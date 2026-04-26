@@ -1,0 +1,779 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, datetime, time, timezone
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.models.cancellation_policy import CancellationPolicy
+from app.models.enums import AvailabilityStatus, LocationStatus, OrganizationReviewStatus, SpaceType, SpaceVisibility, UserRole
+from app.models.location import Location
+from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
+from app.models.pricing_rule import PricingRule
+from app.models.space import Space
+from app.models.space_image import SpaceImage
+from app.models.subscription_plan import SubscriptionPlan
+from app.models.user import User
+from app.services.amenities import get_location_amenities_map
+
+
+CATEGORY_SPACE_TYPES = {
+    "coworking": SpaceType.SHARED_DESK,
+    "private_office": SpaceType.PRIVATE_OFFICE,
+    "meeting_room": SpaceType.CONFERENCE_ROOM,
+}
+
+DEFAULT_SORT = {
+    "coworking": "price_asc",
+    "private_office": "price_asc",
+    "meeting_room": "price_asc",
+}
+
+
+@dataclass
+class PublicMarketplaceSearchFilters:
+    category: str
+    q: str | None = None
+    date: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    capacity: int | None = None
+    max_price: int | None = None
+    amenities: str | None = None
+    sort: str | None = None
+    page: int = 1
+    page_size: int = 20
+
+
+def _split_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    seen: set[str] = set()
+    items: list[str] = []
+    for raw in value.split(","):
+        cleaned = " ".join(raw.split())
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(cleaned)
+    return items
+
+
+def _normalize_tokens(values: list[str]) -> list[str]:
+    return [value.casefold() for value in values]
+
+
+def _clean_query(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = " ".join(value.split())
+    return cleaned or None
+
+
+def _parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be in YYYY-MM-DD format") from exc
+
+
+def _parse_time(value: str | None, field_name: str) -> time | None:
+    if not value:
+        return None
+    try:
+        return time.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be in HH:MM or HH:MM:SS format") from exc
+
+
+def _validate_filters(filters: PublicMarketplaceSearchFilters) -> tuple[date | None, time | None, time | None]:
+    if filters.category not in CATEGORY_SPACE_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported marketplace category")
+
+    parsed_date = _parse_date(filters.date)
+    parsed_start = _parse_time(filters.start_time, "start_time")
+    parsed_end = _parse_time(filters.end_time, "end_time")
+
+    if filters.category == "meeting_room" and (parsed_start or parsed_end):
+        if not parsed_start or not parsed_end:
+            raise HTTPException(status_code=400, detail="start_time and end_time are required together")
+        if parsed_end <= parsed_start:
+            raise HTTPException(status_code=400, detail="end_time must be after start_time")
+
+    if filters.page < 1:
+        raise HTTPException(status_code=400, detail="page must be 1 or greater")
+    if filters.page_size < 1:
+        raise HTTPException(status_code=400, detail="page_size must be 1 or greater")
+    if filters.page_size > 100:
+        raise HTTPException(status_code=400, detail="page_size must be 100 or fewer")
+
+    return parsed_date, parsed_start, parsed_end
+
+
+def _location_amenity_names(
+    location: Location,
+    amenity_map: dict[int, list[dict[str, int | str | None]]],
+) -> list[str]:
+    mapped = amenity_map.get(location.id, [])
+    if mapped:
+        return [str(item["name"]) for item in mapped if item.get("name")]
+    return _split_csv(location.amenities)
+
+
+def _space_amenity_names(space: Space) -> list[str]:
+    return _split_csv(space.amenities)
+
+
+def _space_display_name(space: Space) -> str:
+    cleaned = (space.name or "").strip()
+    if cleaned:
+        return cleaned
+    return " ".join(part.capitalize() for part in space.space_type.value.split("_"))
+
+
+def _split_lines(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [line for line in (" ".join(part.split()) for part in value.splitlines()) if line]
+
+
+def _space_publicly_visible(space: Space, location: Location) -> bool:
+    return bool(
+        location.status == LocationStatus.ACTIVE
+        and space.visibility != SpaceVisibility.PRIVATE
+    )
+
+
+def _user_display_name(user: User) -> str | None:
+    if user.full_name and user.full_name.strip():
+        return user.full_name.strip()
+    parts = [part.strip() for part in [user.first_name or "", user.last_name or ""] if part and part.strip()]
+    if parts:
+        return " ".join(parts)
+    return None
+
+
+def _contact_title(role: UserRole) -> str:
+    if role == UserRole.OWNER:
+        return "Owner"
+    if role == UserRole.ADMIN:
+        return "Admin"
+    return "Team"
+
+
+def _space_hourly_prices(
+    space_id: int,
+    pricing_rules_map: dict[int, list[int]],
+) -> list[int]:
+    return pricing_rules_map.get(space_id, [])
+
+
+def _space_membership_prices(
+    tenant_id: int,
+    space_type: SpaceType,
+    subscription_price_map: dict[tuple[int, str], list[int]],
+) -> list[int]:
+    return subscription_price_map.get((tenant_id, space_type.value), [])
+
+
+def _space_matches_time_window(
+    space: Space,
+    *,
+    category: str,
+    requested_start: time | None,
+    requested_end: time | None,
+) -> bool:
+    if category != "meeting_room":
+        return True
+    if requested_start is None or requested_end is None:
+        return True
+    if space.availability_status != AvailabilityStatus.AVAILABLE:
+        return False
+    if space.availability_start_time and requested_start < space.availability_start_time:
+        return False
+    if space.availability_end_time and requested_end > space.availability_end_time:
+        return False
+    return True
+
+
+def _query_score(
+    q: str | None,
+    *,
+    location: Location,
+    location_amenities: list[str],
+    space_amenities: list[str],
+) -> int:
+    if not q:
+        return 0
+    query = q.casefold()
+    score = 0
+    for value, weight in (
+        (location.name, 5),
+        (location.neighborhood, 4),
+        (location.city, 3),
+        (location.state, 3),
+        (location.address, 2),
+        (location.postal_code, 2),
+    ):
+        if value and query in value.casefold():
+            score += weight
+    if any(query in amenity.casefold() for amenity in location_amenities):
+        score += 3
+    if any(query in amenity.casefold() for amenity in space_amenities):
+        score += 2
+    return score
+
+
+def _space_matches_query(
+    q: str | None,
+    *,
+    location: Location,
+    location_amenities: list[str],
+    space_amenities: list[str],
+) -> bool:
+    if not q:
+        return True
+    return _query_score(
+        q,
+        location=location,
+        location_amenities=location_amenities,
+        space_amenities=space_amenities,
+    ) > 0
+
+
+def _matches_requested_amenities(
+    requested_amenities: list[str],
+    *,
+    location_amenities: list[str],
+    space_amenities: list[str],
+) -> bool:
+    if not requested_amenities:
+        return True
+    haystack = " ".join(location_amenities + space_amenities).casefold()
+    return all(token in haystack for token in requested_amenities)
+
+
+def _active_hourly_pricing_map(db: Session, space_ids: list[int]) -> dict[int, list[int]]:
+    if not space_ids:
+        return {}
+    now = datetime.now(timezone.utc)
+    rows = (
+        db.query(PricingRule)
+        .filter(
+            PricingRule.space_id.in_(space_ids),
+            PricingRule.rate_type == "hourly",
+        )
+        .all()
+    )
+    prices: dict[int, list[int]] = defaultdict(list)
+    for row in rows:
+        if row.active_from and row.active_from.replace(tzinfo=timezone.utc) > now:
+            continue
+        if row.active_to and row.active_to.replace(tzinfo=timezone.utc) < now:
+            continue
+        prices[row.space_id].append(row.rate_amount)
+    return dict(prices)
+
+
+def _subscription_price_map(
+    db: Session,
+    tenant_ids: list[int],
+    *,
+    space_type: SpaceType,
+) -> dict[tuple[int, str], list[int]]:
+    if not tenant_ids:
+        return {}
+    rows = (
+        db.query(SubscriptionPlan)
+        .filter(
+            SubscriptionPlan.tenant_id.in_(tenant_ids),
+            SubscriptionPlan.space_type == space_type,
+            SubscriptionPlan.is_active.is_(True),
+        )
+        .all()
+    )
+    prices: dict[tuple[int, str], list[int]] = defaultdict(list)
+    for row in rows:
+        prices[(row.tenant_id, row.space_type.value)].append(row.price)
+    return dict(prices)
+
+
+def _best_space_price(space_payload: dict[str, object], *, category: str) -> int | None:
+    if category == "coworking":
+        return (
+            space_payload.get("starting_day_pass_price")
+            or space_payload.get("starting_membership_price")
+            or space_payload.get("starting_hourly_price")
+        )
+    if category == "private_office":
+        return space_payload.get("starting_monthly_price")
+    return (
+        space_payload.get("starting_hourly_price")
+        or space_payload.get("starting_day_pass_price")
+        or space_payload.get("starting_monthly_price")
+    )
+
+
+def _space_card_price(
+    *,
+    category: str,
+    space: Space,
+    hourly_prices: list[int],
+    membership_prices: list[int],
+) -> int | None:
+    if category == "coworking":
+        return space.price_daily or (min(membership_prices) if membership_prices else None)
+    if category == "private_office":
+        return space.price_monthly
+    if hourly_prices:
+        return min(hourly_prices)
+    return space.price_daily or space.price_monthly
+
+
+def _sort_key(category: str, item: dict[str, object], *, query_present: bool, sort: str | None) -> tuple[object, ...]:
+    selected_sort = sort or ("relevance" if query_present else DEFAULT_SORT[category])
+    price = _best_space_price(item, category=category)
+    if selected_sort == "price_desc":
+        return (-1 if price is None else 0, -(price or 0), str(item["name"]).casefold())
+    if selected_sort == "name":
+        return (str(item["name"]).casefold(),)
+    if selected_sort == "relevance":
+        return (-int(item["_relevance"]), 1 if price is None else 0, price or 0, str(item["name"]).casefold())
+    return (1 if price is None else 0, price or 0, str(item["name"]).casefold())
+
+
+def _serialize_space_time(value: time | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _build_location_payload(
+    *,
+    location: Location,
+    location_amenities: list[str],
+) -> dict[str, object]:
+    return {
+        "location_public_id": location.public_id,
+        "name": location.name,
+        "address": location.address,
+        "city": location.city,
+        "state": location.state,
+        "postal_code": location.postal_code,
+        "neighborhood": location.neighborhood,
+        "timezone": location.timezone,
+        "lat": location.lat,
+        "lng": location.lng,
+        "location_amenities": location_amenities,
+        "matching_space_count": 0,
+        "featured_space_public_id": None,
+        "featured_image_url": None,
+        "starting_day_pass_price": None,
+        "starting_monthly_price": None,
+        "starting_hourly_price": None,
+        "starting_membership_price": None,
+        "_relevance": 0,
+        "_spaces": [],
+    }
+
+
+def _maybe_update_min(payload: dict[str, object], key: str, value: int | None) -> None:
+    if value is None:
+        return
+    current = payload.get(key)
+    if current is None or value < current:
+        payload[key] = value
+
+
+def _public_inventory_rows(
+    db: Session,
+    *,
+    category: str,
+    require_coordinates: bool,
+) -> list[tuple[Space, Location, SpaceImage | None]]:
+    query = (
+        db.query(Space, Location, SpaceImage)
+        .join(Location, Location.id == Space.location_id)
+        .join(Organization, Organization.id == Location.organization_id)
+        .outerjoin(SpaceImage, (SpaceImage.space_id == Space.id) & (SpaceImage.is_primary.is_(True)))
+        .filter(
+            Space.visibility == SpaceVisibility.PUBLIC,
+            Space.space_type == CATEGORY_SPACE_TYPES[category],
+            Location.status == LocationStatus.ACTIVE,
+            Organization.review_status == OrganizationReviewStatus.APPROVED,
+        )
+    )
+    if require_coordinates:
+        query = query.filter(Location.lat.isnot(None), Location.lng.isnot(None))
+    return query.all()
+
+
+def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters) -> dict[str, object]:
+    _, parsed_start, parsed_end = _validate_filters(filters)
+    query = _clean_query(filters.q)
+    rows = _public_inventory_rows(db, category=filters.category, require_coordinates=False)
+    if not rows:
+        return {"meta": {"total_locations": 0, "page": filters.page, "page_size": filters.page_size}, "results": []}
+
+    space_ids = [space.id for space, _, _ in rows]
+    tenant_ids = list({space.tenant_id for space, _, _ in rows})
+    location_ids = list({location.id for _, location, _ in rows})
+    location_amenity_map = get_location_amenities_map(db, location_ids)
+    hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
+    subscription_prices = _subscription_price_map(
+        db,
+        tenant_ids,
+        space_type=CATEGORY_SPACE_TYPES[filters.category],
+    )
+    requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
+
+    grouped: dict[str, dict[str, object]] = {}
+    for space, location, image in rows:
+        location_amenities = _location_amenity_names(location, location_amenity_map)
+        space_amenities = _space_amenity_names(space)
+        if filters.capacity is not None and space.capacity < filters.capacity:
+            continue
+        if not _space_matches_query(
+            query,
+            location=location,
+            location_amenities=location_amenities,
+            space_amenities=space_amenities,
+        ):
+            continue
+        if not _matches_requested_amenities(
+            requested_amenities,
+            location_amenities=location_amenities,
+            space_amenities=space_amenities,
+        ):
+            continue
+
+        hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
+        membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+        if not _space_matches_time_window(
+            space,
+            category=filters.category,
+            requested_start=parsed_start,
+            requested_end=parsed_end,
+        ):
+            continue
+
+        comparable_price = _space_card_price(
+            category=filters.category,
+            space=space,
+            hourly_prices=hourly_prices,
+            membership_prices=membership_prices,
+        )
+        if filters.max_price is not None and comparable_price is not None and comparable_price > filters.max_price:
+            continue
+
+        payload = grouped.setdefault(
+            location.public_id,
+            _build_location_payload(location=location, location_amenities=location_amenities),
+        )
+        payload["matching_space_count"] = int(payload["matching_space_count"]) + 1
+        payload["_relevance"] = max(
+            int(payload["_relevance"]),
+            _query_score(
+                query,
+                location=location,
+                location_amenities=location_amenities,
+                space_amenities=space_amenities,
+            ),
+        )
+        if image and image.image_url and not payload["featured_image_url"]:
+            payload["featured_image_url"] = image.image_url
+        if payload["featured_space_public_id"] is None:
+            payload["featured_space_public_id"] = space.public_id
+
+        _maybe_update_min(payload, "starting_day_pass_price", space.price_daily)
+        _maybe_update_min(payload, "starting_monthly_price", space.price_monthly)
+        _maybe_update_min(payload, "starting_hourly_price", min(hourly_prices) if hourly_prices else None)
+        _maybe_update_min(
+            payload,
+            "starting_membership_price",
+            min(membership_prices) if membership_prices else None,
+        )
+
+    results = list(grouped.values())
+    results.sort(
+        key=lambda item: _sort_key(
+            filters.category,
+            item,
+            query_present=bool(query),
+            sort=filters.sort,
+        )
+    )
+    total_locations = len(results)
+    start_index = (filters.page - 1) * filters.page_size
+    paged = results[start_index:start_index + filters.page_size]
+    for item in paged:
+        item.pop("_relevance", None)
+        item.pop("_spaces", None)
+    return {
+        "meta": {
+            "total_locations": total_locations,
+            "page": filters.page,
+            "page_size": filters.page_size,
+        },
+        "results": paged,
+    }
+
+
+def get_public_location_detail(
+    db: Session,
+    *,
+    location_public_id: str,
+    filters: PublicMarketplaceSearchFilters,
+) -> dict[str, object]:
+    _, parsed_start, parsed_end = _validate_filters(filters)
+    query = _clean_query(filters.q)
+    rows = _public_inventory_rows(db, category=filters.category, require_coordinates=False)
+    filtered_rows = [
+        (space, location, image)
+        for space, location, image in rows
+        if location.public_id == location_public_id
+    ]
+    if not filtered_rows:
+        raise HTTPException(status_code=404, detail="Marketplace location not found")
+
+    space_ids = [space.id for space, _, _ in filtered_rows]
+    tenant_ids = list({space.tenant_id for space, _, _ in filtered_rows})
+    location = filtered_rows[0][1]
+    location_amenity_map = get_location_amenities_map(db, [location.id])
+    location_amenities = _location_amenity_names(location, location_amenity_map)
+    hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
+    subscription_prices = _subscription_price_map(
+        db,
+        tenant_ids,
+        space_type=CATEGORY_SPACE_TYPES[filters.category],
+    )
+    requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
+
+    spaces: list[dict[str, object]] = []
+    payload = _build_location_payload(location=location, location_amenities=location_amenities)
+    for space, _, image in filtered_rows:
+        space_amenities = _space_amenity_names(space)
+        if filters.capacity is not None and space.capacity < filters.capacity:
+            continue
+        if not _space_matches_query(
+            query,
+            location=location,
+            location_amenities=location_amenities,
+            space_amenities=space_amenities,
+        ):
+            continue
+        if not _matches_requested_amenities(
+            requested_amenities,
+            location_amenities=location_amenities,
+            space_amenities=space_amenities,
+        ):
+            continue
+        hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
+        membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+        if not _space_matches_time_window(
+            space,
+            category=filters.category,
+            requested_start=parsed_start,
+            requested_end=parsed_end,
+        ):
+            continue
+        comparable_price = _space_card_price(
+            category=filters.category,
+            space=space,
+            hourly_prices=hourly_prices,
+            membership_prices=membership_prices,
+        )
+        if filters.max_price is not None and comparable_price is not None and comparable_price > filters.max_price:
+            continue
+
+        payload["matching_space_count"] = int(payload["matching_space_count"]) + 1
+        payload["featured_space_public_id"] = payload["featured_space_public_id"] or space.public_id
+        if image and image.image_url and not payload["featured_image_url"]:
+            payload["featured_image_url"] = image.image_url
+        _maybe_update_min(payload, "starting_day_pass_price", space.price_daily)
+        _maybe_update_min(payload, "starting_monthly_price", space.price_monthly)
+        _maybe_update_min(payload, "starting_hourly_price", min(hourly_prices) if hourly_prices else None)
+        _maybe_update_min(
+            payload,
+            "starting_membership_price",
+            min(membership_prices) if membership_prices else None,
+        )
+
+        spaces.append(
+            {
+                "public_id": space.public_id,
+                "name": _space_display_name(space),
+                "space_type": space.space_type.value,
+                "capacity": space.capacity,
+                "availability_status": space.availability_status.value,
+                "availability_start_time": _serialize_space_time(space.availability_start_time),
+                "availability_end_time": _serialize_space_time(space.availability_end_time),
+                "price_daily": space.price_daily,
+                "price_monthly": space.price_monthly,
+                "hourly_price": min(hourly_prices) if hourly_prices else None,
+                "membership_price": min(membership_prices) if membership_prices else None,
+                "amenities": location_amenities or space_amenities,
+                "image_url": image.image_url if image else None,
+            }
+        )
+
+    if not spaces:
+        raise HTTPException(status_code=404, detail="Marketplace location not found")
+
+    def _space_detail_price(item: dict[str, object]) -> int | None:
+        if filters.category == "coworking":
+            return item["price_daily"] or item["membership_price"]
+        if filters.category == "private_office":
+            return item["price_monthly"]
+        return item["hourly_price"] or item["price_daily"] or item["price_monthly"]
+
+    spaces.sort(
+        key=lambda item: (
+            1 if _space_detail_price(item) is None else 0,
+            _space_detail_price(item) or 0,
+            str(item["public_id"]),
+        )
+    )
+    payload.pop("_relevance", None)
+    payload.pop("_spaces", None)
+    payload["spaces"] = spaces
+    return payload
+
+
+def get_public_space_detail(
+    db: Session,
+    *,
+    space_public_id: str,
+) -> dict[str, object]:
+    row = (
+        db.query(Space, Location, Organization)
+        .join(Location, Location.id == Space.location_id)
+        .join(Organization, Organization.id == Location.organization_id)
+        .filter(Space.public_id == space_public_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Marketplace space not found")
+
+    space, location, organization = row
+    if not _space_publicly_visible(space, location) or organization.review_status != OrganizationReviewStatus.APPROVED:
+        raise HTTPException(status_code=404, detail="Marketplace space not found")
+
+    location_amenity_map = get_location_amenities_map(db, [location.id])
+    location_amenities = _location_amenity_names(location, location_amenity_map)
+    space_amenities = _space_amenity_names(space)
+    images = (
+        db.query(SpaceImage)
+        .filter(SpaceImage.space_id == space.id)
+        .order_by(
+            SpaceImage.is_primary.desc(),
+            SpaceImage.sort_order.asc(),
+            SpaceImage.created_at.asc(),
+        )
+        .all()
+    )
+    hourly_pricing_map = _active_hourly_pricing_map(db, [space.id])
+    subscription_prices = _subscription_price_map(
+        db,
+        [space.tenant_id],
+        space_type=space.space_type,
+    )
+    hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
+    membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+    cancellation_policy = (
+        db.query(CancellationPolicy)
+        .filter(
+            CancellationPolicy.tenant_id == space.tenant_id,
+            CancellationPolicy.space_type == space.space_type.value,
+        )
+        .order_by(CancellationPolicy.id.desc())
+        .first()
+    )
+    contact_rows = (
+        db.query(OrganizationMember, User)
+        .join(User, User.id == OrganizationMember.user_id)
+        .filter(
+            OrganizationMember.organization_id == location.organization_id,
+            OrganizationMember.is_active.is_(True),
+            OrganizationMember.role.in_([UserRole.OWNER, UserRole.ADMIN]),
+        )
+        .all()
+    )
+    role_priority = {UserRole.OWNER: 0, UserRole.ADMIN: 1}
+    support_contacts: list[dict[str, str]] = []
+    seen_contacts: set[str] = set()
+    for member, user in sorted(
+        contact_rows,
+        key=lambda item: (role_priority.get(item[0].role, 99), item[0].id),
+    ):
+        name = _user_display_name(user)
+        if not name:
+            continue
+        dedupe_key = name.casefold()
+        if dedupe_key in seen_contacts:
+            continue
+        seen_contacts.add(dedupe_key)
+        support_contacts.append({"name": name, "title": _contact_title(member.role)})
+        if len(support_contacts) == 2:
+            break
+
+    amenities = location_amenities or space_amenities
+    return {
+        "space": {
+            "public_id": space.public_id,
+            "name": _space_display_name(space),
+            "space_type": space.space_type.value,
+            "capacity": space.capacity,
+            "availability_status": space.availability_status.value,
+            "availability_start_time": _serialize_space_time(space.availability_start_time),
+            "availability_end_time": _serialize_space_time(space.availability_end_time),
+            "price_daily": space.price_daily,
+            "price_monthly": space.price_monthly,
+            "hourly_price": min(hourly_prices) if hourly_prices else None,
+            "membership_price": min(membership_prices) if membership_prices else None,
+            "amenities": amenities,
+        },
+        "images": [
+            {
+                "public_id": image.public_id,
+                "image_url": image.image_url,
+                "is_primary": image.is_primary,
+                "sort_order": image.sort_order,
+            }
+            for image in images
+        ],
+        "location": {
+            "location_public_id": location.public_id,
+            "name": location.name,
+            "address": location.address,
+            "city": location.city,
+            "state": location.state,
+            "postal_code": location.postal_code,
+            "neighborhood": location.neighborhood,
+            "timezone": location.timezone,
+            "lat": location.lat,
+            "lng": location.lng,
+            "public_phone": location.public_phone,
+            "public_email": location.public_email,
+            "public_hours_weekdays": location.public_hours_weekdays,
+            "public_hours_weekends": location.public_hours_weekends,
+            "public_parking_notes": _split_lines(location.public_parking_notes),
+            "public_transit_notes": _split_lines(location.public_transit_notes),
+            "public_included_items": _split_lines(location.public_included_items),
+        },
+        "cancellation_policy": (
+            {
+                "cancel_window_hours": cancellation_policy.cancel_window_hours,
+                "refund_percent": cancellation_policy.refund_percent,
+            }
+            if cancellation_policy
+            else None
+        ),
+        "support_contacts": support_contacts,
+    }

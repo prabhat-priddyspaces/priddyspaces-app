@@ -1,0 +1,27 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: priddyspaces
+      POSTGRES_PASSWORD: priddyspaces
+      POSTGRES_DB: priddyspaces
+    ports:
+      - "5433:5432"
+    volumes:
+      - priddyspaces_db:/var/lib/postgresql/data
+  backend:
+    build:
+      context: ./backend
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql+psycopg2://priddyspaces:priddyspaces@db:5432/priddyspaces
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+volumes:
+  priddyspaces_db:

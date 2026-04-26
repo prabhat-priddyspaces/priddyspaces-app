@@ -1,0 +1,841 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { AppShell } from "@/components/app-shell";
+import { OrganizationAmenitiesManager } from "@/components/organization-amenities-manager";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiFetch } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+
+interface Organization {
+  public_id: string;
+  name: string;
+  branding: string | null;
+  review_status: string;
+  review_notes: string | null;
+}
+
+interface LocationOption {
+  public_id: string;
+  name: string;
+}
+
+interface SpaceOption {
+  public_id: string;
+  space_type: string;
+  location_name: string;
+}
+
+interface PricingRule {
+  public_id: string;
+  rate_type: string;
+  rate_amount: number;
+}
+
+interface PromoCode {
+  public_id: string;
+  code: string;
+  discount_type: string;
+  discount_value: number;
+}
+
+interface TaxConfig {
+  public_id: string;
+  rate_percent: number;
+}
+
+interface FeatureFlag {
+  public_id: string;
+  flag_key: string;
+  flag_value: boolean;
+}
+
+interface CancellationPolicy {
+  public_id: string;
+  space_type: string;
+  cancel_window_hours: number;
+  refund_percent: number;
+}
+
+interface SubscriptionPlan {
+  public_id: string;
+  name: string;
+  space_type: string;
+  billing_cycle: string;
+  price: number;
+  stripe_price_id: string | null;
+  is_active: boolean;
+}
+
+interface SpaceResponse {
+  public_id: string;
+  space_type: string;
+}
+
+export default function OwnerSettingsPage() {
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [spaces, setSpaces] = useState<SpaceOption[]>([]);
+  const [orgId, setOrgId] = useState("");
+  const [spaceId, setSpaceId] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [taxConfig, setTaxConfig] = useState<TaxConfig | null>(null);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
+  const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [connectStatus, setConnectStatus] = useState("");
+  const [orgProfileForm, setOrgProfileForm] = useState({ name: "", branding: "" });
+
+  const [pricingForm, setPricingForm] = useState({ rate_type: "daily", rate_amount: "" });
+  const [promoForm, setPromoForm] = useState({
+    code: "",
+    discount_type: "percent",
+    discount_value: "",
+  });
+  const [taxRate, setTaxRate] = useState("");
+  const [flagForm, setFlagForm] = useState({
+    flag_key: "instant_booking_enabled",
+    flag_value: false,
+    scope_type: "tenant",
+    scope_public_id: "",
+  });
+  const [policyForm, setPolicyForm] = useState({
+    space_type: "conference_room",
+    cancel_window_hours: "24",
+    refund_percent: "0",
+  });
+  const [planForm, setPlanForm] = useState({
+    name: "",
+    space_type: "shared_desk",
+    billing_cycle: "monthly",
+    price: "",
+    stripe_price_id: "",
+    is_active: true,
+  });
+
+  useEffect(() => {
+    async function loadOrgs() {
+      const token = getAccessToken() ?? undefined;
+      try {
+        const list = await apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token);
+        setOrgs(list);
+        if (list.length > 0) {
+          setOrgId((current) => current || list[0].public_id);
+        }
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : "Failed to load organizations");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadOrgs().catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    async function loadOrgContext() {
+      if (!orgId) {
+        setLocations([]);
+        setSpaces([]);
+        return;
+      }
+      const token = getAccessToken() ?? undefined;
+      const locationList = await apiFetch<LocationOption[]>(
+        `/api/locations?organization_public_id=${encodeURIComponent(orgId)}`,
+        { method: "GET" },
+        token
+      );
+      setLocations(locationList);
+
+      const spacesByLocation = await Promise.all(
+        locationList.map(async (location) => {
+          const list = await apiFetch<SpaceResponse[]>(
+            `/api/locations/${location.public_id}/spaces`,
+            { method: "GET" },
+            token
+          ).catch(() => []);
+          return list.map((space) => ({
+            public_id: space.public_id,
+            space_type: space.space_type,
+            location_name: location.name,
+          }));
+        })
+      );
+      const flattened = spacesByLocation.flat();
+      setSpaces(flattened);
+      if (flattened.length > 0) {
+        setSpaceId((current) => current || flattened[0].public_id);
+      } else {
+        setSpaceId("");
+      }
+    }
+
+    loadOrgContext().catch((err) =>
+      setMessage(err instanceof Error ? err.message : "Failed to load organization settings context")
+    );
+  }, [orgId]);
+
+  useEffect(() => {
+    setFlagForm((current) => ({
+      ...current,
+      scope_public_id:
+        current.scope_type === "tenant"
+          ? orgId
+          : current.scope_public_id && spaces.some((space) => space.public_id === current.scope_public_id)
+            ? current.scope_public_id
+            : spaceId,
+    }));
+  }, [orgId, spaceId, spaces]);
+
+  async function loadPricingRules() {
+    if (!spaceId) {
+      setPricingRules([]);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const list = await apiFetch<PricingRule[]>(
+      `/api/pricing-rules?space_public_id=${encodeURIComponent(spaceId)}`,
+      { method: "GET" },
+      token
+    );
+    setPricingRules(list);
+  }
+
+  async function loadPromoCodes() {
+    if (!orgId) {
+      setPromoCodes([]);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const list = await apiFetch<PromoCode[]>(
+      `/api/promo-codes?organization_public_id=${encodeURIComponent(orgId)}`,
+      { method: "GET" },
+      token
+    );
+    setPromoCodes(list);
+  }
+
+  async function loadTaxConfig() {
+    if (!orgId) {
+      setTaxConfig(null);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    try {
+      const cfg = await apiFetch<TaxConfig>(
+        `/api/tax-config?organization_public_id=${encodeURIComponent(orgId)}`,
+        { method: "GET" },
+        token
+      );
+      setTaxConfig(cfg);
+      setTaxRate(String(cfg.rate_percent));
+    } catch {
+      setTaxConfig(null);
+      setTaxRate("");
+    }
+  }
+
+  async function loadFeatureFlags() {
+    if (!flagForm.scope_public_id) {
+      setFeatureFlags([]);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const list = await apiFetch<FeatureFlag[]>(
+      `/api/feature-flags?scope_type=${encodeURIComponent(flagForm.scope_type)}&scope_public_id=${encodeURIComponent(flagForm.scope_public_id)}`,
+      { method: "GET" },
+      token
+    );
+    setFeatureFlags(list);
+  }
+
+  async function loadPolicies() {
+    if (!orgId) {
+      setPolicies([]);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const list = await apiFetch<CancellationPolicy[]>(
+      `/api/cancellation-policies?organization_public_id=${encodeURIComponent(orgId)}`,
+      { method: "GET" },
+      token
+    );
+    setPolicies(list);
+  }
+
+  async function loadPlans() {
+    if (!orgId) {
+      setPlans([]);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const list = await apiFetch<SubscriptionPlan[]>(
+      `/api/subscription-plans?organization_public_id=${encodeURIComponent(orgId)}`,
+      { method: "GET" },
+      token
+    );
+    setPlans(list);
+  }
+
+  async function loadConnectStatus() {
+    if (!orgId) {
+      setConnectStatus("");
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const status = await apiFetch<{ connected: boolean }>(
+      `/api/stripe/connect/status?organization_public_id=${encodeURIComponent(orgId)}`,
+      { method: "GET" },
+      token
+    );
+    setConnectStatus(status.connected ? "Connected" : "Not connected");
+  }
+
+  async function saveOrganizationProfile() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      `/api/orgs/${orgId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: orgProfileForm.name,
+          branding: orgProfileForm.branding,
+        }),
+      },
+      token
+    );
+    setMessage("Organization profile saved");
+    const refreshed = await apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token);
+    setOrgs(refreshed);
+  }
+
+  async function resubmitOrganization() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      `/api/orgs/${orgId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: orgProfileForm.name,
+          branding: orgProfileForm.branding,
+          resubmit_for_review: true,
+        }),
+      },
+      token
+    );
+    setMessage("Organization resubmitted for review");
+    const refreshed = await apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token);
+    setOrgs(refreshed);
+  }
+
+  useEffect(() => {
+    loadPricingRules().catch(() => null);
+  }, [spaceId]);
+
+  useEffect(() => {
+    loadPromoCodes().catch(() => null);
+    loadTaxConfig().catch(() => null);
+    loadPolicies().catch(() => null);
+    loadPlans().catch(() => null);
+    loadConnectStatus().catch(() => null);
+  }, [orgId]);
+
+  useEffect(() => {
+    loadFeatureFlags().catch(() => null);
+  }, [flagForm.scope_public_id, flagForm.scope_type]);
+
+  async function createPricingRule() {
+    if (!spaceId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      "/api/pricing-rules",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          space_public_id: spaceId,
+          rate_type: pricingForm.rate_type,
+          rate_amount: Number(pricingForm.rate_amount),
+        }),
+      },
+      token
+    );
+    setMessage("Pricing rule created");
+    await loadPricingRules();
+  }
+
+  async function createPromoCode() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      `/api/promo-codes?organization_public_id=${encodeURIComponent(orgId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          code: promoForm.code,
+          discount_type: promoForm.discount_type,
+          discount_value: Number(promoForm.discount_value),
+          is_active: true,
+        }),
+      },
+      token
+    );
+    setMessage("Promo code created");
+    await loadPromoCodes();
+  }
+
+  async function saveTaxConfig() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      `/api/tax-config?organization_public_id=${encodeURIComponent(orgId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ rate_percent: Number(taxRate) }),
+      },
+      token
+    );
+    setMessage("Tax config saved");
+    await loadTaxConfig();
+  }
+
+  async function createFeatureFlag() {
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      "/api/feature-flags",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          flag_key: flagForm.flag_key,
+          flag_value: flagForm.flag_value,
+          scope_type: flagForm.scope_type,
+          scope_public_id: flagForm.scope_public_id,
+        }),
+      },
+      token
+    );
+    setMessage("Feature flag saved");
+    await loadFeatureFlags();
+  }
+
+  async function createPolicy() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      `/api/cancellation-policies?organization_public_id=${encodeURIComponent(orgId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          space_type: policyForm.space_type,
+          cancel_window_hours: Number(policyForm.cancel_window_hours),
+          refund_percent: Number(policyForm.refund_percent),
+        }),
+      },
+      token
+    );
+    setMessage("Cancellation policy saved");
+    await loadPolicies();
+  }
+
+  async function createPlan() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    await apiFetch(
+      `/api/subscription-plans?organization_public_id=${encodeURIComponent(orgId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: planForm.name,
+          space_type: planForm.space_type,
+          billing_cycle: planForm.billing_cycle,
+          price: Number(planForm.price),
+          stripe_price_id: planForm.stripe_price_id || null,
+          is_active: planForm.is_active,
+        }),
+      },
+      token
+    );
+    setMessage("Subscription plan saved");
+    await loadPlans();
+  }
+
+  async function startConnect() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    const res = await apiFetch<{ url: string }>(
+      `/api/stripe/connect/onboard?organization_public_id=${encodeURIComponent(orgId)}`,
+      { method: "POST" },
+      token
+    );
+    window.location.href = res.url;
+  }
+
+  const selectedSpace = useMemo(
+    () => spaces.find((space) => space.public_id === spaceId) || null,
+    [spaceId, spaces]
+  );
+  const selectedOrg = useMemo(() => orgs.find((org) => org.public_id === orgId) || null, [orgId, orgs]);
+
+  useEffect(() => {
+    if (!selectedOrg) {
+      setOrgProfileForm({ name: "", branding: "" });
+      return;
+    }
+    setOrgProfileForm({
+      name: selectedOrg.name,
+      branding: selectedOrg.branding ?? "",
+    });
+  }, [selectedOrg]);
+
+  return (
+    <AppShell>
+      <div className="grid gap-6">
+        <div>
+          <h2 className="text-2xl font-semibold">Settings</h2>
+          <p className="text-textSecondary">
+            Pricing, promotions, tax, flags, cancellation rules, plans, and payouts.
+          </p>
+        </div>
+
+        {message ? <div className="text-sm text-textMuted">{message}</div> : null}
+
+        <Card className="grid gap-4 p-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="org">Organization</Label>
+              <select
+                id="org"
+                value={orgId}
+                onChange={(e) => setOrgId(e.target.value)}
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                disabled={loading}
+              >
+                <option value="">Select an organization</option>
+                {orgs.map((org) => (
+                  <option key={org.public_id} value={org.public_id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="space">Space</Label>
+              <select
+                id="space"
+                value={spaceId}
+                onChange={(e) => setSpaceId(e.target.value)}
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              >
+                <option value="">Select a space</option>
+                {spaces.map((space) => (
+                  <option key={space.public_id} value={space.public_id}>
+                    {space.location_name} • {space.space_type}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Current scope</Label>
+              <div className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-textSecondary">
+                {selectedSpace ? `${selectedSpace.location_name} • ${selectedSpace.space_type}` : "Organization-wide settings"}
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4 text-xs text-textMuted">
+            <div>Locations: {locations.length}</div>
+            <div>Spaces: {spaces.length}</div>
+            <div>Promo codes: {promoCodes.length}</div>
+            <div>Plans: {plans.length}</div>
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold">Organization profile</div>
+              <div className="text-xs text-textMuted">
+                Review status: {selectedOrg?.review_status || "not available"}
+                {selectedOrg?.review_notes ? ` • ${selectedOrg.review_notes}` : ""}
+              </div>
+            </div>
+            {selectedOrg?.review_status === "rejected" ? (
+              <Button type="button" variant="secondary" onClick={resubmitOrganization}>
+                Resubmit for review
+              </Button>
+            ) : null}
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            <Input
+              value={orgProfileForm.name}
+              onChange={(e) => setOrgProfileForm((current) => ({ ...current, name: e.target.value }))}
+              placeholder="Organization name"
+            />
+            <Input
+              value={orgProfileForm.branding}
+              onChange={(e) => setOrgProfileForm((current) => ({ ...current, branding: e.target.value }))}
+              placeholder="Branding URL or notes"
+            />
+          </div>
+          <div>
+            <Button type="button" onClick={saveOrganizationProfile} disabled={!orgId}>
+              Save organization profile
+            </Button>
+          </div>
+        </Card>
+
+        <OrganizationAmenitiesManager orgId={orgId} />
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Pricing rules</div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={pricingForm.rate_type}
+              onChange={(e) => setPricingForm({ ...pricingForm, rate_type: e.target.value })}
+            >
+              <option value="hourly">Hourly</option>
+              <option value="daily">Daily</option>
+            </select>
+            <Input
+              value={pricingForm.rate_amount}
+              onChange={(e) => setPricingForm({ ...pricingForm, rate_amount: e.target.value })}
+              placeholder="Amount"
+            />
+            <Button type="button" onClick={createPricingRule} disabled={!spaceId}>
+              Add rule
+            </Button>
+          </div>
+          <div className="grid gap-2 text-xs text-textMuted">
+            {pricingRules.map((rule) => (
+              <div key={rule.public_id}>
+                {rule.rate_type} • {rule.rate_amount}
+              </div>
+            ))}
+            {pricingRules.length === 0 ? <div>No rules configured for this space.</div> : null}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Promo codes</div>
+          <div className="grid gap-2 md:grid-cols-4">
+            <Input
+              value={promoForm.code}
+              onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value })}
+              placeholder="CODE"
+            />
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={promoForm.discount_type}
+              onChange={(e) => setPromoForm({ ...promoForm, discount_type: e.target.value })}
+            >
+              <option value="percent">Percent</option>
+              <option value="fixed">Fixed</option>
+            </select>
+            <Input
+              value={promoForm.discount_value}
+              onChange={(e) => setPromoForm({ ...promoForm, discount_value: e.target.value })}
+              placeholder="Value"
+            />
+            <Button type="button" onClick={createPromoCode} disabled={!orgId}>
+              Add promo
+            </Button>
+          </div>
+          <div className="grid gap-2 text-xs text-textMuted">
+            {promoCodes.map((promo) => (
+              <div key={promo.public_id}>
+                {promo.code} • {promo.discount_type} • {promo.discount_value}
+              </div>
+            ))}
+            {promoCodes.length === 0 ? <div>No promo codes configured.</div> : null}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Tax configuration</div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <Input value={taxRate} onChange={(e) => setTaxRate(e.target.value)} placeholder="Rate %" />
+            <Button type="button" onClick={saveTaxConfig} disabled={!orgId}>
+              Save tax
+            </Button>
+          </div>
+          <div className="text-xs text-textMuted">
+            Current: {taxConfig ? `${taxConfig.rate_percent}%` : "Not set"}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Feature flags</div>
+          <div className="grid gap-2 md:grid-cols-4">
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={flagForm.scope_type}
+              onChange={(e) =>
+                setFlagForm((current) => ({
+                  ...current,
+                  scope_type: e.target.value,
+                  scope_public_id: e.target.value === "tenant" ? orgId : spaceId,
+                }))
+              }
+            >
+              <option value="tenant">Tenant</option>
+              <option value="space">Space</option>
+            </select>
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={flagForm.scope_public_id}
+              onChange={(e) => setFlagForm({ ...flagForm, scope_public_id: e.target.value })}
+            >
+              <option value="">Select scope</option>
+              {flagForm.scope_type === "tenant"
+                ? orgs.map((org) => (
+                    <option key={org.public_id} value={org.public_id}>
+                      {org.name}
+                    </option>
+                  ))
+                : spaces.map((space) => (
+                    <option key={space.public_id} value={space.public_id}>
+                      {space.location_name} • {space.space_type}
+                    </option>
+                  ))}
+            </select>
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={flagForm.flag_value ? "true" : "false"}
+              onChange={(e) => setFlagForm({ ...flagForm, flag_value: e.target.value === "true" })}
+            >
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+            <Button type="button" onClick={createFeatureFlag} disabled={!flagForm.scope_public_id}>
+              Save flag
+            </Button>
+          </div>
+          <div className="grid gap-2 text-xs text-textMuted">
+            {featureFlags.map((flag) => (
+              <div key={flag.public_id}>
+                {flag.flag_key} • {flag.flag_value ? "Enabled" : "Disabled"}
+              </div>
+            ))}
+            {featureFlags.length === 0 ? <div>No flags configured for this scope.</div> : null}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Cancellation policies</div>
+          <div className="grid gap-2 md:grid-cols-4">
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={policyForm.space_type}
+              onChange={(e) => setPolicyForm({ ...policyForm, space_type: e.target.value })}
+            >
+              <option value="conference_room">Conference Room</option>
+              <option value="private_office">Private Office</option>
+              <option value="shared_desk">Shared Desk</option>
+              <option value="virtual_office">Virtual Office</option>
+            </select>
+            <Input
+              value={policyForm.cancel_window_hours}
+              onChange={(e) => setPolicyForm({ ...policyForm, cancel_window_hours: e.target.value })}
+              placeholder="Window hours"
+            />
+            <Input
+              value={policyForm.refund_percent}
+              onChange={(e) => setPolicyForm({ ...policyForm, refund_percent: e.target.value })}
+              placeholder="Refund %"
+            />
+            <Button type="button" onClick={createPolicy} disabled={!orgId}>
+              Add policy
+            </Button>
+          </div>
+          <div className="grid gap-2 text-xs text-textMuted">
+            {policies.map((policy) => (
+              <div key={policy.public_id}>
+                {policy.space_type} • {policy.cancel_window_hours}h • {policy.refund_percent}%
+              </div>
+            ))}
+            {policies.length === 0 ? <div>No cancellation policies configured.</div> : null}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Membership plans</div>
+          <div className="grid gap-2 md:grid-cols-6">
+            <Input
+              value={planForm.name}
+              onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+              placeholder="Plan name"
+            />
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={planForm.space_type}
+              onChange={(e) => setPlanForm({ ...planForm, space_type: e.target.value })}
+            >
+              <option value="conference_room">Conference Room</option>
+              <option value="private_office">Private Office</option>
+              <option value="shared_desk">Shared Desk</option>
+              <option value="virtual_office">Virtual Office</option>
+            </select>
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={planForm.billing_cycle}
+              onChange={(e) => setPlanForm({ ...planForm, billing_cycle: e.target.value })}
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="six_month">6 Months</option>
+              <option value="yearly">Yearly</option>
+            </select>
+            <Input
+              value={planForm.price}
+              onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })}
+              placeholder="Price"
+            />
+            <Input
+              value={planForm.stripe_price_id}
+              onChange={(e) => setPlanForm({ ...planForm, stripe_price_id: e.target.value })}
+              placeholder="Stripe price id"
+            />
+            <div className="flex gap-2">
+              <select
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                value={planForm.is_active ? "true" : "false"}
+                onChange={(e) => setPlanForm({ ...planForm, is_active: e.target.value === "true" })}
+              >
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+              <Button type="button" onClick={createPlan} disabled={!orgId}>
+                Add
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-2 text-xs text-textMuted">
+            {plans.map((plan) => (
+              <div key={plan.public_id}>
+                {plan.name} • {plan.space_type} • {plan.billing_cycle} • {plan.price}
+              </div>
+            ))}
+            {plans.length === 0 ? <div>No membership plans configured.</div> : null}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="text-sm font-semibold">Stripe Connect</div>
+          <div className="text-xs text-textMuted">Status: {connectStatus || "Unknown"}</div>
+          <Button type="button" onClick={startConnect} disabled={!orgId}>
+            Start onboarding
+          </Button>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
