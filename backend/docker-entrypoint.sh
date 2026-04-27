@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
+# Wait for DB to be reachable
 python - <<'PY'
 import os
 import socket
@@ -27,6 +28,12 @@ while time.time() < deadline:
 else:
     raise SystemExit(f"Database not reachable at {host}:{port}")
 PY
+
+# If a command is provided (e.g. migration task), exec it after DB is up
+# and skip the default uvicorn launch.
+if [ $# -gt 0 ]; then
+  exec "$@"
+fi
 
 python -m alembic upgrade head
 
