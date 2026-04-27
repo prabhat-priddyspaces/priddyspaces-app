@@ -118,7 +118,7 @@ jobs:
             --launch-type FARGATE \
             --task-definition "$TASK_DEF_ARN" \
             --network-configuration file://network-config.json \
-            --overrides '{"containerOverrides":[{"name":"backend","command":["alembic","upgrade","head"]}]}' \
+            --overrides '{"containerOverrides":[{"name":"backend","entryPoint":["python","-m","alembic"],"command":["upgrade","head"]}]}' \
             --count 1 >/tmp/run-task.json
 
           TASK_ARN=$(jq -r '.tasks[0].taskArn' /tmp/run-task.json)
