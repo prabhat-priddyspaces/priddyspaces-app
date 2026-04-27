@@ -58,9 +58,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE_URI="${{ steps.meta.outputs.ecr_repo_uri }}:${GITHUB_SHA}"
-          docker build -t "$IMAGE_URI" backend
+          REPO="${{ steps.meta.outputs.ecr_repo_uri }}"
+          IMAGE_URI="$REPO:${GITHUB_SHA}"
+          LATEST_URI="$REPO:latest"
+          docker build -t "$IMAGE_URI" -t "$LATEST_URI" backend
           docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
       - name: Register new task definition revision
