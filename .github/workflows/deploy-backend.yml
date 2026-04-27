@@ -1,0 +1,172 @@
+name: Deploy Backend
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        required: true
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      - name: Resolve deploy metadata from SSM
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX="/priddyspaces/${{ inputs.environment }}/deploy"
+
+          echo "ecr_repo_uri=$(aws ssm get-parameter --name "$PREFIX/ecr_backend_repo_uri" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecs_cluster=$(aws ssm get-parameter --name "$PREFIX/ecs_cluster_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecs_service=$(aws ssm get-parameter --name "$PREFIX/ecs_backend_service_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecs_private_subnets=$(aws ssm get-parameter --name "$PREFIX/ecs_private_subnets_csv" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecs_security_groups=$(aws ssm get-parameter --name "$PREFIX/ecs_service_security_groups_csv" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE_URI="${{ steps.meta.outputs.ecr_repo_uri }}:${GITHUB_SHA}"
+          docker build -t "$IMAGE_URI" backend
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Register new task definition revision
+        id: taskdef
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_service }}"
+          IMAGE_URI="${{ steps.image.outputs.image_uri }}"
+
+          CURRENT_TASK_DEF=$(aws ecs describe-services \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          aws ecs describe-task-definition --task-definition "$CURRENT_TASK_DEF" --query 'taskDefinition' > taskdef.json
+
+          jq --arg IMAGE_URI "$IMAGE_URI" '
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            | .containerDefinitions |= map(if .name == "backend" then .image = $IMAGE_URI else . end)
+          ' taskdef.json > taskdef-updated.json
+
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://taskdef-updated.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Run Alembic migration task
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          TASK_DEF_ARN="${{ steps.taskdef.outputs.task_definition_arn }}"
+
+          SUBNETS_JSON=$(jq -Rn --arg csv "${{ steps.meta.outputs.ecs_private_subnets }}" '$csv | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))')
+          SGS_JSON=$(jq -Rn --arg csv "${{ steps.meta.outputs.ecs_security_groups }}" '$csv | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))')
+          jq -n --argjson subnets "$SUBNETS_JSON" --argjson securityGroups "$SGS_JSON" \
+            '{awsvpcConfiguration:{subnets:$subnets,securityGroups:$securityGroups,assignPublicIp:"DISABLED"}}' \
+            > network-config.json
+
+          aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "$TASK_DEF_ARN" \
+            --network-configuration file://network-config.json \
+            --overrides '{"containerOverrides":[{"name":"backend","command":["alembic","upgrade","head"]}]}' \
+            --count 1 >/tmp/run-task.json
+
+          TASK_ARN=$(jq -r '.tasks[0].taskArn' /tmp/run-task.json)
+          if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "null" ]; then
+            echo "Failed to start migration task"
+            cat /tmp/run-task.json
+            exit 1
+          fi
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration task failed with exit code $EXIT_CODE"
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN"
+
+            TASK_ID="${TASK_ARN##*/}"
+            LOG_GROUP="/ecs/${{ steps.meta.outputs.ecs_service }}"
+            LOG_STREAM=$(aws logs describe-log-streams \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name-prefix "backend/backend/$TASK_ID" \
+              --query 'logStreams[0].logStreamName' \
+              --output text 2>/dev/null || true)
+
+            if [ -n "$LOG_STREAM" ] && [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "null" ]; then
+              echo "===== Migration task logs ($LOG_GROUP :: $LOG_STREAM) ====="
+              aws logs get-log-events \
+                --log-group-name "$LOG_GROUP" \
+                --log-stream-name "$LOG_STREAM" \
+                --limit 200 \
+                --query 'events[].message' \
+                --output text || true
+              echo "===== End migration task logs ====="
+            else
+              echo "Could not find CloudWatch log stream for task id $TASK_ID in $LOG_GROUP"
+            fi
+            exit 1
+          fi
+
+      - name: Update ECS service
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "${{ steps.meta.outputs.ecs_cluster }}" \
+            --service "${{ steps.meta.outputs.ecs_service }}" \
+            --task-definition "${{ steps.taskdef.outputs.task_definition_arn }}"
+
+          aws ecs wait services-stable \
+            --cluster "${{ steps.meta.outputs.ecs_cluster }}" \
+            --services "${{ steps.meta.outputs.ecs_service }}"

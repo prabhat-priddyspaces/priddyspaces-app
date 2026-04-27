@@ -1,0 +1,81 @@
+name: Deploy Frontend
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        required: true
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      - name: Resolve deploy metadata from SSM
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX="/priddyspaces/${{ inputs.environment }}/deploy"
+
+          echo "frontend_bucket=$(aws ssm get-parameter --name "$PREFIX/frontend_bucket_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "cloudfront_distribution_id=$(aws ssm get-parameter --name "$PREFIX/cloudfront_distribution_id" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "api_origin=$(aws ssm get-parameter --name "$PREFIX/api_origin" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: webUI/package-lock.json
+
+      - name: Install dependencies
+        working-directory: webUI
+        run: npm ci
+
+      - name: Build static export
+        working-directory: webUI
+        env:
+          NEXT_PUBLIC_API_URL: ${{ steps.meta.outputs.api_origin }}
+          NEXT_OUTPUT_MODE: export
+        run: npm run build:export
+
+      - name: Upload static assets to S3
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 sync webUI/out "s3://${{ steps.meta.outputs.frontend_bucket }}" --delete
+
+      - name: Invalidate CloudFront cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.meta.outputs.cloudfront_distribution_id }}" \
+            --paths "/*"
