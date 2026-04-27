@@ -165,11 +165,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_service }}"
+
           aws ecs update-service \
-            --cluster "${{ steps.meta.outputs.ecs_cluster }}" \
-            --service "${{ steps.meta.outputs.ecs_service }}" \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
             --task-definition "${{ steps.taskdef.outputs.task_definition_arn }}"
 
-          aws ecs wait services-stable \
-            --cluster "${{ steps.meta.outputs.ecs_cluster }}" \
-            --services "${{ steps.meta.outputs.ecs_service }}"
+          if ! aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"; then
+            echo "===== Service failed to stabilize. Recent events: ====="
+            aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].events[0:25]' --output table || true
+
+            echo "===== Stopped task (most recent) describe: ====="
+            STOPPED_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+              --desired-status STOPPED --query 'taskArns[0]' --output text 2>/dev/null || echo None)
+            if [ -n "$STOPPED_ARN" ] && [ "$STOPPED_ARN" != "None" ]; then
+              aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$STOPPED_ARN" \
+                --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,exitCode:exitCode,reason:reason}}' || true
+            fi
+            exit 1
+          fi
