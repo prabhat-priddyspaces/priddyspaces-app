@@ -62,7 +62,7 @@ jobs:
       - name: Build static export
         working-directory: webUI
         env:
-          NEXT_PUBLIC_API_URL: ${{ steps.meta.outputs.api_origin }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ steps.meta.outputs.api_origin }}
           NEXT_OUTPUT_MODE: export
         run: npm run build:export
 

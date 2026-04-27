@@ -1,7 +1,7 @@
 import BookingDetailClient from "./booking-detail-client";
 
 export function generateStaticParams() {
-  return [];
+  return [{ bookingId: "_" }];
 }
 
 export default async function BookingDetailPage({

@@ -2,6 +2,10 @@ import { Suspense } from "react";
 
 import { PublicLocationDetail } from "@/components/public-location-detail";
 
+export function generateStaticParams() {
+  return [{ locationId: "_" }];
+}
+
 export default async function MeetingRoomLocationPage({
   params,
 }: {

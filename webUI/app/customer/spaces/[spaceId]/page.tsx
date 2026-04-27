@@ -1,7 +1,7 @@
 import { SpaceDetailView } from "@/components/space-detail-view";
 
 export function generateStaticParams() {
-  return [];
+  return [{ spaceId: "_" }];
 }
 
 export default async function SpaceDetailPage({
