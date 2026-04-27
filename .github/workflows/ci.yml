@@ -42,7 +42,7 @@ jobs:
     env:
       DATABASE_URL: sqlite://
       SECRET_KEY: ci-test-secret
-      ALLOWED_ORIGINS: http://localhost:3000
+      CORS_ALLOW_ORIGINS: http://localhost:3000
       REDIS_URL: redis://localhost:6379/0
       FRONTEND_URL: http://localhost:3000
       API_KEY_ENCRYPTION_KEY: ci-encryption-key-32-bytes-long
