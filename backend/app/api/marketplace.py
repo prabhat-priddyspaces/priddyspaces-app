@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import date, datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, literal
 
@@ -7,14 +9,21 @@ from app.models.location import Location
 from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
 from app.models.organization_amenity import OrganizationAmenity
+from app.models.pricing_rule import PricingRule
 from app.models.space import Space
-from app.models.enums import OrganizationReviewStatus, SpaceVisibility, LocationStatus
+from app.models.enums import (
+    BookingGranularity,
+    OrganizationReviewStatus,
+    SpaceVisibility,
+    LocationStatus,
+)
 from app.models.space_image import SpaceImage
 from app.schemas.marketplace import (
     MarketplaceSpaceDetailOut,
     MarketplaceLocationDetailOut,
     MarketplaceLocationSearchOut,
     MarketplaceSpaceOut,
+    SpaceAvailabilityOut,
 )
 from app.services.amenities import get_location_amenities_map
 from app.services.public_marketplace import (
@@ -23,6 +32,7 @@ from app.services.public_marketplace import (
     get_public_location_detail,
     search_public_locations,
 )
+from app.services.space_availability import get_space_availability
 
 router = APIRouter()
 
@@ -276,3 +286,87 @@ def get_marketplace_space_detail(
     db: Session = Depends(get_db),
 ):
     return get_public_space_detail(db, space_public_id=space_public_id)
+
+
+_GRANULARITY_MINUTES = {
+    BookingGranularity.MIN_30: 30,
+    BookingGranularity.MIN_60: 60,
+    BookingGranularity.MIN_120: 120,
+}
+
+
+def _serialize_time(value) -> str | None:
+    return value.strftime("%H:%M") if value else None
+
+
+@router.get(
+    "/marketplace/spaces/{space_public_id}/availability",
+    response_model=SpaceAvailabilityOut,
+)
+def get_marketplace_space_availability(
+    space_public_id: str,
+    from_date: str = Query(..., alias="from"),
+    to_date: str = Query(..., alias="to"),
+    db: Session = Depends(get_db),
+):
+    try:
+        start_date = date.fromisoformat(from_date)
+        end_date = date.fromisoformat(to_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format; expected YYYY-MM-DD")
+
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="`to` must be on or after `from`")
+    if (end_date - start_date).days > 120:
+        raise HTTPException(status_code=400, detail="Date range too large; max 120 days")
+
+    row = (
+        db.query(Space, Location, Organization)
+        .join(Location, Location.id == Space.location_id)
+        .join(Organization, Organization.id == Location.organization_id)
+        .filter(Space.public_id == space_public_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Marketplace space not found")
+    space, location, organization = row
+    if (
+        space.visibility != SpaceVisibility.PUBLIC
+        or location.status != LocationStatus.ACTIVE
+        or organization.review_status != OrganizationReviewStatus.APPROVED
+    ):
+        raise HTTPException(status_code=404, detail="Marketplace space not found")
+
+    days = get_space_availability(
+        db,
+        space_id=space.id,
+        location_timezone=location.timezone,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    now = datetime.now(timezone.utc)
+    hourly_prices = [
+        rule.rate_amount
+        for rule in db.query(PricingRule)
+        .filter(PricingRule.space_id == space.id, PricingRule.rate_type == "hourly")
+        .all()
+        if (
+            (rule.active_from is None or rule.active_from.replace(tzinfo=timezone.utc) <= now)
+            and (rule.active_to is None or rule.active_to.replace(tzinfo=timezone.utc) >= now)
+        )
+    ]
+    hourly_price = min(hourly_prices) if hourly_prices else None
+
+    granularity = _GRANULARITY_MINUTES.get(location.booking_granularity)
+
+    return SpaceAvailabilityOut(
+        space_public_id=space.public_id,
+        timezone=location.timezone,
+        granularity_minutes=granularity,
+        availability_start_time=_serialize_time(space.availability_start_time),
+        availability_end_time=_serialize_time(space.availability_end_time),
+        hourly_price=hourly_price,
+        daily_price=space.price_daily,
+        days=days,
+    )

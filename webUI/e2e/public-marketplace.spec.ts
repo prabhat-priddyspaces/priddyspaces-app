@@ -160,6 +160,26 @@ test("public marketplace redirects to /coworking and supports route-driven locat
       return;
     }
 
+    if (key === "GET /api/marketplace/spaces/space_public_3/availability") {
+      await json(route, {
+        space_public_id: "space_public_3",
+        timezone: "America/New_York",
+        granularity_minutes: 60,
+        availability_start_time: "09:00",
+        availability_end_time: "18:00",
+        hourly_price: 60,
+        daily_price: 220,
+        days: [
+          {
+            date: "2026-04-15",
+            fully_blocked: false,
+            busy_intervals: [],
+          },
+        ],
+      });
+      return;
+    }
+
     if (key === "GET /api/marketplace/spaces/space_public_3") {
       await json(route, {
         space: {
@@ -289,9 +309,10 @@ test("public marketplace redirects to /coworking and supports route-driven locat
   await page.locator('[data-selected="true"]').filter({ hasText: "Harbor Rooms" }).click();
   await expect(page).toHaveURL(/\/spaces\/_\?.*id=space_public_3/);
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
-  await expect(page.locator('input[type="date"]')).toHaveValue("2026-04-15");
-  await expect(page.locator('input[type="time"]').nth(0)).toHaveValue("10:00");
-  await expect(page.locator('input[type="time"]').nth(1)).toHaveValue("11:00");
+  await expect(page.getByRole("button", { name: /April 15, 2026/ })).toBeVisible();
+  const timeSelects = page.locator("aside select");
+  await expect(timeSelects.nth(0)).toHaveValue("10:00");
+  await expect(timeSelects.nth(1)).toHaveValue("11:00");
 
   await page.getByRole("link", { name: "Back to search" }).click();
   await expect(page).toHaveURL(/\/meeting-rooms\?/);

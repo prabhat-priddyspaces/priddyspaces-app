@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
-  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   Clock3,
@@ -23,9 +22,30 @@ import {
   formatLocationAddress,
   formatSpaceTypeLabel,
   MarketplaceSpaceDetailResponse,
+  SpaceAvailabilityResponse,
 } from "@/lib/public-marketplace";
+import {
+  DEFAULT_GRANULARITY_MINUTES,
+  addDaysIso,
+  buildEndSlotOptions,
+  buildSlotOptions,
+  findFirstBookableDay,
+  findFirstSlotOnOrAfter,
+  formatTimeLabel,
+  getDayOpenWindow,
+  getOpenIntervalsForDay,
+  isDayBookable,
+  minutesToTime,
+  nowTimeInZone,
+  timeToMinutes,
+  todayIso,
+  todayIsoInZone,
+} from "@/lib/space-availability";
+import { AvailabilityCalendar } from "@/components/availability-calendar";
 import { SubscriptionModal } from "@/components/subscription-modal";
 import { PublicLocationMiniMap } from "@/components/public-location-mini-map";
+
+const AVAILABILITY_RANGE_DAYS = 60;
 
 interface SubscriptionPlan {
   public_id: string;
@@ -41,10 +61,6 @@ interface PublicSpaceDetailViewProps {
   initialDate?: string;
   initialStartTime?: string;
   initialEndTime?: string;
-}
-
-function toTimeInputValue(value: string | null | undefined) {
-  return value ? value.slice(0, 5) : "";
 }
 
 function buildDirectionsHref(address: string, lat: number | null, lng: number | null) {
@@ -76,12 +92,15 @@ export function PublicSpaceDetailView({
   const router = useRouter();
   const isAuthenticated = Boolean(getAccessToken());
   const [detail, setDetail] = useState<MarketplaceSpaceDetailResponse | null>(null);
+  const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [date, setDate] = useState(initialDate);
   const [startTime, setStartTime] = useState(initialStartTime);
   const [endTime, setEndTime] = useState(initialEndTime);
+  const [allDay, setAllDay] = useState(false);
+  const [autoFilled, setAutoFilled] = useState(Boolean(initialDate));
   const [requesting, setRequesting] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
@@ -92,36 +111,126 @@ export function PublicSpaceDetailView({
     }
     setLoading(true);
     setError("");
+    const fromIso = todayIso();
+    const toIso = addDaysIso(fromIso, AVAILABILITY_RANGE_DAYS);
     Promise.all([
       apiFetch<MarketplaceSpaceDetailResponse>(`/api/marketplace/spaces/${spaceId}`, { method: "GET" }),
       apiFetch<SubscriptionPlan[]>(
         `/api/subscription-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
         { method: "GET" },
       ).catch(() => []),
+      apiFetch<SpaceAvailabilityResponse>(
+        `/api/marketplace/spaces/${encodeURIComponent(spaceId)}/availability?from=${fromIso}&to=${toIso}`,
+        { method: "GET" },
+      ).catch(() => null),
     ])
-      .then(([detailResponse, planResponse]) => {
+      .then(([detailResponse, planResponse, availabilityResponse]) => {
         setDetail(detailResponse);
         setPlans(planResponse);
+        setAvailability(availabilityResponse);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to load listing");
         setDetail(null);
         setPlans([]);
+        setAvailability(null);
       })
       .finally(() => setLoading(false));
   }, [spaceId]);
 
+  const granularity =
+    availability?.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
+  const openWindow = useMemo(
+    () =>
+      getDayOpenWindow({
+        availability_start_time:
+          availability?.availability_start_time ??
+          detail?.space.availability_start_time ??
+          null,
+        availability_end_time:
+          availability?.availability_end_time ??
+          detail?.space.availability_end_time ??
+          null,
+      }),
+    [availability, detail],
+  );
+
+  const dayMap = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof availability>["days"][number]>();
+    const days = Array.isArray(availability?.days) ? availability!.days : [];
+    for (const d of days) map.set(d.date, d);
+    return map;
+  }, [availability]);
+
+  const selectedDay = date ? dayMap.get(date) : undefined;
+  const selectedDayIntervals = useMemo(
+    () => getOpenIntervalsForDay(selectedDay, openWindow),
+    [selectedDay, openWindow],
+  );
+  const startSlotOptions = useMemo(
+    () => buildSlotOptions(selectedDayIntervals, granularity),
+    [selectedDayIntervals, granularity],
+  );
+  const endSlotOptions = useMemo(
+    () => buildEndSlotOptions(selectedDayIntervals, startTime, granularity),
+    [selectedDayIntervals, startTime, granularity],
+  );
+
   useEffect(() => {
-    if (!detail) {
+    if (!availability || autoFilled) return;
+    const tz = availability.timezone || "UTC";
+    const todayLocal = todayIsoInZone(tz);
+    const todayDay = dayMap.get(todayLocal);
+    let pickedDate: string | null = null;
+    let pickedStart: string | null = null;
+
+    if (todayDay && isDayBookable(todayDay, openWindow, granularity)) {
+      const intervals = getOpenIntervalsForDay(todayDay, openWindow);
+      const slot = findFirstSlotOnOrAfter(intervals, granularity, nowTimeInZone(tz));
+      if (slot) {
+        pickedDate = todayLocal;
+        pickedStart = slot.start;
+      }
+    }
+
+    if (!pickedDate) {
+      const nextDay = findFirstBookableDay(
+        availability.days,
+        openWindow,
+        granularity,
+        todayLocal,
+      );
+      if (nextDay) {
+        pickedDate = nextDay.date;
+        const intervals = getOpenIntervalsForDay(nextDay, openWindow);
+        const slot = findFirstSlotOnOrAfter(intervals, granularity, openWindow.start);
+        pickedStart = slot?.start ?? intervals[0]?.start ?? null;
+      }
+    }
+
+    if (pickedDate && pickedStart) {
+      setDate(pickedDate);
+      setStartTime(pickedStart);
+      setEndTime(minutesToTime(timeToMinutes(pickedStart) + granularity));
+    }
+    setAutoFilled(true);
+  }, [availability, autoFilled, dayMap, openWindow, granularity]);
+
+  useEffect(() => {
+    if (allDay) return;
+    if (!startTime || !date) return;
+    const startMins = timeToMinutes(startTime);
+    if (
+      endTime &&
+      timeToMinutes(endTime) > startMins &&
+      endSlotOptions.includes(endTime)
+    ) {
       return;
     }
-    if (!startTime && detail.space.availability_start_time) {
-      setStartTime(toTimeInputValue(detail.space.availability_start_time));
-    }
-    if (!endTime && detail.space.availability_end_time) {
-      setEndTime(toTimeInputValue(detail.space.availability_end_time));
-    }
-  }, [detail, endTime, startTime]);
+    const fallback =
+      endSlotOptions.find((opt) => timeToMinutes(opt) > startMins) ?? null;
+    if (fallback) setEndTime(fallback);
+  }, [allDay, startTime, endTime, endSlotOptions, date]);
 
   const images = detail?.images ?? [];
   const heroImage = images[0] ?? null;
@@ -129,6 +238,53 @@ export function PublicSpaceDetailView({
   const priceRows = useMemo(() => (detail ? getPriceRows(detail.space) : []), [detail]);
   const primaryPrice = priceRows[0]?.value ?? "Contact for pricing";
   const locationAddress = detail ? formatLocationAddress(detail.location) : "";
+
+  const hourlyPrice =
+    availability?.hourly_price ?? detail?.space.hourly_price ?? null;
+  const dailyPrice =
+    availability?.daily_price ?? detail?.space.price_daily ?? null;
+
+  const dayOpenSpan = useMemo(() => {
+    if (!selectedDay) return null;
+    const start = timeToMinutes(openWindow.start);
+    const end = timeToMinutes(openWindow.end);
+    return end > start ? (end - start) / 60 : null;
+  }, [selectedDay, openWindow]);
+
+  const dayHasConflict = useMemo(() => {
+    if (!selectedDay) return false;
+    if (selectedDay.fully_blocked) return true;
+    return (selectedDay.busy_intervals ?? []).some((b) => {
+      const bs = Math.max(timeToMinutes(b.start), timeToMinutes(openWindow.start));
+      const be = Math.min(timeToMinutes(b.end), timeToMinutes(openWindow.end));
+      return be > bs;
+    });
+  }, [selectedDay, openWindow]);
+
+  const allDayDisabled = !selectedDay || dayHasConflict || dayOpenSpan == null;
+
+  useEffect(() => {
+    if (allDay && allDayDisabled) {
+      setAllDay(false);
+    }
+  }, [allDay, allDayDisabled]);
+
+  const hours = useMemo(() => {
+    if (allDay) return dayOpenSpan ?? 0;
+    if (!startTime || !endTime) return 0;
+    const diff = timeToMinutes(endTime) - timeToMinutes(startTime);
+    return diff > 0 ? diff / 60 : 0;
+  }, [allDay, dayOpenSpan, startTime, endTime]);
+
+  const subtotal = useMemo(() => {
+    if (allDay) {
+      if (dailyPrice != null) return dailyPrice;
+      if (hourlyPrice != null && dayOpenSpan != null) return hourlyPrice * dayOpenSpan;
+      return null;
+    }
+    if (hourlyPrice != null && hours > 0) return hourlyPrice * hours;
+    return null;
+  }, [allDay, dailyPrice, hourlyPrice, dayOpenSpan, hours]);
 
   function buildSelfNextHref() {
     const params = new URLSearchParams();
@@ -143,13 +299,21 @@ export function PublicSpaceDetailView({
     if (!detail) {
       return;
     }
-    if (!date || !startTime || !endTime) {
-      setError("Choose a date, start time, and end time before reserving.");
+    if (!date) {
+      setError("Choose a date before reserving.");
       return;
     }
 
-    const start = new Date(`${date}T${startTime}`);
-    const end = new Date(`${date}T${endTime}`);
+    const effectiveStart = allDay ? openWindow.start : startTime;
+    const effectiveEnd = allDay ? openWindow.end : endTime;
+
+    if (!effectiveStart || !effectiveEnd) {
+      setError("Choose a start and end time before reserving.");
+      return;
+    }
+
+    const start = new Date(`${date}T${effectiveStart}`);
+    const end = new Date(`${date}T${effectiveEnd}`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       setError("End time must be after start time.");
       return;
@@ -450,57 +614,98 @@ export function PublicSpaceDetailView({
 
               <div className="rounded-[24px] border border-slate-200 p-5">
                 <div className="text-center text-3xl font-semibold text-slate-900">{primaryPrice}</div>
-                {priceRows.length > 1 ? (
-                  <div className="mt-4 space-y-2 text-sm text-slate-600">
-                    {priceRows.slice(1).map((row) => (
-                      <div key={row.label} className="flex items-center justify-between gap-4">
-                        <span>{row.label}</span>
-                        <span className="font-medium text-slate-900">{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
 
                 <div className="mt-5 grid gap-3">
-                  <label className="grid gap-2 text-sm font-medium text-slate-700">
-                    <span className="inline-flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4 text-slate-500" />
-                      Date
-                    </span>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(event) => setDate(event.target.value)}
-                      className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none"
-                    />
-                  </label>
+                  <AvailabilityCalendar
+                    value={date}
+                    onChange={(next) => {
+                      setDate(next);
+                      const day = dayMap.get(next);
+                      const intervals = getOpenIntervalsForDay(day, openWindow);
+                      const slot = findFirstSlotOnOrAfter(
+                        intervals,
+                        granularity,
+                        openWindow.start,
+                      );
+                      if (slot) {
+                        setStartTime(slot.start);
+                        setEndTime(
+                          minutesToTime(timeToMinutes(slot.start) + granularity),
+                        );
+                      }
+                    }}
+                    days={availability?.days ?? []}
+                    open={openWindow}
+                    granularityMinutes={granularity}
+                  />
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="grid gap-2 text-sm font-medium text-slate-700">
-                      <span className="inline-flex items-center gap-2">
-                        <Clock3 className="h-4 w-4 text-slate-500" />
-                        Start time
-                      </span>
-                      <input
-                        type="time"
-                        value={startTime}
-                        onChange={(event) => setStartTime(event.target.value)}
-                        className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none"
+                  {!allDay ? (
+                    <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                      <label className="grid gap-1 text-xs font-medium text-slate-500">
+                        <span className="inline-flex items-center gap-2">
+                          <Clock3 className="h-4 w-4 text-slate-500" />
+                          Start
+                        </span>
+                        <select
+                          value={startTime}
+                          onChange={(event) => setStartTime(event.target.value)}
+                          disabled={startSlotOptions.length === 0}
+                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {startSlotOptions.length === 0 ? (
+                            <option value="">No times available</option>
+                          ) : null}
+                          {startSlotOptions.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {formatTimeLabel(opt)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <span className="hidden self-end pb-3 text-sm text-slate-500 sm:block">to</span>
+                      <label className="grid gap-1 text-xs font-medium text-slate-500">
+                        <span className="inline-flex items-center gap-2 sm:invisible">
+                          <Clock3 className="h-4 w-4 text-slate-500" />
+                          End
+                        </span>
+                        <select
+                          value={endTime}
+                          onChange={(event) => setEndTime(event.target.value)}
+                          disabled={endSlotOptions.length === 0}
+                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {endSlotOptions.length === 0 ? (
+                            <option value="">—</option>
+                          ) : null}
+                          {endSlotOptions.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {formatTimeLabel(opt)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  <label className="flex items-center justify-between text-sm font-medium text-slate-600">
+                    <span>All day</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={allDay}
+                      onClick={() => setAllDay((prev) => !prev)}
+                      disabled={allDayDisabled}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        allDay ? "bg-slate-900" : "bg-slate-200"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                          allDay ? "translate-x-5" : "translate-x-0.5"
+                        }`}
                       />
-                    </label>
-                    <label className="grid gap-2 text-sm font-medium text-slate-700">
-                      <span className="inline-flex items-center gap-2">
-                        <Clock3 className="h-4 w-4 text-slate-500" />
-                        End time
-                      </span>
-                      <input
-                        type="time"
-                        value={endTime}
-                        onChange={(event) => setEndTime(event.target.value)}
-                        className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none"
-                      />
-                    </label>
-                  </div>
+                    </button>
+                  </label>
 
                   {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
@@ -513,12 +718,55 @@ export function PublicSpaceDetailView({
                   <button
                     type="button"
                     onClick={handleReserve}
-                    disabled={requesting}
+                    disabled={requesting || !date || (!allDay && (!startTime || !endTime))}
                     className="inline-flex h-12 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {requesting ? "Reserving..." : isAuthenticated ? "Reserve" : "Sign in to reserve"}
                   </button>
                 </div>
+
+                {subtotal != null ? (
+                  <div className="mt-5 space-y-3 text-sm text-slate-700">
+                    {allDay ? (
+                      dailyPrice != null ? (
+                        <div className="flex items-center justify-between">
+                          <span>Day rate</span>
+                          <span>${dailyPrice.toLocaleString()}</span>
+                        </div>
+                      ) : hourlyPrice != null && dayOpenSpan != null ? (
+                        <div className="flex items-center justify-between">
+                          <span>
+                            ${hourlyPrice} x {dayOpenSpan} hours
+                          </span>
+                          <span>${subtotal.toLocaleString()}</span>
+                        </div>
+                      ) : null
+                    ) : hourlyPrice != null && hours > 0 ? (
+                      <div className="flex items-center justify-between">
+                        <span>
+                          ${hourlyPrice} x {hours} {hours === 1 ? "hour" : "hours"}
+                        </span>
+                        <span>${subtotal.toLocaleString()}</span>
+                      </div>
+                    ) : null}
+                    <div className="border-t border-slate-200" />
+                    <div className="flex items-center justify-between font-semibold text-slate-900">
+                      <span>Total before taxes</span>
+                      <span>${subtotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  priceRows.length > 1 ? (
+                    <div className="mt-5 space-y-2 text-sm text-slate-600">
+                      {priceRows.slice(1).map((row) => (
+                        <div key={row.label} className="flex items-center justify-between gap-4">
+                          <span>{row.label}</span>
+                          <span className="font-medium text-slate-900">{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null
+                )}
               </div>
 
               {plans.length > 0 ? (

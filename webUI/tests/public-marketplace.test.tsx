@@ -83,6 +83,18 @@ describe("public marketplace flows", () => {
 
   it("hides empty optional sections on the public detail page", async () => {
     apiFetchMock.mockImplementation((url: string) => {
+      if (url.includes("/availability")) {
+        return Promise.resolve({
+          space_public_id: "space_1",
+          timezone: "America/New_York",
+          granularity_minutes: 60,
+          availability_start_time: "08:00",
+          availability_end_time: "18:00",
+          hourly_price: null,
+          daily_price: 69,
+          days: [],
+        });
+      }
       if (url.startsWith("/api/marketplace/spaces/")) {
         return Promise.resolve({
           space: {

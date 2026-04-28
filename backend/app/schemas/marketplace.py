@@ -133,3 +133,25 @@ class MarketplaceSpaceDetailOut(BaseModel):
     location: MarketplaceSpaceDetailLocationOut
     cancellation_policy: MarketplaceCancellationPolicyOut | None = None
     support_contacts: list[MarketplaceSupportContactOut]
+
+
+class SpaceAvailabilityIntervalOut(BaseModel):
+    start: str
+    end: str
+
+
+class SpaceAvailabilityDayOut(BaseModel):
+    date: str
+    fully_blocked: bool
+    busy_intervals: list[SpaceAvailabilityIntervalOut]
+
+
+class SpaceAvailabilityOut(BaseModel):
+    space_public_id: str
+    timezone: str
+    granularity_minutes: int | None
+    availability_start_time: str | None
+    availability_end_time: str | None
+    hourly_price: int | None
+    daily_price: int | None
+    days: list[SpaceAvailabilityDayOut]

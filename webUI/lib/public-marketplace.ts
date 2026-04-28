@@ -129,6 +129,28 @@ export interface MarketplaceSpaceDetailResponse {
   support_contacts: MarketplaceSupportContact[];
 }
 
+export interface SpaceAvailabilityInterval {
+  start: string;
+  end: string;
+}
+
+export interface SpaceAvailabilityDay {
+  date: string;
+  fully_blocked: boolean;
+  busy_intervals: SpaceAvailabilityInterval[];
+}
+
+export interface SpaceAvailabilityResponse {
+  space_public_id: string;
+  timezone: string;
+  granularity_minutes: number | null;
+  availability_start_time: string | null;
+  availability_end_time: string | null;
+  hourly_price: number | null;
+  daily_price: number | null;
+  days: SpaceAvailabilityDay[];
+}
+
 export const PUBLIC_MARKETPLACE_CONFIGS: Record<PublicMarketplaceRoute, PublicMarketplaceConfig> = {
   "coworking": {
     routeKey: "coworking",
