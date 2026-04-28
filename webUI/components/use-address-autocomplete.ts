@@ -88,6 +88,49 @@ function parsePlace(place: {
   };
 }
 
+interface GeocoderResult {
+  address_components?: AddressComponent[];
+  formatted_address?: string;
+  geometry?: { location?: { lat: () => number; lng: () => number } };
+}
+
+interface GoogleGeocoderWindow {
+  google?: {
+    maps?: {
+      Geocoder: new () => {
+        geocode: (
+          request: { location: { lat: number; lng: number } },
+          callback: (results: GeocoderResult[] | null, status: string) => void,
+        ) => void;
+      };
+    };
+  };
+}
+
+/**
+ * Reverse-geocode a lat/lng to a structured place via Google Maps. Resolves
+ * with the best-match place details, or null when the SDK can't be loaded.
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<PlaceDetails | null> {
+  if (typeof window === "undefined") return null;
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+  await loadMapsWithPlaces(apiKey);
+  const w = window as unknown as GoogleGeocoderWindow;
+  const Geocoder = w.google?.maps?.Geocoder;
+  if (!Geocoder) return null;
+  const geocoder = new Geocoder();
+  return new Promise<PlaceDetails | null>((resolve) => {
+    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+      if (status !== "OK" || !results || results.length === 0) {
+        resolve(null);
+        return;
+      }
+      resolve(parsePlace(results[0]));
+    });
+  });
+}
+
 interface AutocompleteOptions {
   /** Restrict to specific Google place types. Defaults to street addresses. */
   types?: string[];

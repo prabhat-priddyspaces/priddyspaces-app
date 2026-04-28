@@ -47,6 +47,7 @@ class MarketplaceLocationSummaryOut(BaseModel):
     starting_monthly_price: int | None = None
     starting_hourly_price: int | None = None
     starting_membership_price: int | None = None
+    distance_miles: float | None = None
 
 
 class MarketplaceLocationSearchOut(BaseModel):

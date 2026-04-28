@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { CalendarDays, Clock3, Search, SlidersHorizontal, Users } from "lucide-react";
+import { CalendarDays, Clock3, Compass, Search, SlidersHorizontal, Users } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import {
+  DEFAULT_RADIUS_MILES,
+  MAX_RADIUS_MILES,
   PUBLIC_MARKETPLACE_CONFIGS,
   PUBLIC_MARKETPLACE_TABS,
   PublicMarketplaceRoute,
@@ -20,6 +22,7 @@ import {
 import { PublicMarketplaceMap } from "@/components/public-marketplace-map";
 import {
   PlaceDetails,
+  reverseGeocode,
   useAddressAutocomplete,
 } from "@/components/use-address-autocomplete";
 
@@ -36,6 +39,9 @@ const DEFAULT_FORM = {
   max_price: "",
   max_price_monthly: "",
   sort: "",
+  lat: "",
+  lng: "",
+  radius_miles: "",
 };
 
 export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserProps) {
@@ -54,8 +60,11 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationNotice, setLocationNotice] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const autoLocateAttemptedRef = useRef(false);
   // The hook captures onSelect once; route through a ref so we can read the
   // latest form + search trigger without re-binding Autocomplete on every
   // render.
@@ -88,6 +97,9 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
       max_price: current.get("max_price") || "",
       max_price_monthly: current.get("max_price_monthly") || "",
       sort: current.get("sort") || "",
+      lat: current.get("lat") || "",
+      lng: current.get("lng") || "",
+      radius_miles: current.get("radius_miles") || "",
     });
   }, [queryString]);
 
@@ -142,6 +154,16 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
         params.set(key, cleaned);
       }
     }
+    const lat = nextForm.lat.trim();
+    const lng = nextForm.lng.trim();
+    if (lat && lng) {
+      params.set("lat", lat);
+      params.set("lng", lng);
+      const radius = nextForm.radius_miles.trim();
+      if (radius) {
+        params.set("radius_miles", radius);
+      }
+    }
     const nextQuery = params.toString();
     router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname);
   }
@@ -154,11 +176,73 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
   // Keep the autocomplete callback fresh so it uses the latest form state.
   onPlaceSelectRef.current = (place: PlaceDetails) => {
     const next = [place.city, place.state].filter(Boolean).join(", ") || place.formatted;
-    if (!next) return;
-    const updated = { ...form, q: next };
+    if (!next && place.lat == null) return;
+    const radius = form.radius_miles.trim() || String(DEFAULT_RADIUS_MILES);
+    const updated = {
+      ...form,
+      q: next,
+      lat: place.lat != null ? String(place.lat) : "",
+      lng: place.lng != null ? String(place.lng) : "",
+      radius_miles: place.lat != null && place.lng != null ? radius : form.radius_miles,
+    };
     setForm(updated);
+    setLocationNotice(null);
     updateSearch(updated);
   };
+
+  async function handleUseMyLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationNotice("Your browser doesn't support location services.");
+      return;
+    }
+    setLocating(true);
+    setLocationNotice(null);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 8000,
+          maximumAge: 5 * 60 * 1000,
+        });
+      });
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const reverse = await reverseGeocode(lat, lng).catch(() => null);
+      const label = reverse
+        ? [reverse.city, reverse.state].filter(Boolean).join(", ") || reverse.formatted || ""
+        : "";
+      const radius = form.radius_miles.trim() || String(DEFAULT_RADIUS_MILES);
+      const updated = {
+        ...form,
+        q: label,
+        lat: String(lat),
+        lng: String(lng),
+        radius_miles: radius,
+      };
+      setForm(updated);
+      updateSearch(updated);
+    } catch (err: unknown) {
+      const message =
+        err instanceof GeolocationPositionError && err.code === err.PERMISSION_DENIED
+          ? "Location permission denied. Search by city or ZIP instead."
+          : "Couldn't get your location. Try searching by city or ZIP.";
+      setLocationNotice(message);
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  // On first paint, if no location filter is set, try the browser geolocation
+  // so users land on results near them with the default 50-mile radius.
+  useEffect(() => {
+    if (autoLocateAttemptedRef.current) return;
+    autoLocateAttemptedRef.current = true;
+    const current = new URLSearchParams(queryString);
+    if (current.get("q") || current.get("lat")) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    void handleUseMyLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSelectLocation(locationId: string) {
     setSelectedLocationId(locationId);
@@ -236,11 +320,31 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 <input
                   ref={searchInputRef}
                   value={form.q}
-                  onChange={(event) => setForm((current) => ({ ...current, q: event.target.value }))}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      q: value,
+                      // Free-text edits invalidate any geocoded coordinates; clear
+                      // them so the next search uses keyword matching.
+                      lat: "",
+                      lng: "",
+                    }));
+                  }}
                   placeholder={config.queryPlaceholder}
                   autoComplete="off"
                   className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
                 />
+                <button
+                  type="button"
+                  onClick={handleUseMyLocation}
+                  disabled={locating}
+                  title="Use my current location"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-teal-500 hover:text-teal-700 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Compass className="h-3.5 w-3.5" />
+                  {locating ? "Locating…" : "Use my location"}
+                </button>
               </label>
               {routeKey !== "private-offices" ? (
                 <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
@@ -335,8 +439,40 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             {autocompleteWarning && (
               <p className="text-xs text-slate-500">{autocompleteWarning}</p>
             )}
+            {locationNotice && (
+              <p className="text-xs text-slate-500">{locationNotice}</p>
+            )}
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 md:max-w-[280px]">
+                <Compass className="h-4 w-4 text-slate-500" />
+                <span className="whitespace-nowrap text-xs uppercase tracking-[0.16em] text-slate-500">Within</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={MAX_RADIUS_MILES}
+                  step="1"
+                  value={form.radius_miles}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    if (raw === "") {
+                      setForm((current) => ({ ...current, radius_miles: "" }));
+                      return;
+                    }
+                    const parsed = Number(raw);
+                    if (Number.isNaN(parsed)) return;
+                    const clamped = Math.max(1, Math.min(MAX_RADIUS_MILES, Math.floor(parsed)));
+                    setForm((current) => ({ ...current, radius_miles: String(clamped) }));
+                  }}
+                  placeholder={String(DEFAULT_RADIUS_MILES)}
+                  disabled={!form.lat || !form.lng}
+                  className="w-16 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                <span className="whitespace-nowrap text-xs text-slate-500">miles</span>
+                {!form.lat || !form.lng ? (
+                  <span className="ml-auto text-[11px] text-slate-400">Pick a place to enable</span>
+                ) : null}
+              </label>
               <select
                 value={form.sort}
                 onChange={(event) => setForm((current) => ({ ...current, sort: event.target.value }))}
@@ -344,6 +480,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               >
                 <option value="">Default sort</option>
                 <option value="relevance">Relevance</option>
+                <option value="distance">Distance</option>
                 <option value="price_asc">Lowest price</option>
                 <option value="price_desc">Highest price</option>
                 <option value="name">Location name</option>
@@ -434,8 +571,17 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                             <p className="mt-1 text-xs uppercase tracking-[0.2em] text-teal-700">{location.neighborhood}</p>
                           ) : null}
                         </div>
-                        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                          {location.matching_space_count} matching {location.matching_space_count === 1 ? "space" : "spaces"}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {location.distance_miles != null ? (
+                            <div className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                              {location.distance_miles < 0.1
+                                ? "<0.1 mi"
+                                : `${location.distance_miles.toFixed(1)} mi`}
+                            </div>
+                          ) : null}
+                          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {location.matching_space_count} matching {location.matching_space_count === 1 ? "space" : "spaces"}
+                          </div>
                         </div>
                       </div>
 
