@@ -39,6 +39,9 @@ dist/
 test-results/
 playwright-report/
 
+# TypeScript
+*.tsbuildinfo
+
 # DB
 *.sqlite
 *.sqlite3
