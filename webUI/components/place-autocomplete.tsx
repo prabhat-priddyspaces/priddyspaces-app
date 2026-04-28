@@ -25,31 +25,32 @@ interface Props {
   disabled?: boolean;
 }
 
-let bootstrapPromise: Promise<void> | null = null;
+let mapsPromise: Promise<void> | null = null;
 
-function bootstrapGoogleMaps(apiKey: string): Promise<void> {
+function loadMapsWithPlaces(apiKey: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
-  const w = window as unknown as { google?: { maps?: unknown } };
-  if (w.google?.maps) return Promise.resolve();
-  if (!bootstrapPromise) {
-    bootstrapPromise = new Promise((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>("script[data-priddy-maps]");
-      if (existing) {
-        existing.addEventListener("load", () => resolve());
-        existing.addEventListener("error", () => reject(new Error("Google Maps script load failed")));
-        return;
-      }
+  const w = window as unknown as { google?: { maps?: { places?: unknown } } };
+  if (w.google?.maps?.places) return Promise.resolve();
+  if (!mapsPromise) {
+    mapsPromise = new Promise((resolve, reject) => {
+      const callbackName = `__priddyMapsReady_${Math.random().toString(36).slice(2)}`;
+      (window as unknown as Record<string, () => void>)[callbackName] = () => {
+        delete (window as unknown as Record<string, () => void>)[callbackName];
+        resolve();
+      };
       const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&libraries=places&callback=${callbackName}`;
       script.async = true;
       script.defer = true;
-      script.dataset.priddyMaps = "1";
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Google Maps script load failed"));
+      script.onerror = () => {
+        delete (window as unknown as Record<string, () => void>)[callbackName];
+        mapsPromise = null;
+        reject(new Error("Google Maps script failed to load"));
+      };
       document.head.appendChild(script);
     });
   }
-  return bootstrapPromise;
+  return mapsPromise;
 }
 
 interface AddressComponent {
@@ -120,22 +121,21 @@ export function PlaceAutocomplete({ value, onChange, onSelect, id, placeholder, 
 
     (async () => {
       try {
-        await bootstrapGoogleMaps(apiKey);
+        await loadMapsWithPlaces(apiKey);
         const w = window as unknown as {
           google: {
             maps: {
-              importLibrary: (name: string) => Promise<{
+              places: {
                 Autocomplete: new (
                   input: HTMLInputElement,
                   options: { fields: string[]; types: string[] }
                 ) => GoogleAutocomplete;
-              }>;
+              };
             };
           };
         };
-        const places = await w.google.maps.importLibrary("places");
         if (cancelled || !inputRef.current) return;
-        autocomplete = new places.Autocomplete(inputRef.current, {
+        autocomplete = new w.google.maps.places.Autocomplete(inputRef.current, {
           fields: ["address_components", "formatted_address", "geometry"],
           types: ["address"],
         });
