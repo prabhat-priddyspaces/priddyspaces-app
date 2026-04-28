@@ -30,6 +30,7 @@ node_modules/
 
 # Build
 .next/
+.next-playwright/
 .expo/
 out/
 dist/

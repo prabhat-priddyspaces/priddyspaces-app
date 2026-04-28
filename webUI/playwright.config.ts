@@ -35,6 +35,9 @@ export default defineConfig({
       // Any non-empty value works; e2e mocks the maps.googleapis.com response.
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
         process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "test-key-for-playwright",
+      // Use a separate build cache so the test-only NEXT_PUBLIC_* values
+      // don't get baked into the .next dir that `npm run dev` reuses.
+      NEXT_DIST_DIR: ".next-playwright",
     },
   },
 });
