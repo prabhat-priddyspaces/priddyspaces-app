@@ -54,7 +54,7 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
 
   const notes = page.locator("textarea").first();
   await notes.fill("Approved for the afternoon block");
-  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
 
   await expect(page.getByText("Status: approved")).toBeVisible();
   await expect(page.getByText("Payment: succeeded • stripe")).toBeVisible();
