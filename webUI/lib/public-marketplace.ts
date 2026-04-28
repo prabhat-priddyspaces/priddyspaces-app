@@ -209,6 +209,10 @@ export function buildApiSearchParams(
     if (radiusMiles) {
       params.set("radius_miles", radiusMiles);
     }
+    // q reflects the place the user picked from autocomplete (e.g.
+    // "Plantation, FL"); the radius does the actual location filtering,
+    // and keeping q as a substring filter would miss every nearby city.
+    params.delete("q");
   }
 
   return params;
