@@ -75,7 +75,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
+    <div className="flex flex-1 items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-md space-y-6 rounded-md border border-border bg-surface p-6">
         <div className="text-center">
           <h1 className="text-xl font-semibold text-textPrimary">Create an account</h1>
