@@ -25,31 +25,31 @@ interface Props {
   disabled?: boolean;
 }
 
-let mapsScriptPromise: Promise<void> | null = null;
+let bootstrapPromise: Promise<void> | null = null;
 
-function loadGoogleMapsScript(apiKey: string): Promise<void> {
+function bootstrapGoogleMaps(apiKey: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
-  const w = window as unknown as { google?: { maps?: { places?: unknown } } };
-  if (w.google?.maps?.places) return Promise.resolve();
-  if (!mapsScriptPromise) {
-    mapsScriptPromise = new Promise((resolve, reject) => {
+  const w = window as unknown as { google?: { maps?: unknown } };
+  if (w.google?.maps) return Promise.resolve();
+  if (!bootstrapPromise) {
+    bootstrapPromise = new Promise((resolve, reject) => {
       const existing = document.querySelector<HTMLScriptElement>("script[data-priddy-maps]");
       if (existing) {
         existing.addEventListener("load", () => resolve());
-        existing.addEventListener("error", reject);
+        existing.addEventListener("error", () => reject(new Error("Google Maps script load failed")));
         return;
       }
       const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&loading=async&v=weekly`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&loading=async`;
       script.async = true;
       script.defer = true;
       script.dataset.priddyMaps = "1";
       script.onload = () => resolve();
-      script.onerror = (event) => reject(event);
+      script.onerror = () => reject(new Error("Google Maps script load failed"));
       document.head.appendChild(script);
     });
   }
-  return mapsScriptPromise;
+  return bootstrapPromise;
 }
 
 interface AddressComponent {
@@ -110,40 +110,51 @@ export function PlaceAutocomplete({ value, onChange, onSelect, id, placeholder, 
     }
     if (!inputRef.current) return;
 
-    let autocomplete: { addListener: (event: string, handler: () => void) => { remove: () => void }; getPlace: () => Parameters<typeof parsePlace>[0] } | null = null;
+    type GoogleAutocomplete = {
+      addListener: (event: string, handler: () => void) => { remove: () => void };
+      getPlace: () => Parameters<typeof parsePlace>[0];
+    };
+    let autocomplete: GoogleAutocomplete | null = null;
     let listener: { remove: () => void } | null = null;
     let cancelled = false;
 
-    loadGoogleMapsScript(apiKey)
-      .then(() => {
-        if (cancelled || !inputRef.current) return;
+    (async () => {
+      try {
+        await bootstrapGoogleMaps(apiKey);
         const w = window as unknown as {
           google: {
             maps: {
-              places: {
+              importLibrary: (name: string) => Promise<{
                 Autocomplete: new (
                   input: HTMLInputElement,
                   options: { fields: string[]; types: string[] }
-                ) => typeof autocomplete extends infer T ? NonNullable<T> : never;
-              };
+                ) => GoogleAutocomplete;
+              }>;
             };
           };
         };
-        autocomplete = new w.google.maps.places.Autocomplete(inputRef.current, {
+        const places = await w.google.maps.importLibrary("places");
+        if (cancelled || !inputRef.current) return;
+        autocomplete = new places.Autocomplete(inputRef.current, {
           fields: ["address_components", "formatted_address", "geometry"],
           types: ["address"],
         });
-        listener = autocomplete!.addListener("place_changed", () => {
+        listener = autocomplete.addListener("place_changed", () => {
           if (!autocomplete) return;
           const raw = autocomplete.getPlace();
           const parsed = parsePlace(raw);
           onSelect(parsed);
           if (parsed.formatted) onChange(parsed.formatted);
         });
-      })
-      .catch(() => {
-        if (!cancelled) setWarning("Could not load Google Maps. Type the address manually.");
-      });
+      } catch (err) {
+        if (!cancelled) {
+          // Surface the underlying cause in the console — the UI just shows a generic notice.
+          // eslint-disable-next-line no-console
+          console.error("PlaceAutocomplete: failed to initialize Google Maps autocomplete", err);
+          setWarning("Could not load Google Maps. Type the address manually.");
+        }
+      }
+    })();
 
     return () => {
       cancelled = true;
