@@ -18,6 +18,10 @@ import {
   MarketplaceLocationSearchResponse,
 } from "@/lib/public-marketplace";
 import { PublicMarketplaceMap } from "@/components/public-marketplace-map";
+import {
+  PlaceDetails,
+  useAddressAutocomplete,
+} from "@/components/use-address-autocomplete";
 
 interface PublicMarketplaceBrowserProps {
   routeKey: PublicMarketplaceRoute;
@@ -51,6 +55,17 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
   const [error, setError] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // The hook captures onSelect once; route through a ref so we can read the
+  // latest form + search trigger without re-binding Autocomplete on every
+  // render.
+  const onPlaceSelectRef = useRef<(place: PlaceDetails) => void>(() => {});
+
+  const { warning: autocompleteWarning } = useAddressAutocomplete(
+    searchInputRef,
+    (place) => onPlaceSelectRef.current(place),
+    { types: ["geocode"] },
+  );
 
   useEffect(() => {
     const next = new URLSearchParams(queryString);
@@ -136,6 +151,15 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
     updateSearch();
   }
 
+  // Keep the autocomplete callback fresh so it uses the latest form state.
+  onPlaceSelectRef.current = (place: PlaceDetails) => {
+    const next = [place.city, place.state].filter(Boolean).join(", ") || place.formatted;
+    if (!next) return;
+    const updated = { ...form, q: next };
+    setForm(updated);
+    updateSearch(updated);
+  };
+
   function handleSelectLocation(locationId: string) {
     setSelectedLocationId(locationId);
     const node = cardRefs.current[locationId];
@@ -210,9 +234,11 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
                 <Search className="h-4 w-4 text-slate-500" />
                 <input
+                  ref={searchInputRef}
                   value={form.q}
                   onChange={(event) => setForm((current) => ({ ...current, q: event.target.value }))}
                   placeholder={config.queryPlaceholder}
+                  autoComplete="off"
                   className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
                 />
               </label>
@@ -306,6 +332,9 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 Search
               </button>
             </form>
+            {autocompleteWarning && (
+              <p className="text-xs text-slate-500">{autocompleteWarning}</p>
+            )}
 
             <div className="flex justify-end">
               <select
