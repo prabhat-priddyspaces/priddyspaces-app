@@ -1,18 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { setAccessToken } from "@/lib/auth";
+import {
+  buildLoginHref,
+  sanitizeNext,
+  stashOauthNext,
+} from "@/lib/auth-redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getDefaultRoute, type MeResponse } from "@/lib/me";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = sanitizeNext(searchParams.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -21,6 +28,7 @@ export default function LoginPage() {
   const enableOauth = process.env.NEXT_PUBLIC_ENABLE_OAUTH === "true";
   const loginUrl = `${API_BASE_URL}/auth/login/google`;
   const appleUrl = `${API_BASE_URL}/auth/login/apple`;
+  const registerHref = next ? buildRegisterHref(next) : "/register";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,12 +48,16 @@ export default function LoginPage() {
       const { access_token } = await res.json();
       setAccessToken(access_token);
       const me = await apiFetch<MeResponse>("/api/me", { method: "GET" }, access_token);
-      router.push(getDefaultRoute(me));
+      router.push(next ?? getDefaultRoute(me));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleOauthClick() {
+    stashOauthNext(next);
   }
 
   return (
@@ -99,12 +111,12 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="grid gap-2">
-              <a href={loginUrl}>
+              <a href={loginUrl} onClick={handleOauthClick}>
                 <Button type="button" variant="secondary" className="w-full">
                   Continue with Google
                 </Button>
               </a>
-              <a href={appleUrl}>
+              <a href={appleUrl} onClick={handleOauthClick}>
                 <Button type="button" variant="secondary" className="w-full">
                   Continue with Apple
                 </Button>
@@ -114,11 +126,29 @@ export default function LoginPage() {
         ) : null}
         <p className="text-center text-sm text-textSecondary">
           Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-medium text-accent hover:underline">
+          <Link href={registerHref} className="font-medium text-accent hover:underline">
             Register
           </Link>
         </p>
       </div>
     </div>
+  );
+}
+
+function buildRegisterHref(next: string): string {
+  return `/register?next=${encodeURIComponent(next)}`;
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
+          Loading…
+        </div>
+      }
+    >
+      <LoginPageInner />
+    </Suspense>
   );
 }

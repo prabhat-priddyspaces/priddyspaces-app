@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { buildLoginHref } from "@/lib/auth-redirect";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,10 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
       .finally(() => setLoading(false));
   }, [spaceId]);
 
+  function buildSelfNextHref() {
+    return `/customer/spaces/${spaceId}`;
+  }
+
   async function handleRequest() {
     if (!startDatetime || !endDatetime) {
       setError("Please select start and end date/time.");
@@ -88,7 +93,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
 
     const token = getAccessToken() ?? undefined;
     if (!token) {
-      router.push("/login");
+      router.push(buildLoginHref(buildSelfNextHref()));
       return;
     }
 
@@ -117,7 +122,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
 
   function handleMembershipClick(plan: SubscriptionPlan) {
     if (!getAccessToken()) {
-      router.push("/login");
+      router.push(buildLoginHref(buildSelfNextHref()));
       return;
     }
     setSelectedPlan(plan);

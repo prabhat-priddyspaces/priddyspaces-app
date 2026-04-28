@@ -21,6 +21,9 @@ export interface MeResponse {
 }
 
 export function getDefaultRoute(me: MeResponse): string {
+  if (me.app_role === "customer" && (!me.default_route || me.default_route === "/customer")) {
+    return "/coworking";
+  }
   if (me.default_route) {
     return me.default_route;
   }
@@ -31,7 +34,7 @@ export function getDefaultRoute(me: MeResponse): string {
     return "/owner";
   }
   if (me.app_role === "customer") {
-    return "/customer";
+    return "/coworking";
   }
   return "/onboarding";
 }

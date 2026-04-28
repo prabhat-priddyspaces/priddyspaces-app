@@ -1,10 +1,5 @@
-import { MarketplaceBrowser } from "@/components/marketplace-browser";
+import { redirect } from "next/navigation";
 
 export default function CustomerDashboard() {
-  return (
-    <MarketplaceBrowser
-      detailHrefBase="/customer/spaces"
-      showCustomerActions={true}
-    />
-  );
+  redirect("/coworking");
 }

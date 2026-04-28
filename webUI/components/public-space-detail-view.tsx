@@ -18,6 +18,7 @@ import {
 
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { buildLoginHref } from "@/lib/auth-redirect";
 import {
   formatLocationAddress,
   formatSpaceTypeLabel,
@@ -129,6 +130,15 @@ export function PublicSpaceDetailView({
   const primaryPrice = priceRows[0]?.value ?? "Contact for pricing";
   const locationAddress = detail ? formatLocationAddress(detail.location) : "";
 
+  function buildSelfNextHref() {
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (startTime) params.set("start_time", startTime);
+    if (endTime) params.set("end_time", endTime);
+    const qs = params.toString();
+    return qs ? `/spaces/${spaceId}?${qs}` : `/spaces/${spaceId}`;
+  }
+
   async function handleReserve() {
     if (!detail) {
       return;
@@ -147,7 +157,7 @@ export function PublicSpaceDetailView({
 
     const token = getAccessToken() ?? undefined;
     if (!token) {
-      router.push("/login");
+      router.push(buildLoginHref(buildSelfNextHref()));
       return;
     }
 
@@ -176,7 +186,7 @@ export function PublicSpaceDetailView({
 
   function handleMembershipClick(plan: SubscriptionPlan) {
     if (!getAccessToken()) {
-      router.push("/login");
+      router.push(buildLoginHref(buildSelfNextHref()));
       return;
     }
     setSelectedPlan(plan);

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiFetch } from "@/lib/api";
 import { setAccessToken } from "@/lib/auth";
+import { consumeOauthNext } from "@/lib/auth-redirect";
 import { getDefaultRoute, type MeResponse } from "@/lib/me";
 
 function AuthCallbackContent() {
@@ -19,9 +20,10 @@ function AuthCallbackContent() {
       return;
     }
     setAccessToken(token);
+    const next = consumeOauthNext();
     apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
       .then((me) => {
-        router.replace(getDefaultRoute(me));
+        router.replace(next ?? getDefaultRoute(me));
       })
       .catch(() => {
         setError("Sign-in failed. Please try again.");
