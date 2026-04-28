@@ -31,5 +31,10 @@ export default defineConfig({
     command: webServerCommand,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
+    env: {
+      // Any non-empty value works; e2e mocks the maps.googleapis.com response.
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
+        process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "test-key-for-playwright",
+    },
   },
 });

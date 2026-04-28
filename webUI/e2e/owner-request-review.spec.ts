@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { json, mockSession } from "./helpers/mock-api";
+import { json, meResponse, mockSession } from "./helpers/mock-api";
 
 test("owner can review a request and approve it with notes", async ({ page }) => {
   const requestState = {
@@ -21,11 +21,7 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
     const key = `${route.request().method()} ${url.pathname}`;
 
     if (key === "GET /api/me") {
-      await json(route, {
-        public_id: "owner_user",
-        email: "owner@priddyspaces.test",
-        role: "owner",
-      });
+      await json(route, meResponse("owner"));
       return;
     }
 

@@ -91,6 +91,14 @@ jobs:
           CI: true
         run: npm test
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chrome
+
+      - name: Run webUI e2e
+        env:
+          CI: true
+        run: npm run test:e2e
+
   deploy-backend-dev:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.backend == 'true'
     needs:

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { json, mockSession } from "./helpers/mock-api";
+import { json, meResponse, mockSession } from "./helpers/mock-api";
 
 test("customer can see payment and invoice status for an approved booking request", async ({ page }) => {
   await mockSession(page, "customer");
@@ -10,11 +10,7 @@ test("customer can see payment and invoice status for an approved booking reques
     const key = `${route.request().method()} ${url.pathname}`;
 
     if (key === "GET /api/me") {
-      await json(route, {
-        public_id: "customer_user",
-        email: "customer@priddyspaces.test",
-        role: "customer",
-      });
+      await json(route, meResponse("customer"));
       return;
     }
 
