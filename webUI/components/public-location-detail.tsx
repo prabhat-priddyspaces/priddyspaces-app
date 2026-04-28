@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import {
   PUBLIC_MARKETPLACE_CONFIGS,
+  PUBLIC_MARKETPLACE_TABS,
   PublicMarketplaceRoute,
   buildApiSearchParams,
   buildMarketplaceSpaceHref,
@@ -25,7 +26,6 @@ interface PublicLocationDetailProps {
 
 export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDetailProps) {
   const searchParams = useSearchParams();
-  const config = PUBLIC_MARKETPLACE_CONFIGS[routeKey];
   // The static export only ships /{routeKey}/_/index.html, so production URLs
   // route through the placeholder with the real id in ?id=. Path param wins
   // for dev mode and any legacy /{routeKey}/{id} links.
@@ -36,6 +36,14 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
     params.delete("id");
     return params.toString();
   }, [searchParams]);
+
+  // Show all categories at this location, defaulting to the route the user came from.
+  const [activeRoute, setActiveRoute] = useState<PublicMarketplaceRoute>(routeKey);
+  useEffect(() => {
+    setActiveRoute(routeKey);
+  }, [routeKey]);
+  const activeConfig = PUBLIC_MARKETPLACE_CONFIGS[activeRoute];
+
   const [location, setLocation] = useState<MarketplaceLocationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -46,7 +54,7 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
       setError("Location not found");
       return;
     }
-    const params = buildApiSearchParams(config, new URLSearchParams(filterQueryString));
+    const params = buildApiSearchParams(activeConfig, new URLSearchParams(filterQueryString));
     setLoading(true);
     setError("");
     apiFetch<MarketplaceLocationDetail>(
@@ -59,8 +67,9 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
         setLocation(null);
       })
       .finally(() => setLoading(false));
-  }, [config, effectiveLocationId, filterQueryString]);
+  }, [activeConfig, effectiveLocationId, filterQueryString]);
 
+  // Back link returns to the original search route, not whichever tab the user opened here.
   const backHref = useMemo(
     () => buildBackHref(routeKey, filterQueryString),
     [routeKey, filterQueryString],
@@ -74,20 +83,33 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
     );
   }
 
-  if (error || !location) {
+  if (error && !location) {
     return (
       <main className="min-h-screen bg-background px-6 py-8">
         <div className="mx-auto max-w-6xl">
           <Link href={backHref} className="text-sm text-accent hover:underline">
             Back to search
           </Link>
-          <p className="mt-4 text-sm text-error">{error || "Location not found"}</p>
+          <p className="mt-4 text-sm text-error">{error}</p>
         </div>
       </main>
     );
   }
 
-  const chips = getLocationPriceChips(config, location);
+  if (!location) {
+    return (
+      <main className="min-h-screen bg-background px-6 py-8">
+        <div className="mx-auto max-w-6xl">
+          <Link href={backHref} className="text-sm text-accent hover:underline">
+            Back to search
+          </Link>
+          <p className="mt-4 text-sm text-textMuted">Location not found</p>
+        </div>
+      </main>
+    );
+  }
+
+  const chips = getLocationPriceChips(activeConfig, location);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef6f8_100%)] px-6 py-8">
@@ -145,18 +167,53 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
           </div>
 
           <div className="space-y-4">
+            <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="text-center text-base font-semibold text-slate-900">
+                Find Your Ideal Workspace
+              </div>
+              <div
+                className="mt-3 grid gap-2"
+                style={{ gridTemplateColumns: `repeat(${PUBLIC_MARKETPLACE_TABS.length}, minmax(0, 1fr))` }}
+              >
+                {PUBLIC_MARKETPLACE_TABS.map((tab) => {
+                  const isActive = tab.routeKey === activeRoute;
+                  return (
+                    <button
+                      key={tab.routeKey}
+                      type="button"
+                      onClick={() => setActiveRoute(tab.routeKey)}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${
+                        isActive
+                          ? "border-slate-900 bg-white shadow-sm"
+                          : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
+                      }`}
+                    >
+                      <div className="text-sm font-semibold text-slate-900">{tab.label}</div>
+                      <div className="mt-1 text-xs text-slate-500">{tab.subtitle.split(".")[0]}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="text-sm font-semibold text-slate-900">
                 {location.spaces.length} matching {location.spaces.length === 1 ? "space" : "spaces"}
               </div>
               <div className="mt-1 text-sm text-slate-500">
-                Inventory below stays aligned with your current filters on {PUBLIC_MARKETPLACE_CONFIGS[routeKey].label.toLowerCase()}.
+                {activeConfig.label} at this location, filtered by your current search.
               </div>
             </div>
 
+            {location.spaces.length === 0 ? (
+              <div className="rounded-[28px] border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                No {activeConfig.label.toLowerCase()} match your filters at this location. Try a different category above.
+              </div>
+            ) : null}
+
             {location.spaces.map((space) => {
-              const chipsForSpace = getSpacePriceChips(config, space);
-              const spaceHref = buildMarketplaceSpaceHref(space.public_id, routeKey, filterQueryString);
+              const chipsForSpace = getSpacePriceChips(activeConfig, space);
+              const spaceHref = buildMarketplaceSpaceHref(space.public_id, activeRoute, filterQueryString);
 
               return (
                 <div key={space.public_id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
