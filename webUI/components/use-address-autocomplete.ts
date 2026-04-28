@@ -89,7 +89,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<PlaceDet
   if (typeof window === "undefined") return null;
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   if (!apiKey) return null;
-  await loadMapsWithPlaces(apiKey);
+  await loadGoogleMaps(apiKey);
   const w = window as unknown as GoogleGeocoderWindow;
   const Geocoder = w.google?.maps?.Geocoder;
   if (!Geocoder) return null;
