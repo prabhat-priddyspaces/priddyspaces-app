@@ -34,7 +34,11 @@ export interface MarketplaceLocationSummary {
   starting_monthly_price: number | null;
   starting_hourly_price: number | null;
   starting_membership_price: number | null;
+  distance_miles: number | null;
 }
+
+export const DEFAULT_RADIUS_MILES = 50;
+export const MAX_RADIUS_MILES = 1000;
 
 export interface MarketplaceLocationSearchResponse {
   meta: {
@@ -184,6 +188,9 @@ export function buildApiSearchParams(
   const endTime = searchParams.get("end_time");
   const capacity = searchParams.get("capacity");
   const sort = searchParams.get("sort");
+  const lat = searchParams.get("lat");
+  const lng = searchParams.get("lng");
+  const radiusMiles = searchParams.get("radius_miles");
   const maxPrice =
     config.priceParamKey === "max_price_monthly"
       ? searchParams.get("max_price_monthly")
@@ -196,6 +203,13 @@ export function buildApiSearchParams(
   if (capacity) params.set("capacity", capacity);
   if (sort) params.set("sort", sort);
   if (maxPrice) params.set("max_price", maxPrice);
+  if (lat && lng) {
+    params.set("lat", lat);
+    params.set("lng", lng);
+    if (radiusMiles) {
+      params.set("radius_miles", radiusMiles);
+    }
+  }
 
   return params;
 }
@@ -205,7 +219,17 @@ export function buildTabHref(
   searchParams: SearchLike,
 ) {
   const next = new URLSearchParams();
-  const transferableKeys = ["q", "capacity", "sort", "date", "start_time", "end_time"];
+  const transferableKeys = [
+    "q",
+    "capacity",
+    "sort",
+    "date",
+    "start_time",
+    "end_time",
+    "lat",
+    "lng",
+    "radius_miles",
+  ];
   for (const key of transferableKeys) {
     const value = searchParams.get(key);
     if (value) next.set(key, value);

@@ -522,6 +522,61 @@ def test_public_location_search_includes_locations_without_coordinates(db_sessio
     assert payload["results"][0]["starting_monthly_price"] == 2100
 
 
+def test_public_location_search_matches_combined_city_state_query(db_session, client_factory):
+    """Autocomplete sends combined "City, ST" — make sure it still matches."""
+    seeded = _seed_public_location_marketplace(db_session)
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get("/api/marketplace/locations?category=coworking&q=Miami%2C%20FL")
+    assert response.status_code == 200
+    payload = response.json()
+    ids = [item["location_public_id"] for item in payload["results"]]
+    assert seeded["coworking_location"].public_id in ids
+
+
+def test_public_location_search_filters_within_radius(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    # Search near Miami with a 50-mile radius. Tampa (~200 mi away) should drop.
+    response = client.get(
+        "/api/marketplace/locations?category=coworking&lat=25.7616&lng=-80.1918&radius_miles=50"
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    ids = [item["location_public_id"] for item in payload["results"]]
+    assert seeded["coworking_location"].public_id in ids
+    miami = next(item for item in payload["results"] if item["location_public_id"] == seeded["coworking_location"].public_id)
+    assert miami["distance_miles"] is not None and miami["distance_miles"] < 1.0
+
+
+def test_public_location_search_radius_excludes_far_locations(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    # Tampa coordinates with a tight 25-mile radius — Miami's location must drop.
+    response = client.get(
+        "/api/marketplace/locations?category=coworking&lat=27.9506&lng=-82.4572&radius_miles=25"
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    ids = [item["location_public_id"] for item in payload["results"]]
+    assert seeded["coworking_location"].public_id not in ids
+
+
+def test_public_location_search_rejects_radius_out_of_range(db_session, client_factory):
+    _seed_public_location_marketplace(db_session)
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    too_big = client.get(
+        "/api/marketplace/locations?category=coworking&lat=25.7616&lng=-80.1918&radius_miles=1500"
+    )
+    assert too_big.status_code == 400
+
+    no_coords = client.get("/api/marketplace/locations?category=coworking&radius_miles=50")
+    assert no_coords.status_code == 400
+
+
 def test_public_location_detail_supports_meeting_room_filters_and_time_validation(db_session, client_factory):
     seeded = _seed_public_location_marketplace(db_session)
     client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})

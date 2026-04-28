@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
@@ -32,6 +33,8 @@ DEFAULT_SORT = {
     "meeting_room": "price_asc",
 }
 
+EARTH_RADIUS_MILES = 3958.7613
+
 
 @dataclass
 class PublicMarketplaceSearchFilters:
@@ -44,8 +47,19 @@ class PublicMarketplaceSearchFilters:
     max_price: int | None = None
     amenities: str | None = None
     sort: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    radius_miles: float | None = None
     page: int = 1
     page_size: int = 20
+
+
+def _haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    rlat1, rlng1, rlat2, rlng2 = (math.radians(v) for v in (lat1, lng1, lat2, lng2))
+    dlat = rlat2 - rlat1
+    dlng = rlng2 - rlng1
+    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlng / 2) ** 2
+    return 2 * EARTH_RADIUS_MILES * math.asin(min(1.0, math.sqrt(a)))
 
 
 def _split_csv(value: str | None) -> list[str]:
@@ -114,6 +128,18 @@ def _validate_filters(filters: PublicMarketplaceSearchFilters) -> tuple[date | N
         raise HTTPException(status_code=400, detail="page_size must be 1 or greater")
     if filters.page_size > 100:
         raise HTTPException(status_code=400, detail="page_size must be 100 or fewer")
+
+    if (filters.lat is None) != (filters.lng is None):
+        raise HTTPException(status_code=400, detail="lat and lng must be provided together")
+    if filters.lat is not None and not -90 <= filters.lat <= 90:
+        raise HTTPException(status_code=400, detail="lat must be between -90 and 90")
+    if filters.lng is not None and not -180 <= filters.lng <= 180:
+        raise HTTPException(status_code=400, detail="lng must be between -180 and 180")
+    if filters.radius_miles is not None:
+        if filters.lat is None or filters.lng is None:
+            raise HTTPException(status_code=400, detail="radius_miles requires lat and lng")
+        if filters.radius_miles <= 0 or filters.radius_miles > 1000:
+            raise HTTPException(status_code=400, detail="radius_miles must be between 1 and 1000")
 
     return parsed_date, parsed_start, parsed_end
 
@@ -204,6 +230,26 @@ def _space_matches_time_window(
     return True
 
 
+def _query_tokens(q: str | None) -> list[str]:
+    """Split a freeform location query into tokens that must each match.
+
+    "New York, NY" → ["new york", "ny"] so the query can match a row whose
+    city is "New York" and state is "NY" stored in separate columns.
+    """
+    if not q:
+        return []
+    tokens: list[str] = []
+    for chunk in q.split(","):
+        cleaned = " ".join(chunk.split())
+        if cleaned:
+            tokens.append(cleaned.casefold())
+    if not tokens:
+        cleaned = " ".join(q.split())
+        if cleaned:
+            tokens.append(cleaned.casefold())
+    return tokens
+
+
 def _query_score(
     q: str | None,
     *,
@@ -211,25 +257,31 @@ def _query_score(
     location_amenities: list[str],
     space_amenities: list[str],
 ) -> int:
-    if not q:
+    tokens = _query_tokens(q)
+    if not tokens:
         return 0
-    query = q.casefold()
-    score = 0
-    for value, weight in (
+    field_weights: tuple[tuple[str | None, int], ...] = (
         (location.name, 5),
         (location.neighborhood, 4),
         (location.city, 3),
         (location.state, 3),
         (location.address, 2),
         (location.postal_code, 2),
-    ):
-        if value and query in value.casefold():
-            score += weight
-    if any(query in amenity.casefold() for amenity in location_amenities):
-        score += 3
-    if any(query in amenity.casefold() for amenity in space_amenities):
-        score += 2
-    return score
+    )
+    total = 0
+    for token in tokens:
+        best = 0
+        for value, weight in field_weights:
+            if value and token in value.casefold():
+                best = max(best, weight)
+        if any(token in amenity.casefold() for amenity in location_amenities):
+            best = max(best, 3)
+        if any(token in amenity.casefold() for amenity in space_amenities):
+            best = max(best, 2)
+        if best == 0:
+            return 0
+        total += best
+    return total
 
 
 def _space_matches_query(
@@ -338,8 +390,22 @@ def _space_card_price(
     return space.price_daily or space.price_monthly
 
 
-def _sort_key(category: str, item: dict[str, object], *, query_present: bool, sort: str | None) -> tuple[object, ...]:
-    selected_sort = sort or ("relevance" if query_present else DEFAULT_SORT[category])
+def _sort_key(
+    category: str,
+    item: dict[str, object],
+    *,
+    query_present: bool,
+    sort: str | None,
+    distance_present: bool,
+) -> tuple[object, ...]:
+    if sort:
+        selected_sort = sort
+    elif distance_present:
+        selected_sort = "distance"
+    elif query_present:
+        selected_sort = "relevance"
+    else:
+        selected_sort = DEFAULT_SORT[category]
     price = _best_space_price(item, category=category)
     if selected_sort == "price_desc":
         return (-1 if price is None else 0, -(price or 0), str(item["name"]).casefold())
@@ -347,6 +413,9 @@ def _sort_key(category: str, item: dict[str, object], *, query_present: bool, so
         return (str(item["name"]).casefold(),)
     if selected_sort == "relevance":
         return (-int(item["_relevance"]), 1 if price is None else 0, price or 0, str(item["name"]).casefold())
+    if selected_sort == "distance":
+        distance = item.get("distance_miles")
+        return (1 if distance is None else 0, distance or 0.0, str(item["name"]).casefold())
     return (1 if price is None else 0, price or 0, str(item["name"]).casefold())
 
 
@@ -358,6 +427,7 @@ def _build_location_payload(
     *,
     location: Location,
     location_amenities: list[str],
+    distance_miles: float | None = None,
 ) -> dict[str, object]:
     return {
         "location_public_id": location.public_id,
@@ -378,6 +448,7 @@ def _build_location_payload(
         "starting_monthly_price": None,
         "starting_hourly_price": None,
         "starting_membership_price": None,
+        "distance_miles": distance_miles,
         "_relevance": 0,
         "_spaces": [],
     }
@@ -432,6 +503,11 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
         space_type=CATEGORY_SPACE_TYPES[filters.category],
     )
     requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
+    radius_active = (
+        filters.radius_miles is not None
+        and filters.lat is not None
+        and filters.lng is not None
+    )
 
     grouped: dict[str, dict[str, object]] = {}
     for space, location, image in rows:
@@ -452,6 +528,13 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             space_amenities=space_amenities,
         ):
             continue
+
+        distance_miles: float | None = None
+        if filters.lat is not None and filters.lng is not None and location.lat is not None and location.lng is not None:
+            distance_miles = _haversine_miles(filters.lat, filters.lng, location.lat, location.lng)
+        if radius_active:
+            if distance_miles is None or distance_miles > filters.radius_miles:
+                continue
 
         hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
         membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
@@ -474,7 +557,11 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
 
         payload = grouped.setdefault(
             location.public_id,
-            _build_location_payload(location=location, location_amenities=location_amenities),
+            _build_location_payload(
+                location=location,
+                location_amenities=location_amenities,
+                distance_miles=round(distance_miles, 2) if distance_miles is not None else None,
+            ),
         )
         payload["matching_space_count"] = int(payload["matching_space_count"]) + 1
         payload["_relevance"] = max(
@@ -507,6 +594,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             item,
             query_present=bool(query),
             sort=filters.sort,
+            distance_present=radius_active,
         )
     )
     total_locations = len(results)

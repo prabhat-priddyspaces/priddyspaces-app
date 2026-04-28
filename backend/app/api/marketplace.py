@@ -205,6 +205,9 @@ def search_marketplace_locations(
     max_price: int | None = None,
     amenities: str | None = None,
     sort: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_miles: float | None = None,
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
@@ -221,6 +224,9 @@ def search_marketplace_locations(
             max_price=max_price,
             amenities=amenities,
             sort=sort,
+            lat=lat,
+            lng=lng,
+            radius_miles=radius_miles,
             page=page,
             page_size=page_size,
         ),
@@ -239,6 +245,9 @@ def get_marketplace_location_detail(
     max_price: int | None = None,
     amenities: str | None = None,
     sort: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_miles: float | None = None,
     db: Session = Depends(get_db),
 ):
     return get_public_location_detail(
@@ -254,6 +263,9 @@ def get_marketplace_location_detail(
             max_price=max_price,
             amenities=amenities,
             sort=sort,
+            lat=lat,
+            lng=lng,
+            radius_miles=radius_miles,
         ),
     )
 
