@@ -78,7 +78,7 @@ describe("public marketplace flows", () => {
     expect(await screen.findByRole("heading", { name: "Fallback Place" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Open Fallback Place" }));
-    expect(pushMock).toHaveBeenCalledWith("/coworking/loc_1?q=Miami");
+    expect(pushMock).toHaveBeenCalledWith("/coworking/_?q=Miami&id=loc_1");
   });
 
   it("hides empty optional sections on the public detail page", async () => {

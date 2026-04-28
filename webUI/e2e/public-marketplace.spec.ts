@@ -287,7 +287,7 @@ test("public marketplace redirects to /coworking and supports route-driven locat
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
   await page.locator('[data-selected="true"]').filter({ hasText: "Harbor Rooms" }).click();
-  await expect(page).toHaveURL(/\/spaces\/space_public_3\?back=/);
+  await expect(page).toHaveURL(/\/spaces\/_\?.*id=space_public_3/);
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
   await expect(page.locator('input[type="date"]')).toHaveValue("2026-04-15");
   await expect(page.locator('input[type="time"]').nth(0)).toHaveValue("10:00");
@@ -305,12 +305,12 @@ test("public marketplace redirects to /coworking and supports route-driven locat
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
   await page.getByRole("link", { name: "View location" }).first().click();
-  await expect(page).toHaveURL(/\/coworking\/loc_public_1\?/);
+  await expect(page).toHaveURL(/\/coworking\/_\?.*id=loc_public_1/);
   await expect(page).toHaveURL(/q=Miami/);
   await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
   await page.getByRole("link", { name: "View space" }).first().click();
 
-  await expect(page).toHaveURL(/\/spaces\/space_public_1\?back=/);
+  await expect(page).toHaveURL(/\/spaces\/_\?.*id=space_public_1/);
   await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to search" }).click();

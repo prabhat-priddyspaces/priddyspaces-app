@@ -255,7 +255,10 @@ export function buildMarketplaceSpaceHref(
   routeKey: PublicMarketplaceRoute,
   search: string,
 ) {
+  // Static export only ships /spaces/_/index.html — route through that path
+  // and pass the real id as a query param so any space id resolves on S3.
   const next = new URLSearchParams();
+  next.set("id", spacePublicId);
   next.set("back", buildBackHref(routeKey, search));
 
   const current = new URLSearchParams(search);
@@ -266,7 +269,20 @@ export function buildMarketplaceSpaceHref(
     }
   }
 
-  return `/spaces/${spacePublicId}?${next.toString()}`;
+  return `/spaces/_?${next.toString()}`;
+}
+
+export function buildMarketplaceLocationHref(
+  routeKey: PublicMarketplaceRoute,
+  locationPublicId: string,
+  search: string,
+) {
+  // Same pattern as the space href — route through /{routeKey}/_/index.html
+  // since arbitrary {locationId} paths aren't pre-rendered for static export.
+  const next = new URLSearchParams(search);
+  next.set("id", locationPublicId);
+  const query = next.toString();
+  return query ? `/${routeKey}/_?${query}` : `/${routeKey}/_`;
 }
 
 export function formatSpaceTypeLabel(spaceType: string) {

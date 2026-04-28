@@ -13,6 +13,7 @@ import {
   PUBLIC_MARKETPLACE_TABS,
   PublicMarketplaceRoute,
   buildApiSearchParams,
+  buildMarketplaceLocationHref,
   buildMarketplaceSpaceHref,
   buildTabHref,
   formatLocationAddress,
@@ -511,9 +512,11 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             {results.map((location) => {
               const chips = getLocationPriceChips(config, location);
               const active = location.location_public_id === selectedLocationId;
-              const locationHref = currentSearch
-                ? `${pathname}/${location.location_public_id}?${currentSearch}`
-                : `${pathname}/${location.location_public_id}`;
+              const locationHref = buildMarketplaceLocationHref(
+                routeKey,
+                location.location_public_id,
+                currentSearch,
+              );
               const primaryHref = location.featured_space_public_id
                 ? buildMarketplaceSpaceHref(location.featured_space_public_id, routeKey, currentSearch)
                 : locationHref;

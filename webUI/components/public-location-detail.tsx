@@ -26,17 +26,31 @@ interface PublicLocationDetailProps {
 export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDetailProps) {
   const searchParams = useSearchParams();
   const config = PUBLIC_MARKETPLACE_CONFIGS[routeKey];
-  const queryString = searchParams.toString();
+  // The static export only ships /{routeKey}/_/index.html, so production URLs
+  // route through the placeholder with the real id in ?id=. Path param wins
+  // for dev mode and any legacy /{routeKey}/{id} links.
+  const effectiveLocationId =
+    !locationId || locationId === "_" ? searchParams.get("id") || "" : locationId;
+  const filterQueryString = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("id");
+    return params.toString();
+  }, [searchParams]);
   const [location, setLocation] = useState<MarketplaceLocationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const params = buildApiSearchParams(config, new URLSearchParams(queryString));
+    if (!effectiveLocationId) {
+      setLoading(false);
+      setError("Location not found");
+      return;
+    }
+    const params = buildApiSearchParams(config, new URLSearchParams(filterQueryString));
     setLoading(true);
     setError("");
     apiFetch<MarketplaceLocationDetail>(
-      `/api/marketplace/locations/${locationId}?${params.toString()}`,
+      `/api/marketplace/locations/${effectiveLocationId}?${params.toString()}`,
       { method: "GET" },
     )
       .then(setLocation)
@@ -45,9 +59,12 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
         setLocation(null);
       })
       .finally(() => setLoading(false));
-  }, [config, locationId, queryString]);
+  }, [config, effectiveLocationId, filterQueryString]);
 
-  const backHref = useMemo(() => buildBackHref(routeKey, queryString), [routeKey, queryString]);
+  const backHref = useMemo(
+    () => buildBackHref(routeKey, filterQueryString),
+    [routeKey, filterQueryString],
+  );
 
   if (loading) {
     return (
@@ -139,7 +156,7 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
 
             {location.spaces.map((space) => {
               const chipsForSpace = getSpacePriceChips(config, space);
-              const spaceHref = buildMarketplaceSpaceHref(space.public_id, routeKey, queryString);
+              const spaceHref = buildMarketplaceSpaceHref(space.public_id, routeKey, filterQueryString);
 
               return (
                 <div key={space.public_id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
