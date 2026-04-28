@@ -23,6 +23,9 @@ test("customer can see payment and invoice status for an approved booking reques
         start_datetime: "2026-04-15T15:00:00.000Z",
         end_datetime: "2026-04-15T18:00:00.000Z",
         status: "approved",
+        payment_status: "succeeded",
+        payment_provider: "stripe",
+        cancellation_deadline_at: "2026-04-14T15:00:00.000Z",
         operator_notes: "Reception will have guest badges ready.",
         estimated_amount: 240,
       });

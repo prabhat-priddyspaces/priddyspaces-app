@@ -1,6 +1,7 @@
 from app.models.audit_log import AuditLog
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
+from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
 from app.models.floor_plan import FloorPlan
 from app.models.floor_plan_marker import FloorPlanMarker
 from app.models.invoice import Invoice
@@ -10,6 +11,7 @@ from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
 from app.models.organization_amenity import OrganizationAmenity
 from app.models.organization_member import OrganizationMember
+from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
 from app.models.platform_setting import PlatformSetting
@@ -29,6 +31,7 @@ __all__ = [
     "AuditLog",
     "Booking",
     "BookingRequest",
+    "CustomerOwnerPaymentMethod",
     "FloorPlan",
     "FloorPlanMarker",
     "Invoice",
@@ -38,6 +41,7 @@ __all__ = [
     "Organization",
     "OrganizationAmenity",
     "OrganizationMember",
+    "OwnerPaymentSetting",
     "Payment",
     "PaymentEvent",
     "PlatformSetting",

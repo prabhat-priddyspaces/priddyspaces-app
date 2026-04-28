@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
+from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
 from app.models.enums import BookingStatus, PaymentStatus
 from app.models.invoice import Invoice
 from app.models.organization import Organization
@@ -23,6 +24,9 @@ SUPPORTED_EVENTS = {
     "customer.subscription.deleted",
     "payment_intent.succeeded",
     "payment_intent.payment_failed",
+    "charge.refunded",
+    "payment_method.detached",
+    "customer.source.expiring",
 }
 
 
@@ -301,8 +305,48 @@ def handle_event(db: Session, event: dict[str, Any]) -> dict[str, Any]:
             payment.status = PaymentStatus.FAILED
             if tenant_id is not None and not payment.tenant_id:
                 payment.tenant_id = tenant_id
+            last_error = data.get("last_payment_error") or {}
+            if isinstance(last_error, dict):
+                payment.failure_reason = last_error.get("message") or last_error.get("code")
             db.add(payment)
             db.commit()
+
+    if event_type == "charge.refunded":
+        payment_intent_id = data.get("payment_intent")
+        if payment_intent_id:
+            payment = db.query(Payment).filter(Payment.stripe_payment_intent_id == payment_intent_id).first()
+            if payment:
+                amount_refunded = data.get("amount_refunded") or 0
+                amount_total = data.get("amount") or 0
+                payment.status = PaymentStatus.REFUNDED if amount_refunded >= amount_total else PaymentStatus.VOIDED
+                db.add(payment)
+                db.commit()
+
+    if event_type == "payment_method.detached":
+        provider_pm_id = data.get("id")
+        if provider_pm_id:
+            method = (
+                db.query(CustomerOwnerPaymentMethod)
+                .filter(CustomerOwnerPaymentMethod.provider_payment_method_id == provider_pm_id)
+                .first()
+            )
+            if method:
+                method.status = "detached"
+                db.add(method)
+                db.commit()
+
+    if event_type == "customer.source.expiring":
+        provider_pm_id = data.get("id")
+        if provider_pm_id:
+            method = (
+                db.query(CustomerOwnerPaymentMethod)
+                .filter(CustomerOwnerPaymentMethod.provider_payment_method_id == provider_pm_id)
+                .first()
+            )
+            if method:
+                method.status = "expiring"
+                db.add(method)
+                db.commit()
 
     if event_type in {"invoice.paid", "invoice.payment_failed"}:
         _handle_subscription_invoice_event(db, event_type, data)

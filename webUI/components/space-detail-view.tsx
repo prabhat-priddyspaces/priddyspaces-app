@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubscriptionModal } from "@/components/subscription-modal";
+import { PaymentMethodModal } from "@/components/payment-method-modal";
 
 interface Space {
   public_id: string;
@@ -44,6 +45,19 @@ interface SpaceDetailViewProps {
   backHref: string;
 }
 
+interface PaymentMethodResolve {
+  is_configured: boolean;
+  has_payment_method: boolean;
+  payment_method_public_id: string | null;
+  message: string | null;
+}
+
+interface ReservationPayload {
+  space_public_id: string;
+  start_datetime: string;
+  end_datetime: string;
+}
+
 export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
   const router = useRouter();
   const [space, setSpace] = useState<Space | null>(null);
@@ -56,6 +70,9 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
+  const [authorizationConsent, setAuthorizationConsent] = useState(false);
   const isAuthenticated = useMemo(() => Boolean(getAccessToken()), []);
 
   useEffect(() => {
@@ -84,6 +101,35 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
     return `/customer/spaces/${spaceId}`;
   }
 
+  async function submitRequest(payload: ReservationPayload, paymentMethodPublicId: string | null) {
+    const token = getAccessToken() ?? undefined;
+    if (!token) {
+      router.push(buildLoginHref(buildSelfNextHref()));
+      return;
+    }
+    setRequesting(true);
+    setError("");
+    try {
+      await apiFetch(
+        "/api/booking-requests",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            ...payload,
+            customer_owner_payment_method_public_id: paymentMethodPublicId,
+            payment_authorization_consent: true,
+          }),
+        },
+        token
+      );
+      router.push("/customer/requests");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setRequesting(false);
+    }
+  }
+
   async function handleRequest() {
     if (!startDatetime || !endDatetime) {
       setError("Please select start and end date/time.");
@@ -96,23 +142,33 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
       router.push(buildLoginHref(buildSelfNextHref()));
       return;
     }
+    if (!authorizationConsent) {
+      setError("Authorize payment on approval before requesting.");
+      return;
+    }
 
     setRequesting(true);
     setError("");
     try {
-      await apiFetch(
-        "/api/booking-requests",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            space_public_id: space.public_id,
-            start_datetime: new Date(startDatetime).toISOString(),
-            end_datetime: new Date(endDatetime).toISOString(),
-          }),
-        },
+      const payload = {
+        space_public_id: space.public_id,
+        start_datetime: new Date(startDatetime).toISOString(),
+        end_datetime: new Date(endDatetime).toISOString(),
+      };
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(space.public_id)}`,
+        { method: "GET" },
         token
       );
-      router.push("/customer/requests");
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || "This owner has not configured payments.");
+      }
+      if (!resolved.has_payment_method) {
+        setPendingReservation(payload);
+        setPaymentMethodOpen(true);
+        return;
+      }
+      await submitRequest(payload, resolved.payment_method_public_id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -202,6 +258,17 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
                   value={endDatetime}
                   onChange={(e) => setEndDatetime(e.target.value)}
                 />
+                {isAuthenticated ? (
+                  <label className="flex items-start gap-3 rounded-md border border-border bg-surface2 p-3 text-sm text-textSecondary">
+                    <input
+                      type="checkbox"
+                      checked={authorizationConsent}
+                      onChange={(event) => setAuthorizationConsent(event.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>I authorize this owner to charge my card upon approval.</span>
+                  </label>
+                ) : null}
                 <Button onClick={handleRequest} disabled={requesting}>
                   {requesting
                     ? "Sending..."
@@ -244,6 +311,19 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
           onDone={() => {
             setSubscriptionOpen(false);
             router.push("/customer/subscriptions");
+          }}
+        />
+      ) : null}
+      {space ? (
+        <PaymentMethodModal
+          open={paymentMethodOpen}
+          spacePublicId={space.public_id}
+          onClose={() => setPaymentMethodOpen(false)}
+          onSaved={(paymentMethodPublicId) => {
+            setPaymentMethodOpen(false);
+            if (pendingReservation) {
+              submitRequest(pendingReservation, paymentMethodPublicId).catch(() => null);
+            }
           }}
         />
       ) : null}

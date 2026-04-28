@@ -16,6 +16,7 @@ const nav = [
   { href: "/owner/team", label: "Team" },
   { href: "/owner/payments", label: "Payments" },
   { href: "/owner/invoices", label: "Invoices" },
+  { href: "/owner/settings/payments", label: "Payment Settings" },
   { href: "/owner/settings", label: "Settings" },
 ];
 

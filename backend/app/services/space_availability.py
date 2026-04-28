@@ -51,7 +51,7 @@ def get_space_availability(
         db.query(BookingRequest.start_datetime, BookingRequest.end_datetime)
         .filter(
             BookingRequest.space_id == space_id,
-            BookingRequest.status == BookingRequestStatus.REQUESTED,
+            BookingRequest.status.in_([BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED]),
             BookingRequest.start_datetime < range_end,
             BookingRequest.end_datetime > range_start,
         )

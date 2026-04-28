@@ -12,6 +12,10 @@ test("customer can submit a booking request from a space detail page", async ({ 
     start_datetime: "2026-04-10T14:00:00.000Z",
     end_datetime: "2026-04-10T16:00:00.000Z",
     status: "requested",
+    payment_status: "not_charged",
+    payment_provider: "stripe",
+    customer_owner_payment_method_public_id: "pm_owner_1",
+    cancellation_deadline_at: "2026-04-09T14:00:00.000Z",
     operator_notes: null,
   };
 
@@ -96,11 +100,30 @@ test("customer can submit a booking request from a space detail page", async ({ 
       return;
     }
 
+    if (key === "GET /api/payment-methods/resolve") {
+      await json(route, {
+        provider: "stripe",
+        owner_payment_setting_public_id: "ops_1",
+        organization_public_id: "org_1",
+        is_configured: true,
+        has_payment_method: true,
+        payment_method_public_id: "pm_owner_1",
+        publishable_key: "pk_test",
+        tokenizer_url: null,
+        message: null,
+      });
+      return;
+    }
+
     if (key === "POST /api/booking-requests") {
       const payload = route.request().postDataJSON() as {
         start_datetime: string;
         end_datetime: string;
+        customer_owner_payment_method_public_id: string;
+        payment_authorization_consent: boolean;
       };
+      expect(payload.customer_owner_payment_method_public_id).toBe("pm_owner_1");
+      expect(payload.payment_authorization_consent).toBe(true);
       bookingRequest.start_datetime = payload.start_datetime;
       bookingRequest.end_datetime = payload.end_datetime;
       await json(route, bookingRequest);
@@ -136,6 +159,7 @@ test("customer can submit a booking request from a space detail page", async ({ 
 
   // Auto-populate fills the date and a slot once availability resolves.
   await expect(page.getByRole("button", { name: "Reserve" })).toBeEnabled();
+  await page.getByLabel("I authorize this owner to charge my card upon approval.").check();
   await page.getByRole("button", { name: "Reserve" }).click();
 
   await expect(page).toHaveURL(/\/customer\/requests$/);

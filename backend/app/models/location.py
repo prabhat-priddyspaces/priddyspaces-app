@@ -28,6 +28,7 @@ class Location(PublicIdMixin, TimestampMixin, Base):
     public_parking_notes = Column(String(2048), nullable=True)
     public_transit_notes = Column(String(2048), nullable=True)
     public_included_items = Column(String(2048), nullable=True)
+    payment_provider = Column(String(32), nullable=True)
     status = Column(
         Enum(LocationStatus, values_callable=enum_values),
         default=LocationStatus.ACTIVE,

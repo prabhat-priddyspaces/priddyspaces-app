@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PaymentModal } from "@/components/payment-modal";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 
@@ -17,13 +16,16 @@ interface BookingRequest {
   start_datetime: string;
   end_datetime: string;
   status: string;
+  payment_status: string | null;
+  payment_provider: string | null;
+  cancellation_deadline_at: string | null;
 }
 
 export default function CustomerRequestsPage() {
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState<{ id: string; amount: number } | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
   async function load() {
@@ -45,6 +47,28 @@ export default function CustomerRequestsPage() {
     if (!token) return;
     const list = await apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token);
     setBookings(list);
+  }
+
+  async function cancelRequest(publicId: string) {
+    const token = getAccessToken() ?? undefined;
+    if (!token) return;
+    setCancelling(publicId);
+    setError(null);
+    try {
+      await apiFetch(`/api/booking-requests/${publicId}/cancel`, { method: "POST" }, token);
+      await refreshRequests();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to cancel request");
+    } finally {
+      setCancelling(null);
+    }
+  }
+
+  function canCancel(request: BookingRequest) {
+    if (request.status === "requested" || request.status === "payment_failed") return true;
+    if (request.status !== "approved") return false;
+    if (!request.cancellation_deadline_at) return false;
+    return new Date() <= new Date(request.cancellation_deadline_at);
   }
 
   return (
@@ -86,46 +110,49 @@ export default function CustomerRequestsPage() {
                     <div className="mt-1 text-textMuted">
                       Status: <span className="capitalize">{b.status}</span>
                     </div>
+                    <div className="mt-1 text-textMuted">
+                      Payment: <span className="capitalize">{b.payment_status || "not charged"}</span>
+                      {b.payment_provider ? ` • ${b.payment_provider}` : ""}
+                    </div>
+                    {b.cancellation_deadline_at ? (
+                      <div className="mt-1 text-textMuted">
+                        Cancel by {new Date(b.cancellation_deadline_at).toLocaleString()}
+                      </div>
+                    ) : null}
                     {b.estimated_amount != null ? (
                       <div className="mt-1 text-textMuted">
                         Estimated: ${b.estimated_amount}
                       </div>
                     ) : null}
                   </div>
-                  <Link href={`/customer/requests/${b.public_id}`}>
-                    <Button size="sm" variant="secondary">
-                      View details
-                    </Button>
-                  </Link>
+                  <div className="flex flex-wrap gap-2">
+                    <Link href={`/customer/requests/${b.public_id}`}>
+                      <Button size="sm" variant="secondary">
+                        View details
+                      </Button>
+                    </Link>
+                    {canCancel(b) ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => cancelRequest(b.public_id)}
+                        disabled={cancelling === b.public_id}
+                      >
+                        {cancelling === b.public_id ? "Cancelling..." : "Cancel"}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-                {b.status === "approved" &&
-                b.booking_public_id != null &&
-                b.estimated_amount != null ? (
-                  <Button
-                    size="sm"
-                    onClick={() => setPaying({ id: b.booking_public_id!, amount: b.estimated_amount! })}
-                  >
-                    Pay now
-                  </Button>
+                {b.status === "payment_failed" ? (
+                  <div className="mt-3 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
+                    Payment failed when the owner approved this request. The owner can retry the charge after you update your payment method.
+                  </div>
                 ) : null}
               </Card>
             ))}
           </div>
         )}
       </div>
-      {paying ? (
-        <PaymentModal
-          open={true}
-          bookingPublicId={paying.id}
-          amount={paying.amount}
-          onClose={() => setPaying(null)}
-          onDone={() => {
-            setPaying(null);
-            refreshRequests().catch(() => null);
-            window.location.href = "/customer/payments/success";
-          }}
-        />
-      ) : null}
     </main>
   );
 }

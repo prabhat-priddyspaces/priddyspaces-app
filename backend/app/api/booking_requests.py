@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.config import settings
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
 from app.models.booking import Booking
@@ -9,21 +10,35 @@ from app.models.enums import BookingRequestStatus, BookingStatus, UserAppRole, U
 from app.models.location import Location
 from datetime import datetime, timezone
 
+from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.payment import Payment
 from app.models.space import Space
 from app.models.pricing_rule import PricingRule
 from app.models.tax_config import TaxConfig
 from app.models.feature_flag import FeatureFlag
 from app.models.user import User
-from app.schemas.booking_request import BookingRequestCreate, BookingRequestOut, BookingRequestDecision
+from app.schemas.booking_request import (
+    BookingPaymentSummary,
+    BookingRequestCreate,
+    BookingRequestDecision,
+    BookingRequestOut,
+    BookingRequestRetryPayment,
+)
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids, require_location_roles
 from app.services.availability import booking_overlaps, booking_request_overlaps, subscription_overlaps
+from app.services.booking_payments import cancellation_deadline_for_request, charge_booking_request, refund_booking_payment
+from app.services.owner_payments import require_payment_method_for_request
 from app.services.pricing import estimate_booking_amount
 from app.services.notifications import send_email
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
 
 router = APIRouter()
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -88,6 +103,34 @@ def _to_out(
             rate_amount=rate_amount,
             tax_rate_percent=tax_rate
         )
+    payment_method_public_id = None
+    if db and req.customer_owner_payment_method_id:
+        payment_method = (
+            db.query(CustomerOwnerPaymentMethod)
+            .filter(CustomerOwnerPaymentMethod.id == req.customer_owner_payment_method_id)
+            .first()
+        )
+        payment_method_public_id = payment_method.public_id if payment_method else None
+    last_payment_summary = None
+    failure_reason = None
+    if db:
+        last_payment = (
+            db.query(Payment)
+            .filter(Payment.booking_request_id == req.id)
+            .order_by(Payment.created_at.desc())
+            .first()
+        )
+        if last_payment:
+            last_payment_summary = BookingPaymentSummary(
+                status=last_payment.status.value if last_payment.status else None,
+                amount=last_payment.amount,
+                amount_cents=last_payment.amount_cents,
+                currency=last_payment.currency,
+                attempt_number=last_payment.attempt_number,
+                failure_reason=last_payment.failure_reason,
+                attempted_at=last_payment.created_at,
+            )
+            failure_reason = last_payment.failure_reason
     return BookingRequestOut(
         public_id=req.public_id,
         space_id=req.space_id,
@@ -98,10 +141,20 @@ def _to_out(
         start_datetime=req.start_datetime,
         end_datetime=req.end_datetime,
         status=req.status,
+        payment_status=req.payment_status,
+        payment_provider=req.payment_provider,
+        customer_owner_payment_method_public_id=payment_method_public_id,
+        approved_at=req.approved_at,
+        cancelled_at=req.cancelled_at,
+        cancellation_deadline_at=req.cancellation_deadline_at,
+        payment_authorization_consent_at=req.payment_authorization_consent_at,
         operator_notes=req.operator_notes,
         price_daily=price_daily,
         price_monthly=price_monthly,
-        estimated_amount=estimated
+        estimated_amount=estimated,
+        payment_attempt_count=req.payment_attempt_count,
+        failure_reason=failure_reason,
+        last_payment=last_payment_summary,
     )
 
 
@@ -125,6 +178,18 @@ def create_booking_request(
     if booking_request_overlaps(db, space.id, payload.start_datetime, payload.end_datetime):
         raise HTTPException(status_code=409, detail="Booking request already exists for that time")
 
+    owner_payment_setting = None
+    payment_method = None
+    consent_at = None
+    if settings.PAYMENT_METHOD_REQUIRED_FOR_REQUEST:
+        owner_payment_setting, payment_method, consent_at = require_payment_method_for_request(
+            db,
+            user,
+            space,
+            payload.customer_owner_payment_method_public_id,
+            payload.payment_authorization_consent,
+        )
+
     instant = _instant_booking_enabled(db, space)
     req = BookingRequest(
         tenant_id=space.tenant_id,
@@ -132,11 +197,22 @@ def create_booking_request(
         space_id=space.id,
         start_datetime=payload.start_datetime,
         end_datetime=payload.end_datetime,
-        status=BookingRequestStatus.APPROVED if instant else BookingRequestStatus.REQUESTED
+        status=BookingRequestStatus.APPROVED if instant and not settings.PAYMENT_CHARGE_ON_APPROVAL else BookingRequestStatus.REQUESTED,
+        owner_payment_setting_id=owner_payment_setting.id if owner_payment_setting else None,
+        payment_provider=owner_payment_setting.provider if owner_payment_setting else None,
+        customer_owner_payment_method_id=payment_method.id if payment_method else None,
+        payment_status="not_charged" if owner_payment_setting else None,
+        payment_authorization_consent_at=consent_at,
     )
+    req.cancellation_deadline_at = cancellation_deadline_for_request(db, req, space)
     db.add(req)
     db.commit()
     db.refresh(req)
+    if instant and settings.PAYMENT_CHARGE_ON_APPROVAL:
+        req, booking, _payment = charge_booking_request(db, req)
+        if req.status == BookingRequestStatus.APPROVED:
+            send_email(user.email, "Booking approved", f"Request {req.public_id} approved instantly.")
+        return _to_out(req, space, booking, db)
     if instant:
         booking = Booking(
             user_id=req.user_id,
@@ -242,7 +318,7 @@ def approve_booking_request(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
-    req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).first()
+    req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).with_for_update().first()
     if not req:
         raise HTTPException(status_code=404, detail="Booking request not found")
     space = db.query(Space).filter(Space.id == req.space_id).first()
@@ -253,48 +329,84 @@ def approve_booking_request(
         raise HTTPException(status_code=404, detail="Booking request not found")
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
 
-    if req.status != BookingRequestStatus.REQUESTED:
+    if req.status == BookingRequestStatus.APPROVED and req.booking_id:
+        booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+        return _to_out(req, space, booking, db)
+
+    if req.status not in (BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED):
         raise HTTPException(status_code=400, detail="Request already processed")
 
-    req.status = BookingRequestStatus.APPROVED
-    req.operator_notes = payload.operator_notes
-    db.add(req)
-    db.commit()
-    db.refresh(req)
+    if settings.PAYMENT_CHARGE_ON_APPROVAL:
+        before_status = req.status
+        req, booking, payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
+        after_status = req.status
+    else:
+        before_status = req.status
+        req.status = BookingRequestStatus.APPROVED
+        req.operator_notes = payload.operator_notes
+        req.approved_at = datetime.now(timezone.utc)
+        db.add(req)
+        db.commit()
+        db.refresh(req)
 
-    booking = Booking(
-        user_id=req.user_id,
-        space_id=req.space_id,
-        tenant_id=req.tenant_id,
-        start_datetime=req.start_datetime,
-        end_datetime=req.end_datetime,
-        status=BookingStatus.PENDING
-    )
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
-    req.booking_id = booking.id
-    db.add(req)
-    db.commit()
-    db.refresh(req)
+        booking = Booking(
+            user_id=req.user_id,
+            space_id=req.space_id,
+            tenant_id=req.tenant_id,
+            start_datetime=req.start_datetime,
+            end_datetime=req.end_datetime,
+            status=BookingStatus.PENDING
+        )
+        db.add(booking)
+        db.commit()
+        db.refresh(booking)
+        req.booking_id = booking.id
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        after_status = req.status
     customer = db.query(User).filter(User.id == req.user_id).first()
-    if customer:
+    if customer and req.status == BookingRequestStatus.APPROVED:
         send_email(customer.email, "Booking request approved", f"Request {req.public_id} approved.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
         actor_id=actor_id,
-        action="booking_request_approved",
+        action="booking_request_approved" if req.status == BookingRequestStatus.APPROVED else "booking_request_payment_failed",
         entity_type="booking_request",
         entity_public_id=req.public_id,
-        before_state={"status": BookingRequestStatus.REQUESTED.value},
-        after_state={"status": req.status.value},
+        before_state={"status": before_status.value},
+        after_state={"status": after_status.value, "payment_status": req.payment_status},
         acting_as_user_id=acting_as_user_id,
         context=context,
     )
     booking = None
     if req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+    return _to_out(req, space, booking, db)
+
+
+@router.post("/booking-requests/{public_id}/retry-payment", response_model=BookingRequestOut)
+def retry_booking_request_payment(
+    public_id: str,
+    payload: BookingRequestRetryPayment,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user)
+):
+    user = get_or_create_user(db, token)
+    req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).with_for_update().first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    space = db.query(Space).filter(Space.id == req.space_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
+    if req.status != BookingRequestStatus.PAYMENT_FAILED:
+        raise HTTPException(status_code=400, detail="Request is not payment failed")
+    req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
     return _to_out(req, space, booking, db)
 
 
@@ -343,4 +455,57 @@ def reject_booking_request(
     booking = None
     if req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+    return _to_out(req, space, booking, db)
+
+
+@router.post("/booking-requests/{public_id}/cancel", response_model=BookingRequestOut)
+def cancel_booking_request(
+    public_id: str,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user)
+):
+    user = get_or_create_user(db, token)
+    req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).with_for_update().first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    space = db.query(Space).filter(Space.id == req.space_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+
+    is_customer = user.role == UserAppRole.CUSTOMER
+    if is_customer:
+        if req.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Booking request not found")
+    else:
+        require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
+
+    if req.status in (BookingRequestStatus.CANCELLED, BookingRequestStatus.REJECTED):
+        return _to_out(req, space, None, db)
+
+    now = datetime.now(timezone.utc)
+    booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+    if is_customer and booking and req.cancellation_deadline_at and now > _as_utc(req.cancellation_deadline_at):
+        raise HTTPException(status_code=400, detail="Cancellation deadline has passed")
+
+    if booking:
+        payment = refund_booking_payment(db, req=req, booking=booking)
+        booking.status = BookingStatus.CANCELED
+        db.add(booking)
+        req.payment_status = payment.status.value if payment else "cancelled"
+    else:
+        req.payment_status = req.payment_status or "not_charged"
+
+    req.status = BookingRequestStatus.CANCELLED
+    req.cancelled_at = now
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    if booking:
+        db.refresh(booking)
+    customer = db.query(User).filter(User.id == req.user_id).first()
+    if customer:
+        send_email(customer.email, "Booking canceled", f"Request {req.public_id} has been canceled.")
     return _to_out(req, space, booking, db)

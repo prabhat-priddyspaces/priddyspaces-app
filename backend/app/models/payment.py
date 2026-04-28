@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, Integer, String
+from sqlalchemy import Column, Enum, Integer, JSON, String
 
 from app.models.base import Base
 from app.models.enums import PaymentStatus, enum_values
@@ -12,14 +12,24 @@ class Payment(PublicIdMixin, TimestampMixin, Base):
     user_id = Column(Integer, nullable=False)
     subscription_id = Column(Integer, nullable=True)
     booking_id = Column(Integer, nullable=True)
+    booking_request_id = Column(Integer, nullable=True)
     tenant_id = Column(Integer, nullable=True)
     amount = Column(Integer, nullable=False)
+    amount_cents = Column(Integer, nullable=True)
+    currency = Column(String(3), nullable=False, default="usd", server_default="usd")
     provider = Column(String(32), default="stripe")
+    payment_method_id = Column(Integer, nullable=True)
     status = Column(
         Enum(PaymentStatus, values_callable=enum_values),
         default=PaymentStatus.REQUIRES_PAYMENT,
     )
     stripe_payment_intent_id = Column(String(255), nullable=True)
+    provider_payment_id = Column(String(255), nullable=True)
+    provider_reference_id = Column(String(255), nullable=True)
+    attempt_number = Column(Integer, nullable=False, default=1, server_default="1")
+    idempotency_key = Column(String(255), nullable=True)
+    failure_reason = Column(String(1024), nullable=True)
+    raw_response = Column(JSON, nullable=True)
     commission_rate_pct = Column(Integer, nullable=True)
     platform_fee_amount = Column(Integer, nullable=True)
     owner_net_amount = Column(Integer, nullable=True)

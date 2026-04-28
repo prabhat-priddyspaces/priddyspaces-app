@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 
@@ -30,6 +31,19 @@ interface Space {
   availability_end_time: string | null;
 }
 
+interface PaymentMethodResolve {
+  is_configured: boolean;
+  has_payment_method: boolean;
+  payment_method_public_id: string | null;
+  message: string | null;
+}
+
+interface ReservationPayload {
+  space_public_id: string;
+  start_datetime: string;
+  end_datetime: string;
+}
+
 export default function CustomerLocationsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -42,6 +56,9 @@ export default function CustomerLocationsPage() {
   const [startDatetime, setStartDatetime] = useState("");
   const [endDatetime, setEndDatetime] = useState("");
   const [selectedSpace, setSelectedSpace] = useState<string | null>(null);
+  const [authorizationConsent, setAuthorizationConsent] = useState(false);
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
 
   useEffect(() => {
     if (!locationId) {
@@ -61,14 +78,10 @@ export default function CustomerLocationsPage() {
       .finally(() => setLoading(false));
   }, [locationId]);
 
-  async function handleRequest(spacePublicId: string) {
-    if (!startDatetime || !endDatetime) {
-      setError("Please select start and end date/time.");
-      return;
-    }
+  async function submitRequest(payload: ReservationPayload, paymentMethodPublicId: string | null) {
     const token = getAccessToken() ?? undefined;
     if (!token) return;
-    setRequesting(spacePublicId);
+    setRequesting(payload.space_public_id);
     setError("");
     try {
       await apiFetch(
@@ -76,9 +89,9 @@ export default function CustomerLocationsPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            space_public_id: spacePublicId,
-            start_datetime: new Date(startDatetime).toISOString(),
-            end_datetime: new Date(endDatetime).toISOString(),
+            ...payload,
+            customer_owner_payment_method_public_id: paymentMethodPublicId,
+            payment_authorization_consent: true,
           }),
         },
         token
@@ -87,6 +100,46 @@ export default function CustomerLocationsPage() {
       setStartDatetime("");
       setEndDatetime("");
       router.push("/customer/requests");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setRequesting(null);
+    }
+  }
+
+  async function handleRequest(spacePublicId: string) {
+    if (!startDatetime || !endDatetime) {
+      setError("Please select start and end date/time.");
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    if (!token) return;
+    if (!authorizationConsent) {
+      setError("Authorize payment on approval before requesting.");
+      return;
+    }
+    setRequesting(spacePublicId);
+    setError("");
+    try {
+      const payload = {
+        space_public_id: spacePublicId,
+        start_datetime: new Date(startDatetime).toISOString(),
+        end_datetime: new Date(endDatetime).toISOString(),
+      };
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(spacePublicId)}`,
+        { method: "GET" },
+        token
+      );
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || "This owner has not configured payments.");
+      }
+      if (!resolved.has_payment_method) {
+        setPendingReservation(payload);
+        setPaymentMethodOpen(true);
+        return;
+      }
+      await submitRequest(payload, resolved.payment_method_public_id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -183,6 +236,15 @@ export default function CustomerLocationsPage() {
                           value={endDatetime}
                           onChange={(e) => setEndDatetime(e.target.value)}
                         />
+                        <label className="flex items-start gap-3 rounded-md border border-border bg-surface2 p-3 text-sm text-textSecondary">
+                          <input
+                            type="checkbox"
+                            checked={authorizationConsent}
+                            onChange={(event) => setAuthorizationConsent(event.target.checked)}
+                            className="mt-1"
+                          />
+                          <span>I authorize this owner to charge my card upon approval.</span>
+                        </label>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -198,6 +260,7 @@ export default function CustomerLocationsPage() {
                               setSelectedSpace(null);
                               setStartDatetime("");
                               setEndDatetime("");
+                              setAuthorizationConsent(false);
                             }}
                           >
                             Cancel
@@ -226,6 +289,17 @@ export default function CustomerLocationsPage() {
           </div>
         )}
       </div>
+      {pendingReservation ? (
+        <PaymentMethodModal
+          open={paymentMethodOpen}
+          spacePublicId={pendingReservation.space_public_id}
+          onClose={() => setPaymentMethodOpen(false)}
+          onSaved={(paymentMethodPublicId) => {
+            setPaymentMethodOpen(false);
+            submitRequest(pendingReservation, paymentMethodPublicId).catch(() => null);
+          }}
+        />
+      ) : null}
     </main>
   );
 }

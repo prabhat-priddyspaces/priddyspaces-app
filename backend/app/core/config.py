@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg2://priddyspaces:priddyspaces@localhost:5432/priddyspaces"
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    DEFAULT_PAYMENT_PROVIDER: str = "stripe"
+    PAYMENT_METHOD_REQUIRED_FOR_REQUEST: bool = True
+    PAYMENT_CHARGE_ON_APPROVAL: bool = True
+    PAYMENT_CREDENTIAL_ENCRYPTION_KEY: str = ""
     EMAIL_VERIFICATION_REQUIRED: bool = True
     AUTH_JWKS_URL: str = ""
     AUTH_AUDIENCE: str = ""

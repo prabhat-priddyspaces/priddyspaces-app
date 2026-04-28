@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, amenities, analytics, auth, booking_requests, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, marketplace, me, media, organization_members, organizations, payments, pricing, spaces, stripe_connect, subscription_plans, subscriptions, webhooks
+from app.api import admin, amenities, analytics, auth, booking_requests, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, marketplace, me, media, organization_members, organizations, owner_payments, payments, pricing, spaces, stripe_connect, subscription_plans, subscriptions, webhooks
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -71,6 +71,7 @@ app.include_router(subscription_plans.router, prefix="/api")
 app.include_router(invoices.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(floor_plans.router, prefix="/api")
+app.include_router(owner_payments.router, prefix="/api")
 app.include_router(payments.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
 app.include_router(marketplace.router, prefix="/api")

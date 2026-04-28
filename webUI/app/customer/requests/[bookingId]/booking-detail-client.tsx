@@ -7,7 +7,15 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PaymentModal } from "@/components/payment-modal";
+
+interface PaymentSummary {
+  status: string | null;
+  amount: number | null;
+  currency: string | null;
+  attempt_number: number | null;
+  failure_reason: string | null;
+  attempted_at: string | null;
+}
 
 interface BookingRequest {
   public_id: string;
@@ -17,8 +25,16 @@ interface BookingRequest {
   start_datetime: string;
   end_datetime: string;
   status: string;
+  payment_status: string | null;
+  payment_provider: string | null;
+  cancellation_deadline_at: string | null;
+  cancelled_at: string | null;
+  approved_at: string | null;
   operator_notes: string | null;
   estimated_amount: number | null;
+  payment_attempt_count: number | null;
+  failure_reason: string | null;
+  last_payment: PaymentSummary | null;
 }
 
 interface Payment {
@@ -47,7 +63,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   async function load() {
     if (!bookingId) return;
@@ -82,11 +98,43 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
     );
   }, [booking, invoices, relatedPayment]);
 
-  const canPayNow =
-    booking?.status === "approved" &&
-    booking.booking_public_id &&
-    booking.estimated_amount != null &&
-    (!relatedPayment || relatedPayment.status !== "succeeded");
+  const canCancel =
+    booking != null &&
+    (booking.status === "requested" ||
+      booking.status === "payment_failed" ||
+      (booking.status === "approved" &&
+        booking.cancellation_deadline_at != null &&
+        new Date() <= new Date(booking.cancellation_deadline_at)));
+
+  const deadlineCountdown = useMemo(() => {
+    if (!booking?.cancellation_deadline_at) return null;
+    const deadline = new Date(booking.cancellation_deadline_at).getTime();
+    const now = Date.now();
+    const ms = deadline - now;
+    if (ms <= 0) return "Deadline passed";
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      return `${days} day${days === 1 ? "" : "s"} ${hours % 24}h left`;
+    }
+    return `${hours}h ${minutes}m left`;
+  }, [booking]);
+
+  async function cancelRequest() {
+    const token = getAccessToken() ?? undefined;
+    if (!token || !booking) return;
+    setCancelling(true);
+    setError("");
+    try {
+      await apiFetch(`/api/booking-requests/${booking.public_id}/cancel`, { method: "POST" }, token);
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to cancel request");
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-background px-6 py-8">
@@ -106,6 +154,10 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                 Status: <span className="capitalize">{booking.status}</span>
               </div>
               <div className="mt-2 text-sm text-textSecondary">
+                Payment: <span className="capitalize">{booking.payment_status || "not charged"}</span>
+                {booking.payment_provider ? ` • ${booking.payment_provider}` : ""}
+              </div>
+              <div className="mt-2 text-sm text-textSecondary">
                 Start: {new Date(booking.start_datetime).toLocaleString()}
               </div>
               <div className="mt-2 text-sm text-textSecondary">
@@ -121,20 +173,57 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                   Operator notes: {booking.operator_notes}
                 </div>
               ) : null}
+              {booking.cancellation_deadline_at ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Cancel by {new Date(booking.cancellation_deadline_at).toLocaleString()}
+                  {deadlineCountdown ? ` (${deadlineCountdown})` : ""}
+                </div>
+              ) : null}
+              {booking.cancelled_at ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Cancelled at {new Date(booking.cancelled_at).toLocaleString()}
+                </div>
+              ) : null}
               {booking.space_public_id ? (
-                <div className="mt-4">
+                <div className="mt-4 flex flex-wrap gap-2">
                   <Link href={`/customer/spaces/${booking.space_public_id}`}>
                     <Button size="sm" variant="secondary">
                       View space
                     </Button>
                   </Link>
+                  {canCancel ? (
+                    <Button size="sm" variant="secondary" onClick={cancelRequest} disabled={cancelling}>
+                      {cancelling ? "Cancelling..." : "Cancel request"}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </Card>
 
             <Card className="p-6">
               <div className="text-lg font-semibold text-textPrimary">Payment status</div>
-              {relatedPayment ? (
+              {booking.last_payment ? (
+                <>
+                  <div className="mt-3 text-sm text-textSecondary">
+                    Status: <span className="capitalize">{booking.last_payment.status || "—"}</span>
+                  </div>
+                  {booking.last_payment.amount != null ? (
+                    <div className="mt-2 text-sm text-textSecondary">
+                      Amount: ${booking.last_payment.amount}
+                    </div>
+                  ) : null}
+                  {booking.last_payment.attempt_number != null ? (
+                    <div className="mt-2 text-sm text-textSecondary">
+                      Attempt #{booking.last_payment.attempt_number}
+                    </div>
+                  ) : null}
+                  {booking.last_payment.attempted_at ? (
+                    <div className="mt-2 text-sm text-textSecondary">
+                      Last attempt: {new Date(booking.last_payment.attempted_at).toLocaleString()}
+                    </div>
+                  ) : null}
+                </>
+              ) : relatedPayment ? (
                 <>
                   <div className="mt-3 text-sm text-textSecondary">
                     Payment: {relatedPayment.public_id}
@@ -145,18 +234,32 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                   <div className="mt-2 text-sm text-textSecondary">
                     Amount: ${relatedPayment.amount}
                   </div>
-                  <div className="mt-2 text-sm text-textSecondary">
-                    Updated: {new Date(relatedPayment.created_at).toLocaleString()}
-                  </div>
                 </>
               ) : (
                 <div className="mt-3 text-sm text-textMuted">No payment has been recorded yet.</div>
               )}
-              {canPayNow ? (
-                <div className="mt-4">
-                  <Button size="sm" onClick={() => setPaying(true)}>
-                    Pay now
-                  </Button>
+              {booking.status === "payment_failed" ? (
+                <div className="mt-4 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
+                  <div className="font-medium">Payment failed</div>
+                  {booking.failure_reason ? (
+                    <div className="mt-1">{booking.failure_reason}</div>
+                  ) : (
+                    <div className="mt-1">
+                      Your card could not be charged. Update your payment method and the owner can retry the charge.
+                    </div>
+                  )}
+                  {booking.space_public_id ? (
+                    <div className="mt-3">
+                      <Link href={`/customer/spaces/${booking.space_public_id}`}>
+                        <Button size="sm">Update payment method</Button>
+                      </Link>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {(booking.last_payment?.status === "voided" || booking.last_payment?.status === "refunded") ? (
+                <div className="mt-4 rounded-md border border-border bg-surface2 p-3 text-sm text-textSecondary">
+                  Refund processed: <span className="capitalize">{booking.last_payment.status}</span>
                 </div>
               ) : null}
             </Card>
@@ -197,18 +300,6 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
         ) : null}
       </div>
 
-      {paying && booking?.booking_public_id && booking.estimated_amount != null ? (
-        <PaymentModal
-          open={true}
-          bookingPublicId={booking.booking_public_id}
-          amount={booking.estimated_amount}
-          onClose={() => setPaying(false)}
-          onDone={() => {
-            setPaying(false);
-            load().catch(() => null);
-          }}
-        />
-      ) : null}
     </main>
   );
 }

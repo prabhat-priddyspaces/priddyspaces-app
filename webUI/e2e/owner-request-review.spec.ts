@@ -10,6 +10,9 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
     start_datetime: "2026-04-11T14:00:00.000Z",
     end_datetime: "2026-04-11T15:30:00.000Z",
     status: "requested",
+    payment_status: "not_charged",
+    payment_provider: "stripe",
+    cancellation_deadline_at: "2026-04-10T14:00:00.000Z",
     estimated_amount: 180,
     operator_notes: null as string | null,
   };
@@ -30,9 +33,10 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
       return;
     }
 
-    if (key === "POST /api/booking-requests/req_2/approved") {
+    if (key === "POST /api/booking-requests/req_2/approve") {
       const payload = route.request().postDataJSON() as { operator_notes?: string | null };
       requestState.status = "approved";
+      requestState.payment_status = "succeeded";
       requestState.operator_notes = payload.operator_notes || null;
       requestState.booking_id = 44;
       requestState.booking_public_id = "book_approved_1";
@@ -53,6 +57,7 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
   await page.getByRole("button", { name: "Approve" }).click();
 
   await expect(page.getByText("Status: approved")).toBeVisible();
+  await expect(page.getByText("Payment: succeeded • stripe")).toBeVisible();
   await expect(page.getByText("Booking created: book_approved_1")).toBeVisible();
   await expect(notes).toHaveValue("Approved for the afternoon block");
 });

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.db.deps import get_db
 from app.models.booking import Booking
-from app.models.enums import BookingStatus, UserAppRole, UserRole
+from app.models.booking_request import BookingRequest
+from app.models.enums import BookingRequestStatus, BookingStatus, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.space import Space
 from app.schemas.booking import BookingCreate, BookingOut, BookingUpdateIn, BookingCancelOut, BookingCheckInOut
@@ -18,8 +19,13 @@ from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
 from app.services.notifications import send_email
 from app.models.user import User
+from app.services.booking_payments import refund_booking_payment
 
 router = APIRouter()
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _booking_for_checkin(db: Session, public_id: str, token: dict) -> tuple[Booking, User, Location, Space]:
@@ -211,10 +217,25 @@ def cancel_booking(
         .first()
     )
     refund_percent = policy.refund_percent if policy else 0
+    deadline = _as_utc(booking.start_datetime)
+    if policy:
+        deadline = _as_utc(booking.start_datetime) - timedelta(hours=policy.cancel_window_hours)
+    now = datetime.now(timezone.utc)
+    if user.role == UserAppRole.CUSTOMER and now > deadline:
+        raise HTTPException(status_code=400, detail="Cancellation deadline has passed")
 
     before_status = booking.status
+    req = db.query(BookingRequest).filter(BookingRequest.booking_id == booking.id).first()
+    payment = None
+    if before_status != BookingStatus.CANCELED:
+        payment = refund_booking_payment(db, req=req, booking=booking)
     booking.status = BookingStatus.CANCELED
     db.add(booking)
+    if req:
+        req.status = BookingRequestStatus.CANCELLED
+        req.cancelled_at = now
+        req.payment_status = payment.status.value if payment else "cancelled"
+        db.add(req)
     db.commit()
     db.refresh(booking)
     customer = db.query(User).filter(User.id == booking.user_id).first()
@@ -343,8 +364,17 @@ def refund_booking(
     refund_percent = policy.refund_percent if policy else 0
 
     before_status = booking.status
+    req = db.query(BookingRequest).filter(BookingRequest.booking_id == booking.id).first()
+    payment = None
+    if before_status != BookingStatus.CANCELED:
+        payment = refund_booking_payment(db, req=req, booking=booking)
     booking.status = BookingStatus.CANCELED
     db.add(booking)
+    if req:
+        req.status = BookingRequestStatus.CANCELLED
+        req.cancelled_at = datetime.now(timezone.utc)
+        req.payment_status = payment.status.value if payment else "cancelled"
+        db.add(req)
     db.commit()
     db.refresh(booking)
     customer = db.query(User).filter(User.id == booking.user_id).first()

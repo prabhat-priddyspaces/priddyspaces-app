@@ -13,6 +13,7 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
     owner_id = Column(Integer, nullable=False)
     branding = Column(String(1024), nullable=True)
     stripe_account_id = Column(String(255), nullable=True)
+    payment_provider = Column(String(32), nullable=True)
     review_status = Column(
         Enum(OrganizationReviewStatus, values_callable=enum_values),
         nullable=False,

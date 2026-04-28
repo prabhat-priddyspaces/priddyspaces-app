@@ -37,7 +37,14 @@ class PaymentOut(BaseModel):
     status: str
     tenant_id: int | None
     booking_id: int | None
+    booking_request_id: int | None = None
     subscription_id: int | None
+    payment_method_id: int | None = None
+    amount_cents: int | None = None
+    currency: str | None = None
+    provider_payment_id: str | None = None
+    provider_reference_id: str | None = None
+    failure_reason: str | None = None
     commission_rate_pct: int | None
     platform_fee_amount: int | None
     owner_net_amount: int | None

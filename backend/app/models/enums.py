@@ -72,12 +72,16 @@ class BookingRequestStatus(str, enum.Enum):
     REQUESTED = "requested"
     APPROVED = "approved"
     REJECTED = "rejected"
+    PAYMENT_FAILED = "payment_failed"
+    CANCELLED = "cancelled"
 
 
 class PaymentStatus(str, enum.Enum):
     REQUIRES_PAYMENT = "requires_payment"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    REFUNDED = "refunded"
+    VOIDED = "voided"
 
 
 class BookingGranularity(str, enum.Enum):

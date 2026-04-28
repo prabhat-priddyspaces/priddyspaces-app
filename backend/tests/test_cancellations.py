@@ -73,8 +73,8 @@ def _seed_booking(db):
         user_id=customer.id,
         space_id=space.id,
         tenant_id=org.id,
-        start_datetime=datetime(2026, 2, 5, 10, 0, tzinfo=timezone.utc),
-        end_datetime=datetime(2026, 2, 5, 12, 0, tzinfo=timezone.utc),
+        start_datetime=datetime(2099, 2, 5, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2099, 2, 5, 12, 0, tzinfo=timezone.utc),
         status=BookingStatus.CONFIRMED
     )
     db.add(booking)
