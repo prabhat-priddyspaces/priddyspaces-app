@@ -48,6 +48,11 @@ jobs:
           echo "cloudfront_distribution_id=$(aws ssm get-parameter --name "$PREFIX/cloudfront_distribution_id" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
           echo "api_origin=$(aws ssm get-parameter --name "$PREFIX/api_origin" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
 
+          # Optional: Google Maps key. Empty if the SSM parameter doesn't exist yet.
+          GMAPS_KEY=$(aws ssm get-parameter --name "$PREFIX/google_maps_api_key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+          echo "::add-mask::$GMAPS_KEY"
+          echo "google_maps_api_key=$GMAPS_KEY" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -63,6 +68,7 @@ jobs:
         working-directory: webUI
         env:
           NEXT_PUBLIC_API_BASE_URL: ${{ steps.meta.outputs.api_origin }}
+          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
           NEXT_OUTPUT_MODE: export
         run: npm run build:export
 

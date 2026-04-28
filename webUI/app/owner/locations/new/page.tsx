@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { AmenitySelector } from "@/components/amenity-selector";
+import { PlaceAutocomplete, type PlaceDetails } from "@/components/place-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,20 @@ export default function NewLocation() {
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showAddressDetails, setShowAddressDetails] = useState(false);
+
+  function applyPlace(place: PlaceDetails) {
+    setForm((current) => ({
+      ...current,
+      address: place.street || place.formatted,
+      city: place.city,
+      state: place.state,
+      postal_code: place.postal_code,
+      neighborhood: place.neighborhood || current.neighborhood,
+      lat: place.lat != null ? String(place.lat) : "",
+      lng: place.lng != null ? String(place.lng) : "",
+    }));
+  }
 
   useEffect(() => {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -236,74 +251,89 @@ export default function NewLocation() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="address">Address</Label>
-              <Input
+              <PlaceAutocomplete
                 id="address"
                 value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="123 Main St"
+                onChange={(value) => setForm({ ...form, address: value })}
+                onSelect={applyPlace}
+                placeholder="Start typing an address…"
               />
+              {(form.city || form.state || form.postal_code || form.lat) && (
+                <p className="text-xs text-textSecondary">
+                  {[form.city, form.state, form.postal_code].filter(Boolean).join(", ")}
+                  {form.lat && form.lng ? ` · ${form.lat}, ${form.lng}` : ""}
+                </p>
+              )}
+              <button
+                type="button"
+                className="self-start text-xs text-teal-700 hover:underline"
+                onClick={() => setShowAddressDetails((v) => !v)}
+              >
+                {showAddressDetails ? "Hide details" : "Edit address details"}
+              </button>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                placeholder="San Francisco"
-              />
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={form.state}
-                  onChange={(e) => setForm({ ...form, state: e.target.value })}
-                  placeholder="California"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="postal_code">Postal code</Label>
-                <Input
-                  id="postal_code"
-                  value={form.postal_code}
-                  onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
-                  placeholder="94105"
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="neighborhood">Neighborhood</Label>
-              <Input
-                id="neighborhood"
-                value={form.neighborhood}
-                onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
-                placeholder="SoMa"
-              />
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="lat">Latitude</Label>
-                <Input
-                  id="lat"
-                  value={form.lat}
-                  onChange={(e) => setForm({ ...form, lat: e.target.value })}
-                  placeholder="37.7749"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lng">Longitude</Label>
-                <Input
-                  id="lng"
-                  value={form.lng}
-                  onChange={(e) => setForm({ ...form, lng: e.target.value })}
-                  placeholder="-122.4194"
-                />
-              </div>
-            </div>
-            <div className="text-xs text-textSecondary">
-              Add latitude and longitude to place this location on the public marketplace map.
-            </div>
+            {showAddressDetails && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={form.city}
+                    onChange={(e) => setForm({ ...form, city: e.target.value })}
+                    placeholder="San Francisco"
+                  />
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State</Label>
+                    <Input
+                      id="state"
+                      value={form.state}
+                      onChange={(e) => setForm({ ...form, state: e.target.value })}
+                      placeholder="CA"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="postal_code">Postal code</Label>
+                    <Input
+                      id="postal_code"
+                      value={form.postal_code}
+                      onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
+                      placeholder="94105"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="neighborhood">Neighborhood</Label>
+                  <Input
+                    id="neighborhood"
+                    value={form.neighborhood}
+                    onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
+                    placeholder="SoMa"
+                  />
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="lat">Latitude</Label>
+                    <Input
+                      id="lat"
+                      value={form.lat}
+                      onChange={(e) => setForm({ ...form, lat: e.target.value })}
+                      placeholder="37.7749"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lng">Longitude</Label>
+                    <Input
+                      id="lng"
+                      value={form.lng}
+                      onChange={(e) => setForm({ ...form, lng: e.target.value })}
+                      placeholder="-122.4194"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="timezone">Timezone</Label>
