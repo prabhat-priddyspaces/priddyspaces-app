@@ -35,6 +35,10 @@ node_modules/
 out/
 dist/
 
+# Test artifacts
+test-results/
+playwright-report/
+
 # DB
 *.sqlite
 *.sqlite3
