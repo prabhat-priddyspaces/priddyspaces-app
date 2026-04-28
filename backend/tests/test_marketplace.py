@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import datetime, timezone, time
 
 from fastapi.testclient import TestClient
 
@@ -7,12 +7,14 @@ from app.main import app
 from app.models.enums import (
     AvailabilityStatus,
     BillingCycle,
+    BookingStatus,
     LocationStatus,
     SpaceType,
     SpaceVisibility,
     UserAppRole,
     UserRole,
 )
+from app.models.booking import Booking
 from app.models.cancellation_policy import CancellationPolicy
 from app.models.user import User
 from app.models.location_amenity import LocationAmenity
@@ -397,6 +399,7 @@ def _seed_public_location_marketplace(db):
     db.commit()
 
     return {
+        "owner": owner,
         "coworking_location": coworking_location,
         "meeting_location": meeting_location,
         "no_geo_location": no_geo_location,
@@ -551,6 +554,28 @@ def test_public_location_detail_supports_meeting_room_filters_and_time_validatio
         "?category=meeting_room&start_time=07:00&end_time=08:00"
     )
     assert outside_hours.status_code == 404
+
+
+def test_public_location_search_excludes_booked_requested_window(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    booking = Booking(
+        user_id=seeded["owner"].id,
+        space_id=seeded["meeting_room"].id,
+        tenant_id=seeded["meeting_room"].tenant_id,
+        start_datetime=datetime(2026, 4, 15, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 4, 15, 11, 0, tzinfo=timezone.utc),
+        status=BookingStatus.CONFIRMED,
+    )
+    db_session.add(booking)
+    db_session.commit()
+
+    response = client.get(
+        "/api/marketplace/locations?category=meeting_room&date=2026-04-15&start_time=10:00&end_time=11:00"
+    )
+    assert response.status_code == 200
+    assert response.json()["meta"]["total_locations"] == 0
 
 
 def test_public_marketplace_space_detail_returns_listing_content(db_session, client_factory):

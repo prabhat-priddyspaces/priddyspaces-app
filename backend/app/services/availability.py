@@ -8,18 +8,23 @@ from app.models.enums import BookingStatus, BookingRequestStatus
 from app.models.subscription import Subscription
 
 
-def booking_overlaps(db: Session, space_id: int, start: datetime, end: datetime) -> bool:
-    return (
-        db.query(Booking)
-        .filter(
-            Booking.space_id == space_id,
-            Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
-            Booking.start_datetime < end,
-            Booking.end_datetime > start
-        )
-        .first()
-        is not None
+def booking_overlaps(
+    db: Session,
+    space_id: int,
+    start: datetime,
+    end: datetime,
+    *,
+    exclude_booking_id: int | None = None,
+) -> bool:
+    query = db.query(Booking).filter(
+        Booking.space_id == space_id,
+        Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
+        Booking.start_datetime < end,
+        Booking.end_datetime > start
     )
+    if exclude_booking_id is not None:
+        query = query.filter(Booking.id != exclude_booking_id)
+    return query.first() is not None
 
 
 def booking_request_overlaps(db: Session, space_id: int, start: datetime, end: datetime) -> bool:

@@ -19,6 +19,19 @@ interface BookingRequest {
   operator_notes: string | null;
 }
 
+function ownerNextStep(request: BookingRequest) {
+  if (request.status === "requested") {
+    return "Review the time window before approval; the API rechecks conflicts when you approve.";
+  }
+  if (request.status === "approved" && request.booking_public_id) {
+    return "Approved. The customer still needs to pay before the booking is confirmed.";
+  }
+  if (request.status === "rejected") {
+    return "Rejected. The customer can submit a different request.";
+  }
+  return "Track payment and final confirmation from bookings and payments.";
+}
+
 export default function OwnerRequestsPage() {
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +114,7 @@ export default function OwnerRequestsPage() {
                         {new Date(request.end_datetime).toLocaleString()}
                       </div>
                       <div className="mt-1 text-textMuted">Status: {request.status}</div>
+                      <div className="mt-1 text-textMuted">{ownerNextStep(request)}</div>
                       {request.estimated_amount != null ? (
                         <div className="mt-1 text-textMuted">
                           Estimated amount: ${request.estimated_amount}

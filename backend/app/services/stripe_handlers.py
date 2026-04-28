@@ -11,6 +11,7 @@ from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.services.availability import booking_overlaps, subscription_overlaps
 from app.services.invoices import generate_invoice_pdf
 from app.services.notifications import send_email
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
@@ -143,6 +144,24 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
 
     booking = db.query(Booking).filter(Booking.public_id == booking_public_id).first()
     if not booking:
+        return
+
+    if (
+        subscription_overlaps(db, booking.space_id, booking.start_datetime.date(), booking.end_datetime.date())
+        or booking_overlaps(
+            db,
+            booking.space_id,
+            booking.start_datetime,
+            booking.end_datetime,
+            exclude_booking_id=booking.id,
+        )
+    ):
+        booking.status = BookingStatus.CANCELED
+        db.add(booking)
+        if payment:
+            payment.status = PaymentStatus.FAILED
+            db.add(payment)
+        db.commit()
         return
 
     booking.status = BookingStatus.CONFIRMED

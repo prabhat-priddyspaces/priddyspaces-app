@@ -41,6 +41,25 @@ interface Invoice {
   created_at: string;
 }
 
+function bookingGuidance(booking: BookingRequest, relatedPayment: Payment | null) {
+  if (booking.status === "requested") {
+    return "Your request is waiting for owner review. You will be able to pay after approval.";
+  }
+  if (booking.status === "approved" && (!relatedPayment || relatedPayment.status !== "succeeded")) {
+    return "The owner approved this request. Complete payment to confirm your booking.";
+  }
+  if (relatedPayment?.status === "succeeded") {
+    return "Payment succeeded. Your booking confirmation and invoice are shown below.";
+  }
+  if (relatedPayment?.status === "failed") {
+    return "Payment failed. Retry payment or contact support before the space is released.";
+  }
+  if (booking.status === "rejected") {
+    return "The owner declined this request. Pick another time or continue searching.";
+  }
+  return "Check this page for the latest booking, payment, and invoice state.";
+}
+
 export default function BookingDetailClient({ bookingId }: { bookingId: string }) {
   const [booking, setBooking] = useState<BookingRequest | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -104,6 +123,9 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
               <div className="text-lg font-semibold text-textPrimary">Request details</div>
               <div className="mt-3 text-sm text-textSecondary">
                 Status: <span className="capitalize">{booking.status}</span>
+              </div>
+              <div className="mt-2 rounded-md border border-border bg-surface2 p-3 text-sm text-textSecondary">
+                {bookingGuidance(booking, relatedPayment)}
               </div>
               <div className="mt-2 text-sm text-textSecondary">
                 Start: {new Date(booking.start_datetime).toLocaleString()}

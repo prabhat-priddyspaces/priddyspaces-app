@@ -116,6 +116,15 @@ def create_booking_request(
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
 
+    if payload.end_datetime <= payload.start_datetime:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+
+    if space.availability_start_time and payload.start_datetime.timetz().replace(tzinfo=None) < space.availability_start_time:
+        raise HTTPException(status_code=400, detail="Start time is outside space availability hours")
+
+    if space.availability_end_time and payload.end_datetime.timetz().replace(tzinfo=None) > space.availability_end_time:
+        raise HTTPException(status_code=400, detail="End time is outside space availability hours")
+
     if subscription_overlaps(db, space.id, payload.start_datetime.date(), payload.end_datetime.date()):
         raise HTTPException(status_code=409, detail="Space already subscribed for that date")
 
@@ -255,6 +264,12 @@ def approve_booking_request(
 
     if req.status != BookingRequestStatus.REQUESTED:
         raise HTTPException(status_code=400, detail="Request already processed")
+
+    if subscription_overlaps(db, space.id, req.start_datetime.date(), req.end_datetime.date()):
+        raise HTTPException(status_code=409, detail="Space already subscribed for that date")
+
+    if booking_overlaps(db, space.id, req.start_datetime, req.end_datetime):
+        raise HTTPException(status_code=409, detail="Booking overlaps existing booking")
 
     req.status = BookingRequestStatus.APPROVED
     req.operator_notes = payload.operator_notes

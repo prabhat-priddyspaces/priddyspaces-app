@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -44,9 +44,6 @@ export function MarketplaceBrowser({
   showAuthActions = false,
 }: MarketplaceBrowserProps) {
   const [city, setCity] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
-  const [radiusKm, setRadiusKm] = useState("25");
   const [spaceType, setSpaceType] = useState("");
   const [minCapacity, setMinCapacity] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -55,17 +52,13 @@ export function MarketplaceBrowser({
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  async function loadSpaces(markSearched = true) {
     setError("");
     setLoading(true);
-    setSearched(true);
+    if (markSearched) setSearched(true);
     try {
       const params = new URLSearchParams();
       if (city.trim()) params.set("city", city.trim());
-      if (lat.trim()) params.set("lat", lat.trim());
-      if (lng.trim()) params.set("lng", lng.trim());
-      if (radiusKm.trim()) params.set("radius_km", radiusKm.trim());
       if (spaceType.trim()) params.set("space_type", spaceType.trim());
       if (minCapacity.trim()) params.set("min_capacity", minCapacity.trim());
       if (maxPrice.trim()) params.set("max_price", maxPrice.trim());
@@ -79,6 +72,15 @@ export function MarketplaceBrowser({
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    loadSpaces(false).catch(() => null);
+  }, []);
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    await loadSpaces(true);
   }
 
   return (
@@ -114,39 +116,12 @@ export function MarketplaceBrowser({
         </div>
         <form onSubmit={handleSearch} className="mt-6 flex flex-wrap items-end gap-4">
           <div className="min-w-[200px] space-y-2">
-            <Label htmlFor="city">City</Label>
+            <Label htmlFor="city">City or market</Label>
             <Input
               id="city"
               value={city}
               onChange={(e) => setCity(e.target.value)}
               placeholder="e.g. San Francisco"
-            />
-          </div>
-          <div className="min-w-[160px] space-y-2">
-            <Label htmlFor="lat">Lat</Label>
-            <Input
-              id="lat"
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-              placeholder="37.7749"
-            />
-          </div>
-          <div className="min-w-[160px] space-y-2">
-            <Label htmlFor="lng">Lng</Label>
-            <Input
-              id="lng"
-              value={lng}
-              onChange={(e) => setLng(e.target.value)}
-              placeholder="-122.4194"
-            />
-          </div>
-          <div className="min-w-[140px] space-y-2">
-            <Label htmlFor="radius">Radius (km)</Label>
-            <Input
-              id="radius"
-              value={radiusKm}
-              onChange={(e) => setRadiusKm(e.target.value)}
-              placeholder="25"
             />
           </div>
           <div className="min-w-[180px] space-y-2">
@@ -187,7 +162,7 @@ export function MarketplaceBrowser({
           </Button>
         </form>
         {error ? <p className="mt-4 text-sm text-error">{error}</p> : null}
-        {searched && !loading ? (
+        {(searched || spaces.length > 0) && !loading ? (
           spaces.length === 0 ? (
             <p className="mt-6 text-sm text-textMuted">No spaces found.</p>
           ) : (

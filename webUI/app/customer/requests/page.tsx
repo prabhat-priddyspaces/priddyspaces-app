@@ -19,6 +19,19 @@ interface BookingRequest {
   status: string;
 }
 
+function requestNextStep(request: BookingRequest) {
+  if (request.status === "requested") {
+    return "Waiting for the owner to review this request.";
+  }
+  if (request.status === "approved" && request.booking_public_id) {
+    return "Approved. Complete payment to confirm the booking.";
+  }
+  if (request.status === "rejected") {
+    return "The owner declined this request. Choose another time or space.";
+  }
+  return "Open the details page for the latest payment and invoice status.";
+}
+
 export default function CustomerRequestsPage() {
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +99,7 @@ export default function CustomerRequestsPage() {
                     <div className="mt-1 text-textMuted">
                       Status: <span className="capitalize">{b.status}</span>
                     </div>
+                    <div className="mt-1 text-textMuted">{requestNextStep(b)}</div>
                     {b.estimated_amount != null ? (
                       <div className="mt-1 text-textMuted">
                         Estimated: ${b.estimated_amount}

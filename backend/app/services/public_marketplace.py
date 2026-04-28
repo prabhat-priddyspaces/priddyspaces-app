@@ -18,6 +18,7 @@ from app.models.space_image import SpaceImage
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.services.amenities import get_location_amenities_map
+from app.services.availability import booking_overlaps, subscription_overlaps
 
 
 CATEGORY_SPACE_TYPES = {
@@ -202,6 +203,23 @@ def _space_matches_time_window(
     if space.availability_end_time and requested_end > space.availability_end_time:
         return False
     return True
+
+
+def _space_available_for_requested_window(
+    db: Session,
+    space: Space,
+    *,
+    requested_date: date | None,
+    requested_start: time | None,
+    requested_end: time | None,
+) -> bool:
+    if requested_date is None:
+        return True
+    if subscription_overlaps(db, space.id, requested_date, requested_date):
+        return False
+    start_dt = datetime.combine(requested_date, requested_start or time.min)
+    end_dt = datetime.combine(requested_date, requested_end or time.max)
+    return not booking_overlaps(db, space.id, start_dt, end_dt)
 
 
 def _query_score(
@@ -415,7 +433,7 @@ def _public_inventory_rows(
 
 
 def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters) -> dict[str, object]:
-    _, parsed_start, parsed_end = _validate_filters(filters)
+    parsed_date, parsed_start, parsed_end = _validate_filters(filters)
     query = _clean_query(filters.q)
     rows = _public_inventory_rows(db, category=filters.category, require_coordinates=False)
     if not rows:
@@ -458,6 +476,14 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
         if not _space_matches_time_window(
             space,
             category=filters.category,
+            requested_start=parsed_start,
+            requested_end=parsed_end,
+        ):
+            continue
+        if not _space_available_for_requested_window(
+            db,
+            space,
+            requested_date=parsed_date,
             requested_start=parsed_start,
             requested_end=parsed_end,
         ):
@@ -531,7 +557,7 @@ def get_public_location_detail(
     location_public_id: str,
     filters: PublicMarketplaceSearchFilters,
 ) -> dict[str, object]:
-    _, parsed_start, parsed_end = _validate_filters(filters)
+    parsed_date, parsed_start, parsed_end = _validate_filters(filters)
     query = _clean_query(filters.q)
     rows = _public_inventory_rows(db, category=filters.category, require_coordinates=False)
     filtered_rows = [
@@ -579,6 +605,14 @@ def get_public_location_detail(
         if not _space_matches_time_window(
             space,
             category=filters.category,
+            requested_start=parsed_start,
+            requested_end=parsed_end,
+        ):
+            continue
+        if not _space_available_for_requested_window(
+            db,
+            space,
+            requested_date=parsed_date,
             requested_start=parsed_start,
             requested_end=parsed_end,
         ):
