@@ -41,6 +41,41 @@ class SpaceType(str, enum.Enum):
     SHARED_DESK = "shared_desk"
     CONFERENCE_ROOM = "conference_room"
     VIRTUAL_OFFICE = "virtual_office"
+    SUITE = "suite"
+
+
+class BookingMode(str, enum.Enum):
+    HOURLY = "hourly"
+    DAY_PASS = "day_pass"
+    MONTHLY_MEMBERSHIP = "monthly_membership"
+    VIRTUAL_MEMBERSHIP = "virtual_membership"
+    PRIVATE_OFFICE_LEASE = "private_office_lease"
+    SUITE_LEASE = "suite_lease"
+
+
+class BookingRequestKind(str, enum.Enum):
+    HOURLY_BOOKING = "hourly_booking"
+    DAILY_BOOKING = "daily_booking"
+    MEMBERSHIP_PURCHASE = "membership_purchase"
+    LEASE_PURCHASE = "lease_purchase"
+
+
+class SubscriptionStatusEnum(str, enum.Enum):
+    PENDING_APPROVAL = "pending_approval"
+    PENDING_PAYMENT = "pending_payment"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELING = "canceling"
+    CANCELED = "canceled"
+    EXPIRED = "expired"
+    COMMITMENT_BREACH = "commitment_breach"
+
+
+class LedgerEntryType(str, enum.Enum):
+    GRANT = "grant"
+    USAGE = "usage"
+    ADJUSTMENT = "adjustment"
+    EXPIRY = "expiry"
 
 
 class AvailabilityStatus(str, enum.Enum):

@@ -1,16 +1,42 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.enums import BookingRequestStatus
+from app.models.enums import BookingRequestKind, BookingRequestStatus
 
 
 class BookingRequestCreate(BaseModel):
-    space_public_id: str
-    start_datetime: datetime
-    end_datetime: datetime
+    """Either an hourly/daily booking (space_public_id + datetimes) or a membership purchase
+    (membership_plan_public_id + desired_start_date). Validated as XOR by the model_validator
+    below.
+    """
+
+    space_public_id: str | None = None
+    start_datetime: datetime | None = None
+    end_datetime: datetime | None = None
+
+    membership_plan_public_id: str | None = None
+    desired_start_date: date | None = None
+    seats_requested: int = Field(default=1, ge=1)
+
     customer_owner_payment_method_public_id: str | None = None
     payment_authorization_consent: bool = False
+
+    @model_validator(mode="after")
+    def _validate_xor(self):
+        is_booking = bool(self.space_public_id and self.start_datetime and self.end_datetime)
+        is_membership = bool(self.membership_plan_public_id and self.desired_start_date)
+        if is_booking and is_membership:
+            raise ValueError(
+                "Provide either booking fields (space_public_id + start/end_datetime) OR "
+                "membership fields (membership_plan_public_id + desired_start_date), not both"
+            )
+        if not is_booking and not is_membership:
+            raise ValueError(
+                "Provide booking fields (space_public_id + start/end_datetime) OR "
+                "membership fields (membership_plan_public_id + desired_start_date)"
+            )
+        return self
 
 
 class BookingPaymentSummary(BaseModel):
@@ -49,6 +75,12 @@ class BookingRequestOut(BaseModel):
     payment_attempt_count: int | None = None
     failure_reason: str | None = None
     last_payment: BookingPaymentSummary | None = None
+
+    request_kind: BookingRequestKind = BookingRequestKind.HOURLY_BOOKING
+    membership_plan_public_id: str | None = None
+    desired_start_date: date | None = None
+    seats_requested: int = 1
+    commitment_months_snapshot: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

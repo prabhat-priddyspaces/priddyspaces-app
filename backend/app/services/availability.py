@@ -43,7 +43,19 @@ def booking_overlaps_date(db: Session, space_id: int, start: date, end: date | N
     return booking_overlaps(db, space_id, start_dt, end_dt)
 
 
+_EXCLUSIVE_BOOKING_MODES = {"private_office_lease", "suite_lease"}
+
+
 def subscription_overlaps(db: Session, space_id: int, start: date, end: date | None) -> bool:
+    """True iff there's an *exclusive* subscription on this space covering the window.
+
+    Office/suite leases block other bookings (the space is reserved for that
+    customer). Coworking memberships, day passes, and virtual memberships do
+    not — multiple customers can share the same space concurrently.
+
+    Legacy subscriptions (no booking_mode) keep the pre-membership-flow behavior
+    of blocking, so existing tests/data don't change semantics.
+    """
     end_date = end or date.max
     return (
         db.query(Subscription)
@@ -51,7 +63,11 @@ def subscription_overlaps(db: Session, space_id: int, start: date, end: date | N
             Subscription.space_id == space_id,
             Subscription.status.in_(["active", "past_due"]),
             Subscription.start_date <= end_date,
-            or_(Subscription.end_date.is_(None), Subscription.end_date >= start)
+            or_(Subscription.end_date.is_(None), Subscription.end_date >= start),
+            or_(
+                Subscription.booking_mode.is_(None),
+                Subscription.booking_mode.in_(_EXCLUSIVE_BOOKING_MODES),
+            ),
         )
         .first()
         is not None

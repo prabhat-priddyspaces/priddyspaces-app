@@ -1,12 +1,20 @@
+from datetime import date as date_cls
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.db.deps import get_db
+from app.models.membership_plan import MembershipPlan
 from app.models.subscription import Subscription
-from app.schemas.subscription import SubscriptionCreate, SubscriptionOut
+from app.schemas.subscription import (
+    MeetingRoomBalanceOut,
+    SubscriptionCreate,
+    SubscriptionOut,
+)
 from app.services.auth_user import get_or_create_user
 from app.services.availability import booking_overlaps_date, subscription_overlaps
+from app.services.meeting_room_balance import balance_for_period
 from app.models.space import Space
 from app.models.location import Location
 from app.models.enums import UserAppRole, UserRole
@@ -28,6 +36,16 @@ def _to_out(db: Session, subscription: Subscription) -> SubscriptionOut:
         if location:
             location_name = location.name
 
+    plan_public_id = None
+    if subscription.membership_plan_id:
+        plan = (
+            db.query(MembershipPlan)
+            .filter(MembershipPlan.id == subscription.membership_plan_id)
+            .first()
+        )
+        if plan:
+            plan_public_id = plan.public_id
+
     return SubscriptionOut(
         public_id=subscription.public_id,
         space_id=subscription.space_id,
@@ -38,6 +56,13 @@ def _to_out(db: Session, subscription: Subscription) -> SubscriptionOut:
         start_date=subscription.start_date,
         end_date=subscription.end_date,
         stripe_subscription_id=subscription.stripe_subscription_id,
+        booking_mode=subscription.booking_mode,
+        membership_plan_public_id=plan_public_id,
+        commitment_months=subscription.commitment_months,
+        commitment_start_date=subscription.commitment_start_date,
+        commitment_end_date=subscription.commitment_end_date,
+        included_meeting_room_hours_per_month=subscription.included_meeting_room_hours_per_month or 0,
+        auto_renew=subscription.auto_renew or False,
     )
 
 
@@ -131,6 +156,61 @@ def get_subscription(
         status_code=404,
     )
     return _to_out(db, subscription)
+
+
+@router.get(
+    "/subscriptions/{public_id}/meeting-room-balance",
+    response_model=MeetingRoomBalanceOut,
+)
+def get_meeting_room_balance(
+    public_id: str,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    subscription = (
+        db.query(Subscription).filter(Subscription.public_id == public_id).first()
+    )
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    if user.role == UserAppRole.CUSTOMER and subscription.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    if user.role != UserAppRole.CUSTOMER:
+        space = db.query(Space).filter(Space.id == subscription.space_id).first()
+        location = (
+            db.query(Location).filter(Location.id == space.location_id).first()
+            if space
+            else None
+        )
+        if not space or not location:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        require_location_roles(
+            db,
+            user.id,
+            location,
+            {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF},
+            detail="Subscription not found",
+            status_code=404,
+        )
+
+    summary = balance_for_period(db, subscription, as_of=date_cls.today())
+    overage_rate_cents = None
+    if subscription.membership_plan_id:
+        plan = (
+            db.query(MembershipPlan)
+            .filter(MembershipPlan.id == subscription.membership_plan_id)
+            .first()
+        )
+        if plan:
+            overage_rate_cents = plan.overage_hourly_rate_cents
+    return MeetingRoomBalanceOut(
+        period_start=summary.period_start,
+        period_end=summary.period_end,
+        granted_minutes=summary.granted_minutes,
+        used_minutes=summary.used_minutes,
+        remaining_minutes=summary.remaining_minutes,
+        overage_hourly_rate_cents=overage_rate_cents,
+    )
 
 
 @router.post("/subscriptions/{public_id}/cancel", response_model=SubscriptionOut)

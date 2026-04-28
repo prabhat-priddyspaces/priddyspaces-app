@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy import Column, Date, DateTime, Enum, Integer, String
 
 from app.models.base import Base
 from app.models.enums import BookingRequestStatus, enum_values
@@ -29,3 +29,14 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     payment_authorization_consent_at = Column(DateTime(timezone=True), nullable=True)
     payment_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     operator_notes = Column(String(1024), nullable=True)
+
+    request_kind = Column(
+        String(32),
+        nullable=False,
+        default="hourly_booking",
+        server_default="hourly_booking",
+    )
+    membership_plan_id = Column(Integer, nullable=True)
+    desired_start_date = Column(Date, nullable=True)
+    seats_requested = Column(Integer, nullable=False, default=1, server_default="1")
+    commitment_months_snapshot = Column(Integer, nullable=True)
