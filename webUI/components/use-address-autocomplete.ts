@@ -2,6 +2,8 @@
 
 import { RefObject, useEffect, useState } from "react";
 
+import { loadGoogleMaps } from "@/lib/google-maps-loader";
+
 export interface PlaceDetails {
   formatted: string;
   street: string;
@@ -18,34 +20,6 @@ interface AddressComponent {
   long_name: string;
   short_name: string;
   types: string[];
-}
-
-let mapsPromise: Promise<void> | null = null;
-
-function loadMapsWithPlaces(apiKey: string): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  const w = window as unknown as { google?: { maps?: { places?: unknown } } };
-  if (w.google?.maps?.places) return Promise.resolve();
-  if (!mapsPromise) {
-    mapsPromise = new Promise((resolve, reject) => {
-      const callbackName = `__priddyMapsReady_${Math.random().toString(36).slice(2)}`;
-      (window as unknown as Record<string, () => void>)[callbackName] = () => {
-        delete (window as unknown as Record<string, () => void>)[callbackName];
-        resolve();
-      };
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&libraries=places&callback=${callbackName}`;
-      script.async = true;
-      script.defer = true;
-      script.onerror = () => {
-        delete (window as unknown as Record<string, () => void>)[callbackName];
-        mapsPromise = null;
-        reject(new Error("Google Maps script failed to load"));
-      };
-      document.head.appendChild(script);
-    });
-  }
-  return mapsPromise;
 }
 
 function pickComponent(components: AddressComponent[], type: string, short = false): string {
@@ -136,7 +110,7 @@ export function useAddressAutocomplete(
 
     (async () => {
       try {
-        await loadMapsWithPlaces(apiKey);
+        await loadGoogleMaps(apiKey);
         const w = window as unknown as {
           google: {
             maps: {
