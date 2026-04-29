@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -198,6 +199,30 @@ export default function OwnerDashboard() {
           <p className="text-textSecondary">
             Revenue, membership, and location activity across your workspace portfolio.
           </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Link
+            href="/owner/calendar"
+            className="rounded-md border border-accent/30 bg-accentSubtle p-4 text-accent transition hover:bg-accent hover:text-white"
+          >
+            <div className="text-sm font-semibold">Calendar</div>
+            <div className="text-xs opacity-80">See what's booked, by whom, when.</div>
+          </Link>
+          <Link
+            href="/owner/requests"
+            className="rounded-md border border-border bg-surface p-4 text-textPrimary transition hover:border-accent/40"
+          >
+            <div className="text-sm font-semibold">Requests</div>
+            <div className="text-xs text-textMuted">Approve, deny, or retry payment.</div>
+          </Link>
+          <Link
+            href="/owner/members"
+            className="rounded-md border border-border bg-surface p-4 text-textPrimary transition hover:border-accent/40"
+          >
+            <div className="text-sm font-semibold">Members</div>
+            <div className="text-xs text-textMuted">Customers who interact with your spaces.</div>
+          </Link>
         </div>
 
         {error ? <div className="text-sm text-error">{error}</div> : null}

@@ -7,12 +7,14 @@ import { clearAccessToken } from "@/lib/auth";
 
 const nav = [
   { href: "/owner", label: "Dashboard" },
+  { href: "/owner/calendar", label: "Calendar" },
+  { href: "/owner/requests", label: "Requests" },
+  { href: "/owner/members", label: "Members" },
   { href: "/owner/analytics", label: "Analytics" },
   { href: "/owner/locations", label: "Locations" },
   { href: "/owner/locations/spaces", label: "Inventory" },
   { href: "/owner/spaces/new", label: "New Space" },
   { href: "/owner/locations/new", label: "New Location" },
-  { href: "/owner/requests", label: "Requests" },
   { href: "/owner/team", label: "Team" },
   { href: "/owner/payments", label: "Payments" },
   { href: "/owner/invoices", label: "Invoices" },
