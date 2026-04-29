@@ -13,6 +13,8 @@ export interface MeResponse {
   email: string;
   first_name: string | null;
   last_name: string | null;
+  phone?: string | null;
+  company_name?: string | null;
   role: string | null;
   app_role: string | null;
   platform_role: string | null;

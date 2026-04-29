@@ -10,6 +10,26 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, setAccessToken } from "@/lib/auth";
+import { formatCurrency } from "@/lib/calendar";
+
+interface OrgActivity {
+  user_public_id: string;
+  organization_public_id: string;
+  name: string;
+  email: string;
+  status: string;
+  stats: {
+    total_bookings: number;
+    confirmed_bookings: number;
+    canceled_bookings: number;
+    no_shows: number;
+    open_requests: number;
+    total_revenue_cents: number;
+    active_subscriptions: number;
+    first_booking_at: string | null;
+    last_booking_at: string | null;
+  };
+}
 
 interface CustomerDetail {
   profile: {
@@ -61,17 +81,26 @@ export function AdminCustomerDetailClient() {
   const params = useParams<{ public_id: string }>();
   const router = useRouter();
   const [data, setData] = useState<CustomerDetail | null>(null);
+  const [orgActivity, setOrgActivity] = useState<OrgActivity[]>([]);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     const token = getAccessToken() ?? undefined;
     try {
-      const result = await apiFetch<CustomerDetail>(
-        `/api/admin/customers/${params.public_id}`,
-        { method: "GET" },
-        token
-      );
+      const [result, orgs] = await Promise.all([
+        apiFetch<CustomerDetail>(
+          `/api/admin/customers/${params.public_id}`,
+          { method: "GET" },
+          token
+        ),
+        apiFetch<OrgActivity[]>(
+          `/api/admin/customers/${params.public_id}/orgs`,
+          { method: "GET" },
+          token
+        ).catch(() => [] as OrgActivity[]),
+      ]);
       setData(result);
+      setOrgActivity(orgs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load customer");
     }
@@ -129,6 +158,59 @@ export function AdminCustomerDetailClient() {
                   Impersonate
                 </Button>
               </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-semibold text-textPrimary">
+                  Cross-org activity ({orgActivity.length})
+                </div>
+                <div className="text-xs text-textMuted">
+                  Per-org relationships and stats — useful for support across multiple owners.
+                </div>
+              </div>
+              {orgActivity.length === 0 ? (
+                <div className="text-xs text-textMuted">No org activity for this customer.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead className="text-left text-textMuted">
+                      <tr>
+                        <th className="p-2">Organization</th>
+                        <th className="p-2">CRM status</th>
+                        <th className="p-2 text-right">Bookings</th>
+                        <th className="p-2 text-right">Revenue</th>
+                        <th className="p-2 text-right">Active subs</th>
+                        <th className="p-2">Last booking</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orgActivity.map((item) => (
+                        <tr
+                          key={item.organization_public_id}
+                          className="border-t border-border"
+                        >
+                          <td className="p-2 text-textPrimary">{item.name}</td>
+                          <td className="p-2 text-textSecondary capitalize">{item.status}</td>
+                          <td className="p-2 text-right text-textPrimary">
+                            <div>{item.stats.confirmed_bookings} confirmed</div>
+                            <div className="text-textMuted">{item.stats.total_bookings} total</div>
+                          </td>
+                          <td className="p-2 text-right text-textPrimary">
+                            {formatCurrency(item.stats.total_revenue_cents)}
+                          </td>
+                          <td className="p-2 text-right text-textPrimary">
+                            {item.stats.active_subscriptions}
+                          </td>
+                          <td className="p-2 text-textMuted">
+                            {item.stats.last_booking_at?.slice(0, 10) ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
 
             <Card className="p-4">

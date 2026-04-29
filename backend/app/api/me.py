@@ -1,11 +1,17 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.db.deps import get_db
+from app.models.booking import Booking
+from app.models.location import Location
+from app.models.space import Space
+from app.models.subscription import Subscription
 from app.schemas.auth import ImpersonationContextOut, MeOut, MeUpdateIn
+from app.schemas.calendar import CalendarResponse
+from app.services.calendar_events import build_calendar_events
 from app.services.platform_auth import (
     build_default_route,
     get_actor_user,
@@ -32,6 +38,8 @@ def get_me(
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
+        phone=user.phone,
+        company_name=user.company_name,
         role=user.role.value if user.role else None,
         app_role=app_role,
         platform_role=platform_role,
@@ -54,6 +62,39 @@ def get_me(
     )
 
 
+@router.get("/me/calendar", response_model=CalendarResponse)
+def my_calendar(
+    start: datetime = Query(...),
+    end: datetime = Query(...),
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+) -> CalendarResponse:
+    user = get_effective_user(db, token)
+    # Find every location where this user has any booking, request, or subscription.
+    space_ids: set[int] = set()
+    for (sid,) in db.query(Booking.space_id).filter(Booking.user_id == user.id).distinct():
+        space_ids.add(sid)
+    for (sid,) in (
+        db.query(Subscription.space_id).filter(Subscription.user_id == user.id).distinct()
+    ):
+        space_ids.add(sid)
+    location_ids: set[int] = set()
+    if space_ids:
+        for (lid,) in (
+            db.query(Space.location_id).filter(Space.id.in_(space_ids)).distinct()
+        ):
+            location_ids.add(lid)
+    if not location_ids:
+        return CalendarResponse(start=start, end=end, events=[], spaces=[], truncated=False)
+    return build_calendar_events(
+        db,
+        location_ids=location_ids,
+        start=start,
+        end=end,
+        user_id_filter=user.id,
+    )
+
+
 @router.patch("/me", response_model=MeOut)
 def update_me(
     payload: MeUpdateIn,
@@ -65,6 +106,10 @@ def update_me(
         user.first_name = payload.first_name
     if payload.last_name is not None:
         user.last_name = payload.last_name
+    if payload.phone is not None:
+        user.phone = payload.phone or None
+    if payload.company_name is not None:
+        user.company_name = payload.company_name or None
     if payload.role is not None and user.role is None:
         user.role = payload.role
     if payload.terms_accepted is True:
@@ -87,6 +132,8 @@ def update_me(
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
+        phone=user.phone,
+        company_name=user.company_name,
         role=user.role.value if user.role else None,
         app_role=app_role,
         platform_role=platform_role,

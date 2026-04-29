@@ -7,11 +7,13 @@ import { clearAccessToken } from "@/lib/auth";
 
 const nav = [
   { href: "/customer", label: "Marketplace" },
+  { href: "/customer/calendar", label: "My Calendar" },
   { href: "/customer/insights", label: "My Insights" },
   { href: "/customer/requests", label: "My Requests" },
   { href: "/customer/subscriptions", label: "Memberships" },
   { href: "/customer/payments", label: "Payments" },
-  { href: "/customer/invoices", label: "Invoices" }
+  { href: "/customer/invoices", label: "Invoices" },
+  { href: "/customer/profile", label: "Profile" }
 ];
 
 export function CustomerSideNav() {

@@ -23,5 +23,7 @@ class User(PublicIdMixin, TimestampMixin, Base):
     privacy_policy_accepted_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
     email_verified = Column(Boolean, default=False)
+    phone = Column(String(64), nullable=True)
+    company_name = Column(String(255), nullable=True)
     stripe_customer_id = Column(String(255), nullable=True)
     stripe_default_payment_method_id = Column(String(255), nullable=True)

@@ -53,6 +53,8 @@ class MeOut(BaseModel):
     email: str
     first_name: str | None
     last_name: str | None
+    phone: str | None = None
+    company_name: str | None = None
     role: str | None
     app_role: UserAppRole | None
     platform_role: PlatformTeamRole | None
@@ -65,6 +67,8 @@ class MeOut(BaseModel):
 class MeUpdateIn(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
+    phone: str | None = None
+    company_name: str | None = None
     role: UserAppRole | None = None
     terms_accepted: bool | None = None
     privacy_policy_accepted: bool | None = None

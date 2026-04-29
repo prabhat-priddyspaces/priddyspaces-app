@@ -7,6 +7,7 @@ import { clearAccessToken } from "@/lib/auth";
 
 const baseNav = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/calendar", label: "Calendar" },
   { href: "/admin/analytics", label: "Analytics" },
   { href: "/admin/customers", label: "Customers" },
   { href: "/admin/owner-companies", label: "Owner Companies" },
