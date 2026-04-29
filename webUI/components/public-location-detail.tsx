@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { PublicTopbar } from "@/components/public-topbar";
 import {
   PUBLIC_MARKETPLACE_CONFIGS,
   PUBLIC_MARKETPLACE_TABS,
@@ -77,16 +78,18 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-background px-6 py-8">
-        <div className="mx-auto max-w-6xl text-sm text-textMuted">Loading location…</div>
+      <main className="min-h-screen bg-background">
+        <PublicTopbar />
+        <div className="mx-auto max-w-6xl px-6 py-8 text-sm text-textMuted">Loading location…</div>
       </main>
     );
   }
 
   if (error && !location) {
     return (
-      <main className="min-h-screen bg-background px-6 py-8">
-        <div className="mx-auto max-w-6xl">
+      <main className="min-h-screen bg-background">
+        <PublicTopbar />
+        <div className="mx-auto max-w-6xl px-6 py-8">
           <Link href={backHref} className="text-sm text-accent hover:underline">
             Back to search
           </Link>
@@ -98,8 +101,9 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
 
   if (!location) {
     return (
-      <main className="min-h-screen bg-background px-6 py-8">
-        <div className="mx-auto max-w-6xl">
+      <main className="min-h-screen bg-background">
+        <PublicTopbar />
+        <div className="mx-auto max-w-6xl px-6 py-8">
           <Link href={backHref} className="text-sm text-accent hover:underline">
             Back to search
           </Link>
@@ -112,8 +116,9 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
   const chips = getLocationPriceChips(activeConfig, location);
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef6f8_100%)] px-6 py-8">
-      <div className="mx-auto max-w-6xl">
+    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef6f8_100%)]">
+      <PublicTopbar />
+      <div className="mx-auto max-w-6xl px-6 py-8">
         <Link href={backHref} className="text-sm font-medium text-teal-700 hover:underline">
           Back to search
         </Link>

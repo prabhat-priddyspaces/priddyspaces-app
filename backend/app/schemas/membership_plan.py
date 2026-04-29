@@ -69,3 +69,5 @@ class MembershipPlanPublicOut(BaseModel):
     included_meeting_room_hours_per_month: int
     overage_hourly_rate_cents: int | None
     seats_per_plan: int
+    space_capacity: int
+    available_seats: int | None

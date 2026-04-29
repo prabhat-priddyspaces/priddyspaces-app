@@ -314,6 +314,60 @@ export function formatSpaceTypeLabel(spaceType: string) {
     .join(" ");
 }
 
+export type LeaseBookingMode = "private_office_lease" | "suite_lease";
+
+export interface MembershipPlanPublic {
+  public_id: string;
+  booking_mode: string;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  billing_cycle: string;
+  commitment_months: number | null;
+  included_meeting_room_hours_per_month: number;
+  overage_hourly_rate_cents: number | null;
+  seats_per_plan: number;
+  space_capacity: number;
+  available_seats: number | null;
+}
+
+export function leaseBookingModeForSpaceType(spaceType: string): LeaseBookingMode | null {
+  if (spaceType === "private_office") return "private_office_lease";
+  if (spaceType === "suite") return "suite_lease";
+  return null;
+}
+
+export function formatLeasePrice(cents: number, billingCycle: string = "monthly") {
+  const dollars = Math.round(cents / 100);
+  const formatted = dollars.toLocaleString();
+  const suffix = billingCycle === "yearly" ? "/yr" : "/mo";
+  return `$${formatted}${suffix}`;
+}
+
+export function termLabel(commitmentMonths: number | null) {
+  if (commitmentMonths == null || commitmentMonths <= 1) return "Month-to-month";
+  return `${commitmentMonths}-month Term`;
+}
+
+export function findBaselinePlan(plans: MembershipPlanPublic[]): MembershipPlanPublic | null {
+  return (
+    plans.find((p) => p.commitment_months == null) ??
+    plans.find((p) => p.commitment_months === 1) ??
+    null
+  );
+}
+
+export function computeMonthlySavingsPercent(
+  plan: MembershipPlanPublic,
+  baseline: MembershipPlanPublic | null,
+): number | null {
+  if (!baseline || baseline.public_id === plan.public_id) return null;
+  if (baseline.price_cents <= 0) return null;
+  const ratio = 1 - plan.price_cents / baseline.price_cents;
+  if (ratio <= 0) return null;
+  return Math.round(ratio * 100);
+}
+
 export function getLocationPriceChips(
   config: PublicMarketplaceConfig,
   location: MarketplaceLocationSummary,

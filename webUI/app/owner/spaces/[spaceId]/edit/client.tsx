@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LeaseTermsManager } from "@/components/lease-terms-manager";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 
@@ -225,6 +226,13 @@ export function EditSpaceClient() {
             {message ? <div className="text-sm text-textMuted">{message}</div> : null}
           </div>
         </Card>
+        {form.space_type === "private_office" || form.space_type === "suite" ? (
+          <LeaseTermsManager
+            spacePublicId={spaceId}
+            spaceType={form.space_type as "private_office" | "suite"}
+            spaceCapacity={Number(form.capacity || 1)}
+          />
+        ) : null}
       </div>
     </AppShell>
   );

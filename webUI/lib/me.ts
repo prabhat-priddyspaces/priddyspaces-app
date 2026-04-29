@@ -38,3 +38,10 @@ export function getDefaultRoute(me: MeResponse): string {
   }
   return "/onboarding";
 }
+
+export function getDashboardHref(me: MeResponse): string {
+  if (me.platform_role) return "/admin";
+  if (me.app_role === "owner") return "/owner";
+  if (me.app_role === "customer") return "/customer/requests";
+  return "/onboarding";
+}

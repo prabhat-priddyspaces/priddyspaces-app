@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user, require_email_verified
+from app.core.auth import get_current_user
 from app.core.crypto import encrypt_secret
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
@@ -323,7 +323,6 @@ def create_payment_method_setup_session(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
-    require_email_verified(token)
     user = get_or_create_user(db, token)
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
@@ -356,7 +355,6 @@ def save_customer_payment_method(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
-    require_email_verified(token)
     user = get_or_create_user(db, token)
     if user.role != UserAppRole.CUSTOMER:
         raise HTTPException(status_code=403, detail="Customer only")

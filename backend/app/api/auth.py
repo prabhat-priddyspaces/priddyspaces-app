@@ -89,7 +89,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
         user.role = user.role or payload.role
         user.terms_accepted_at = now
         user.privacy_policy_accepted_at = now
-        user.email_verified = user.email_verified or False
+        user.email_verified = True
         db.add(user)
     else:
         user = User(
@@ -101,7 +101,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
             role=payload.role,
             terms_accepted_at=now,
             privacy_policy_accepted_at=now,
-            email_verified=False,
+            email_verified=True,
         )
         db.add(user)
     db.commit()
@@ -124,6 +124,11 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Account disabled")
+    if not user.email_verified:
+        user.email_verified = True
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     touch_platform_last_login(db, user.id)
     token = issue_standard_token(user)
     return TokenOut(access_token=token)

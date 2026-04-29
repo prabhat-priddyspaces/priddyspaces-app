@@ -1,4 +1,7 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -9,6 +12,7 @@ from app.models.membership_plan import MembershipPlan
 from app.models.organization import Organization
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
+from app.models.subscription import Subscription
 from app.schemas.membership_plan import (
     MembershipPlanCreate,
     MembershipPlanOut,
@@ -19,6 +23,11 @@ from app.services.auth_user import get_or_create_user
 from app.services.authz import require_location_roles
 from app.services.booking_modes import is_mode_valid_for_space_type
 from app.services.platform_auth import organization_is_publicly_visible
+
+_EXCLUSIVE_LEASE_MODES = {
+    BookingMode.PRIVATE_OFFICE_LEASE.value,
+    BookingMode.SUITE_LEASE.value,
+}
 
 router = APIRouter()
 
@@ -157,7 +166,46 @@ def list_public_membership_plans(
     plans = query.order_by(
         MembershipPlan.sort_order.asc(), MembershipPlan.price_cents.asc()
     ).all()
-    return plans
+
+    today = date.today()
+    has_active_lease = (
+        db.query(Subscription.id)
+        .filter(
+            Subscription.space_id == space.id,
+            Subscription.status.in_(["active", "past_due"]),
+            Subscription.start_date <= today,
+            or_(Subscription.end_date.is_(None), Subscription.end_date >= today),
+            or_(
+                Subscription.booking_mode.is_(None),
+                Subscription.booking_mode.in_(_EXCLUSIVE_LEASE_MODES),
+            ),
+        )
+        .first()
+        is not None
+    )
+
+    def _availability_for(plan: MembershipPlan) -> int | None:
+        if plan.booking_mode in _EXCLUSIVE_LEASE_MODES:
+            return 0 if has_active_lease else space.capacity
+        return None
+
+    return [
+        MembershipPlanPublicOut(
+            public_id=plan.public_id,
+            booking_mode=plan.booking_mode,
+            name=plan.name,
+            description=plan.description,
+            price_cents=plan.price_cents,
+            billing_cycle=plan.billing_cycle,
+            commitment_months=plan.commitment_months,
+            included_meeting_room_hours_per_month=plan.included_meeting_room_hours_per_month,
+            overage_hourly_rate_cents=plan.overage_hourly_rate_cents,
+            seats_per_plan=plan.seats_per_plan,
+            space_capacity=space.capacity,
+            available_seats=_availability_for(plan),
+        )
+        for plan in plans
+    ]
 
 
 @router.get("/membership-plans/{public_id}", response_model=MembershipPlanOut)

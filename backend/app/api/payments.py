@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from datetime import datetime, timezone
 
-from app.core.auth import get_current_user, require_email_verified
+from app.core.auth import get_current_user
 from app.core.config import settings
 from app.db.deps import get_db
 from app.models.payment import Payment
@@ -107,7 +107,6 @@ def create_intent(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user)
 ):
-    require_email_verified(token)
     user = get_or_create_user(db, token)
 
     amount = payload.amount
@@ -154,7 +153,6 @@ def create_subscription_purchase(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user)
 ):
-    require_email_verified(token)
     user = get_or_create_user(db, token)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
@@ -223,7 +221,6 @@ def create_customer_portal(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user)
 ):
-    require_email_verified(token)
     user = get_or_create_user(db, token)
 
     if not user.stripe_customer_id:

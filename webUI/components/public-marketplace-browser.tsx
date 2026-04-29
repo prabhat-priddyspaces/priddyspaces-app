@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { CalendarDays, Clock3, Compass, Search, SlidersHorizontal, Users } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
+import { PublicTopbar } from "@/components/public-topbar";
 import {
   DEFAULT_RADIUS_MILES,
   MAX_RADIUS_MILES,
@@ -257,28 +258,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.14),_transparent_34%),linear-gradient(180deg,_#f8fafc_0%,_#eef6f8_100%)] pb-10">
-      <div className="border-b border-slate-200/70 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-5">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">Priddyspaces</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">Public Marketplace</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/register"
-              className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-            >
-              Join Now
-            </Link>
-          </div>
-        </div>
-      </div>
+      <PublicTopbar />
 
       <section className="mx-auto max-w-[1440px] px-6 pt-8">
         <div className="rounded-[32px] border border-white/80 bg-white/90 p-6 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]">

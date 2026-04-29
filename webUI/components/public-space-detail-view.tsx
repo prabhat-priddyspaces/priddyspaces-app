@@ -21,9 +21,12 @@ import { buildLoginHref } from "@/lib/auth-redirect";
 import {
   formatLocationAddress,
   formatSpaceTypeLabel,
+  leaseBookingModeForSpaceType,
   MarketplaceSpaceDetailResponse,
   SpaceAvailabilityResponse,
 } from "@/lib/public-marketplace";
+import { LeaseBookingWidget } from "@/components/lease-booking-widget";
+import { PublicTopbar } from "@/components/public-topbar";
 import {
   DEFAULT_GRANULARITY_MINUTES,
   addDaysIso,
@@ -62,6 +65,8 @@ interface PublicSpaceDetailViewProps {
   initialDate?: string;
   initialStartTime?: string;
   initialEndTime?: string;
+  initialPlanPublicId?: string;
+  initialMoveInDate?: string;
 }
 
 interface PaymentMethodResolve {
@@ -102,6 +107,8 @@ export function PublicSpaceDetailView({
   initialDate = "",
   initialStartTime = "",
   initialEndTime = "",
+  initialPlanPublicId,
+  initialMoveInDate,
 }: PublicSpaceDetailViewProps) {
   const router = useRouter();
   const isAuthenticated = Boolean(getAccessToken());
@@ -255,6 +262,9 @@ export function PublicSpaceDetailView({
   const priceRows = useMemo(() => (detail ? getPriceRows(detail.space) : []), [detail]);
   const primaryPrice = priceRows[0]?.value ?? "Contact for pricing";
   const locationAddress = detail ? formatLocationAddress(detail.location) : "";
+  const leaseBookingMode = detail
+    ? leaseBookingModeForSpaceType(detail.space.space_type)
+    : null;
 
   const hourlyPrice =
     availability?.hourly_price ?? detail?.space.hourly_price ?? null;
@@ -303,11 +313,13 @@ export function PublicSpaceDetailView({
     return null;
   }, [allDay, dailyPrice, hourlyPrice, dayOpenSpan, hours]);
 
-  function buildSelfNextHref() {
+  function buildSelfNextHref(extra?: { planPublicId?: string | null; moveInDate?: string }) {
     const params = new URLSearchParams();
     if (date) params.set("date", date);
     if (startTime) params.set("start_time", startTime);
     if (endTime) params.set("end_time", endTime);
+    if (extra?.planPublicId) params.set("plan", extra.planPublicId);
+    if (extra?.moveInDate) params.set("move_in", extra.moveInDate);
     const qs = params.toString();
     return qs ? `/spaces/${spaceId}?${qs}` : `/spaces/${spaceId}`;
   }
@@ -415,16 +427,18 @@ export function PublicSpaceDetailView({
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)] px-6 py-8">
-        <div className="mx-auto max-w-[1320px] text-sm text-slate-500">Loading listing…</div>
+      <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)]">
+        <PublicTopbar />
+        <div className="mx-auto max-w-[1320px] px-6 py-8 text-sm text-slate-500">Loading listing…</div>
       </main>
     );
   }
 
   if (error && !detail) {
     return (
-      <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)] px-6 py-8">
-        <div className="mx-auto max-w-[1320px]">
+      <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)]">
+        <PublicTopbar />
+        <div className="mx-auto max-w-[1320px] px-6 py-8">
           <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 hover:underline">
             <ChevronLeft className="h-4 w-4" />
             Back to search
@@ -440,8 +454,9 @@ export function PublicSpaceDetailView({
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)] px-6 py-8">
-      <div className="mx-auto max-w-[1320px]">
+    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)]">
+      <PublicTopbar />
+      <div className="mx-auto max-w-[1320px] px-6 py-8">
         <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 hover:underline">
           <ChevronLeft className="h-4 w-4" />
           Back to search
@@ -654,6 +669,34 @@ export function PublicSpaceDetailView({
           </div>
 
           <aside className="lg:sticky lg:top-6 lg:self-start">
+            {leaseBookingMode ? (
+              <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)]">
+                {detail.cancellation_policy ? (
+                  <div className="rounded-[20px] border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <ShieldCheck className="h-4 w-4" />
+                      Book with confidence
+                    </div>
+                    <p className="mt-2 leading-6 text-teal-800">
+                      Cancel up to {detail.cancellation_policy.cancel_window_hours} hours before start time for a{" "}
+                      {detail.cancellation_policy.refund_percent}% refund.
+                    </p>
+                  </div>
+                ) : null}
+                <LeaseBookingWidget
+                  spacePublicId={detail.space.public_id}
+                  spaceType={detail.space.space_type as "private_office" | "suite"}
+                  spaceCapacity={detail.space.capacity}
+                  bookingMode={leaseBookingMode}
+                  spaceMonthlyPrice={detail.space.price_monthly ?? null}
+                  buildLoginNextHref={({ planPublicId, moveInDate }) =>
+                    buildSelfNextHref({ planPublicId, moveInDate })
+                  }
+                  initialPlanPublicId={initialPlanPublicId}
+                  initialMoveInDate={initialMoveInDate}
+                />
+              </div>
+            ) : (
             <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)]">
               {detail.cancellation_policy ? (
                 <div className="rounded-[20px] border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
@@ -860,6 +903,7 @@ export function PublicSpaceDetailView({
                 </div>
               ) : null}
             </div>
+            )}
           </aside>
         </div>
       </div>

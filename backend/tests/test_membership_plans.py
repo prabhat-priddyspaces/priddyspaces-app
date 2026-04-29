@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from app.models.enums import (
     BillingCycle,
     BookingMode,
@@ -12,6 +14,7 @@ from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
+from app.models.subscription import Subscription
 from app.models.user import User
 
 
@@ -217,6 +220,60 @@ def test_public_membership_plans_filtered_by_enabled_modes(db_session, client_fa
     )
     assert empty_resp.status_code == 200
     assert empty_resp.json() == []
+
+
+def test_public_membership_plans_include_capacity_and_availability(db_session, client_factory):
+    owner, org, _, space = _seed_owner_with_space(db_session, space_type=SpaceType.PRIVATE_OFFICE)
+    client = _client(client_factory)
+
+    client.put(
+        f"/api/spaces/{space.public_id}/booking-modes",
+        json={"booking_mode": BookingMode.PRIVATE_OFFICE_LEASE.value, "is_enabled": True},
+    )
+    client.post(
+        "/api/membership-plans",
+        json={
+            "space_public_id": space.public_id,
+            "booking_mode": BookingMode.PRIVATE_OFFICE_LEASE.value,
+            "name": "12mo",
+            "price_cents": 200000,
+            "commitment_months": 12,
+            "seats_per_plan": 4,
+        },
+    )
+
+    open_resp = client.get(
+        f"/api/membership-plans/public?space_public_id={space.public_id}"
+    )
+    assert open_resp.status_code == 200
+    open_plans = open_resp.json()
+    assert len(open_plans) == 1
+    assert open_plans[0]["space_capacity"] == space.capacity
+    assert open_plans[0]["available_seats"] == space.capacity
+
+    today = date.today()
+    db_session.add(
+        Subscription(
+            user_id=owner.id,
+            space_id=space.id,
+            tenant_id=org.id,
+            status="active",
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=365),
+            booking_mode=BookingMode.PRIVATE_OFFICE_LEASE.value,
+            commitment_months=12,
+        )
+    )
+    db_session.commit()
+
+    occupied_resp = client.get(
+        f"/api/membership-plans/public?space_public_id={space.public_id}"
+    )
+    assert occupied_resp.status_code == 200
+    occupied_plans = occupied_resp.json()
+    assert len(occupied_plans) == 1
+    assert occupied_plans[0]["space_capacity"] == space.capacity
+    assert occupied_plans[0]["available_seats"] == 0
 
 
 def test_suite_space_type_accepted(db_session, client_factory):
