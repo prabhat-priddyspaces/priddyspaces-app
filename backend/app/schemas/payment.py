@@ -48,6 +48,6 @@ class PaymentOut(BaseModel):
     commission_rate_pct: int | None
     platform_fee_amount: int | None
     owner_net_amount: int | None
-    created_at: datetime
+    created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

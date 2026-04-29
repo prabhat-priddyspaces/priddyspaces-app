@@ -96,6 +96,6 @@ class CustomerOwnerPaymentMethodOut(BaseModel):
     status: str
     billing_name: str | None = None
     billing_zip: str | None = None
-    created_at: datetime
+    created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

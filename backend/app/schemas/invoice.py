@@ -12,4 +12,4 @@ class InvoiceOut(BaseModel):
     booking_id: int | None
     payment_id: int | None
     pdf_url: str | None
-    created_at: datetime
+    created_at: datetime | None = None
