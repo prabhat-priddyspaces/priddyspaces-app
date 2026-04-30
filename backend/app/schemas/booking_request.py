@@ -22,6 +22,11 @@ class BookingRequestCreate(BaseModel):
     customer_owner_payment_method_public_id: str | None = None
     payment_authorization_consent: bool = False
 
+    # Explicit pricing-mode signals from the booking widget. Optional for backwards
+    # compat with older clients; modern widgets always send one of these.
+    booking_mode: str | None = None  # 'hourly' | 'day_pass'
+    full_day: bool = False
+
     @model_validator(mode="after")
     def _validate_xor(self):
         is_booking = bool(self.space_public_id and self.start_datetime and self.end_datetime)
@@ -71,7 +76,15 @@ class BookingRequestOut(BaseModel):
     operator_notes: str | None = None
     price_daily: int | None = None
     price_monthly: int | None = None
+    price_hourly: int | None = None
     estimated_amount: int | None = None
+    # Pricing breakdown for the booking widget and approval email.
+    base_amount_cents: int | None = None
+    discount_percent: int = 0
+    discount_amount_cents: int = 0
+    tax_amount_cents: int = 0
+    rate_basis: str | None = None
+    units: float | None = None
     payment_attempt_count: int | None = None
     failure_reason: str | None = None
     last_payment: BookingPaymentSummary | None = None

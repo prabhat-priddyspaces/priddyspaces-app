@@ -56,7 +56,8 @@ def _seed_owner_space(db):
         space_type=SpaceType.CONFERENCE_ROOM,
         capacity=4,
         availability_status=AvailabilityStatus.AVAILABLE,
-        price_daily=200
+        price_daily=200,
+        price_hourly=50,
     )
     db.add(space)
     db.commit()

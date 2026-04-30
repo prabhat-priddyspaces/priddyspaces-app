@@ -42,6 +42,7 @@ def _serialize_space(
         capacity=space.capacity,
         price_monthly=space.price_monthly,
         price_daily=space.price_daily,
+        price_hourly=space.price_hourly,
         availability_status=space.availability_status,
         availability_start_time=space.availability_start_time,
         availability_end_time=space.availability_end_time,
@@ -84,6 +85,7 @@ def create_space(
         capacity=payload.capacity,
         price_monthly=payload.price_monthly,
         price_daily=payload.price_daily,
+        price_hourly=payload.price_hourly,
         availability_start_time=payload.availability_start_time,
         availability_end_time=payload.availability_end_time,
         visibility=payload.visibility,
@@ -159,6 +161,8 @@ def update_space(
         space.price_monthly = payload.price_monthly
     if payload.price_daily is not None:
         space.price_daily = payload.price_daily
+    if payload.price_hourly is not None:
+        space.price_hourly = payload.price_hourly
     if payload.availability_status is not None:
         space.availability_status = payload.availability_status
     if payload.availability_start_time is not None:

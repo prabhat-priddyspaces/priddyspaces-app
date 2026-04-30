@@ -50,7 +50,11 @@ from app.services.membership_subscriptions import (
     create_subscription as create_stripe_subscription,
 )
 from app.services.owner_payments import require_payment_method_for_request
-from app.services.pricing import estimate_booking_amount
+from app.services.pricing import (
+    EstimateResult,
+    VolumeDiscount,
+    estimate_booking_price,
+)
 from app.services.notifications import send_email
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
@@ -60,6 +64,31 @@ router = APIRouter()
 
 def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def _granularity_to_minutes(value) -> int:
+    raw = getattr(value, "value", value)
+    return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
+
+
+def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]:
+    """Load active volume-discount tiers for a space. Returns [] until Phase B model lands."""
+    try:
+        from app.models.space_volume_discount import SpaceVolumeDiscount
+    except ImportError:
+        return []
+    rows = (
+        db.query(SpaceVolumeDiscount)
+        .filter(
+            SpaceVolumeDiscount.space_id == space_id,
+            SpaceVolumeDiscount.is_active.is_(True),
+        )
+        .all()
+    )
+    return [
+        VolumeDiscount(min_hours=float(r.min_hours), discount_percent=int(r.discount_percent))
+        for r in rows
+    ]
 
 
 def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -102,7 +131,9 @@ def _to_out(
 ) -> BookingRequestOut:
     price_daily = space.price_daily if space else None
     price_monthly = space.price_monthly if space else None
+    price_hourly = space.price_hourly if space else None
     estimated = None
+    estimate: EstimateResult | None = None
     request_kind = req.request_kind or BookingRequestKind.HOURLY_BOOKING.value
     is_membership = request_kind in (
         BookingRequestKind.MEMBERSHIP_PURCHASE.value,
@@ -118,6 +149,8 @@ def _to_out(
         rate_type = None
         rate_amount = None
         tax_rate = None
+        granularity_minutes = 60
+        volume_discounts: list[VolumeDiscount] = []
         if db:
             rule = _get_active_pricing_rule(db, space.id)
             if rule:
@@ -126,15 +159,30 @@ def _to_out(
             tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
             if tax:
                 tax_rate = tax.rate_percent
-        estimated = estimate_booking_amount(
+            location = db.query(Location).filter(Location.id == space.location_id).first()
+            if location and location.booking_granularity:
+                granularity_minutes = _granularity_to_minutes(location.booking_granularity)
+            volume_discounts = _active_volume_discounts(db, space.id)
+
+        # Map request_kind back to engine flags.
+        full_day_flag = request_kind == BookingRequestKind.DAILY_BOOKING.value
+        booking_mode_flag = "day_pass" if full_day_flag else "hourly"
+
+        estimate = estimate_booking_price(
             req.start_datetime,
             req.end_datetime,
-            price_daily,
-            price_monthly,
+            price_hourly=price_hourly,
+            price_daily=price_daily,
+            price_monthly=price_monthly,
             rate_type=rate_type,
             rate_amount=rate_amount,
-            tax_rate_percent=tax_rate
+            booking_mode=booking_mode_flag,
+            full_day=full_day_flag,
+            volume_discounts=volume_discounts,
+            granularity_minutes=granularity_minutes,
+            tax_rate_percent=tax_rate,
         )
+        estimated = estimate.total_cents // 100 if estimate else None
     payment_method_public_id = None
     if db and req.customer_owner_payment_method_id:
         payment_method = (
@@ -183,7 +231,14 @@ def _to_out(
         operator_notes=req.operator_notes,
         price_daily=price_daily,
         price_monthly=price_monthly,
+        price_hourly=price_hourly,
         estimated_amount=estimated,
+        base_amount_cents=estimate.base_cents if estimate else None,
+        discount_percent=estimate.discount_percent if estimate else 0,
+        discount_amount_cents=estimate.discount_cents if estimate else 0,
+        tax_amount_cents=estimate.tax_cents if estimate else 0,
+        rate_basis=estimate.rate_basis if estimate else None,
+        units=estimate.units if estimate else None,
         payment_attempt_count=req.payment_attempt_count,
         failure_reason=failure_reason,
         last_payment=last_payment_summary,
@@ -421,6 +476,12 @@ def create_booking_request(
         )
 
     instant = _instant_booking_enabled(db, space)
+    is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
+    chosen_kind = (
+        BookingRequestKind.DAILY_BOOKING.value
+        if is_day_pass
+        else BookingRequestKind.HOURLY_BOOKING.value
+    )
     req = BookingRequest(
         tenant_id=space.tenant_id,
         user_id=user.id,
@@ -433,7 +494,7 @@ def create_booking_request(
         customer_owner_payment_method_id=payment_method.id if payment_method else None,
         payment_status="not_charged" if owner_payment_setting else None,
         payment_authorization_consent_at=consent_at,
-        request_kind=BookingRequestKind.HOURLY_BOOKING.value,
+        request_kind=chosen_kind,
     )
     req.cancellation_deadline_at = cancellation_deadline_for_request(db, req, space)
     db.add(req)

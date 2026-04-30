@@ -19,6 +19,7 @@ class Space(PublicIdMixin, TimestampMixin, Base):
     capacity = Column(Integer, default=1)
     price_monthly = Column(Integer, nullable=True)
     price_daily = Column(Integer, nullable=True)
+    price_hourly = Column(Integer, nullable=True)
     availability_status = Column(
         Enum(AvailabilityStatus, values_callable=enum_values),
         default=AvailabilityStatus.AVAILABLE,

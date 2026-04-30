@@ -11,6 +11,7 @@ class SpaceCreate(BaseModel):
     capacity: int = 1
     price_monthly: int | None = None
     price_daily: int | None = None
+    price_hourly: int | None = None
     availability_start_time: time | None = None
     availability_end_time: time | None = None
     visibility: SpaceVisibility = SpaceVisibility.PUBLIC
@@ -24,6 +25,7 @@ class SpaceOut(BaseModel):
     capacity: int
     price_monthly: int | None
     price_daily: int | None
+    price_hourly: int | None = None
     availability_status: AvailabilityStatus
     availability_start_time: time | None
     availability_end_time: time | None
@@ -38,6 +40,7 @@ class SpaceUpdate(BaseModel):
     capacity: int | None = None
     price_monthly: int | None = None
     price_daily: int | None = None
+    price_hourly: int | None = None
     availability_status: AvailabilityStatus | None = None
     availability_start_time: time | None = None
     availability_end_time: time | None = None
