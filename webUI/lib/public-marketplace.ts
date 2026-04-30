@@ -76,6 +76,11 @@ export interface MarketplaceSpaceImage {
   sort_order: number;
 }
 
+export interface MarketplaceVolumeDiscountTier {
+  min_hours: number;
+  discount_percent: number;
+}
+
 export interface MarketplaceSpaceDetailSpace {
   public_id: string;
   name: string;
@@ -89,6 +94,7 @@ export interface MarketplaceSpaceDetailSpace {
   hourly_price: number | null;
   membership_price: number | null;
   amenities: string[];
+  volume_discounts?: MarketplaceVolumeDiscountTier[];
 }
 
 export interface MarketplaceSpaceDetailLocation {
@@ -409,8 +415,13 @@ export function getSpacePriceChips(
   } else if (config.routeKey === "private-offices") {
     if (space.price_monthly != null) chips.push(`Private Office $${space.price_monthly}/mo`);
   } else {
-    if (space.hourly_price != null) chips.push(`Hourly $${space.hourly_price}/hr`);
-    if (space.price_daily != null) chips.push(`Day Rate $${space.price_daily}/day`);
+    // Meeting rooms: lead with hourly (the new default), keep daily as the alt rate.
+    if (space.hourly_price != null) {
+      chips.push(`From $${space.hourly_price}/hr`);
+      if (space.price_daily != null) chips.push(`or $${space.price_daily}/day`);
+    } else if (space.price_daily != null) {
+      chips.push(`Day Rate $${space.price_daily}/day`);
+    }
   }
   return chips;
 }

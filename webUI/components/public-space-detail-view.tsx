@@ -80,6 +80,8 @@ interface ReservationPayload {
   space_public_id: string;
   start_datetime: string;
   end_datetime: string;
+  booking_mode: "hourly" | "day_pass";
+  full_day: boolean;
 }
 
 function buildDirectionsHref(address: string, lat: number | null, lng: number | null) {
@@ -303,15 +305,61 @@ export function PublicSpaceDetailView({
     return diff > 0 ? diff / 60 : 0;
   }, [allDay, dayOpenSpan, startTime, endTime]);
 
-  const subtotal = useMemo(() => {
+  const volumeDiscounts = detail?.space.volume_discounts ?? [];
+
+  const breakdown = useMemo(() => {
     if (allDay) {
-      if (dailyPrice != null) return dailyPrice;
-      if (hourlyPrice != null && dayOpenSpan != null) return hourlyPrice * dayOpenSpan;
+      // Full-day: flat day rate, no volume discount.
+      if (dailyPrice != null) {
+        return {
+          base: dailyPrice,
+          discountPercent: 0,
+          discountAmount: 0,
+          total: dailyPrice,
+          basis: "daily" as const,
+          units: 1,
+        };
+      }
+      if (hourlyPrice != null && dayOpenSpan != null) {
+        const base = hourlyPrice * dayOpenSpan;
+        return { base, discountPercent: 0, discountAmount: 0, total: base, basis: "hourly_day_span" as const, units: dayOpenSpan };
+      }
       return null;
     }
-    if (hourlyPrice != null && hours > 0) return hourlyPrice * hours;
-    return null;
-  }, [allDay, dailyPrice, hourlyPrice, dayOpenSpan, hours]);
+    if (hourlyPrice == null || hours <= 0) return null;
+    const baseHourly = hourlyPrice * hours;
+    // Auto-cap to daily.
+    if (dailyPrice != null && baseHourly > dailyPrice) {
+      return {
+        base: dailyPrice,
+        discountPercent: 0,
+        discountAmount: 0,
+        total: dailyPrice,
+        basis: "capped_to_daily" as const,
+        units: 1,
+      };
+    }
+    // Pick best applicable volume tier.
+    const eligible = volumeDiscounts.filter(
+      (t) => hours >= t.min_hours && t.discount_percent > 0 && t.discount_percent < 100
+    );
+    const best = eligible.reduce<{ percent: number } | null>((acc, t) => {
+      if (!acc || t.discount_percent > acc.percent) return { percent: t.discount_percent };
+      return acc;
+    }, null);
+    const discountPercent = best?.percent ?? 0;
+    const discountAmount = Math.round(baseHourly * (discountPercent / 100));
+    return {
+      base: baseHourly,
+      discountPercent,
+      discountAmount,
+      total: baseHourly - discountAmount,
+      basis: "hourly" as const,
+      units: hours,
+    };
+  }, [allDay, dailyPrice, hourlyPrice, dayOpenSpan, hours, volumeDiscounts]);
+
+  const subtotal = breakdown?.total ?? null;
 
   function buildSelfNextHref(extra?: { planPublicId?: string | null; moveInDate?: string }) {
     const params = new URLSearchParams();
@@ -390,10 +438,12 @@ export function PublicSpaceDetailView({
     setRequesting(true);
     setError("");
     try {
-      const payload = {
+      const payload: ReservationPayload = {
         space_public_id: detail.space.public_id,
         start_datetime: start.toISOString(),
         end_datetime: end.toISOString(),
+        booking_mode: allDay ? "day_pass" : "hourly",
+        full_day: allDay,
       };
       const resolved = await apiFetch<PaymentMethodResolve>(
         `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(detail.space.public_id)}`,
@@ -786,25 +836,43 @@ export function PublicSpaceDetailView({
                     </div>
                   ) : null}
 
-                  <label className="flex items-center justify-between text-sm font-medium text-slate-600">
-                    <span>All day</span>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      role="switch"
-                      aria-checked={allDay}
-                      onClick={() => setAllDay((prev) => !prev)}
-                      disabled={allDayDisabled}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                        allDay ? "bg-slate-900" : "bg-slate-200"
+                      onClick={() => setAllDay(false)}
+                      disabled={hourlyPrice == null}
+                      className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        !allDay
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
                       }`}
                     >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                          allDay ? "translate-x-5" : "translate-x-0.5"
-                        }`}
-                      />
+                      By the hour
                     </button>
-                  </label>
+                    <button
+                      type="button"
+                      onClick={() => setAllDay(true)}
+                      disabled={allDayDisabled || dailyPrice == null}
+                      className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        allDay
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                      }`}
+                    >
+                      Full day
+                    </button>
+                  </div>
+                  {volumeDiscounts.length > 0 && !allDay ? (
+                    <div className="text-xs text-slate-600">
+                      {volumeDiscounts
+                        .slice()
+                        .sort((a, b) => a.min_hours - b.min_hours)
+                        .map(
+                          (t) => `Save ${t.discount_percent}% from ${t.min_hours} hrs`,
+                        )
+                        .join(" · ")}
+                    </div>
+                  ) : null}
 
                   {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
@@ -836,34 +904,53 @@ export function PublicSpaceDetailView({
                   </button>
                 </div>
 
-                {subtotal != null ? (
+                {breakdown != null ? (
                   <div className="mt-5 space-y-3 text-sm text-slate-700">
-                    {allDay ? (
-                      dailyPrice != null ? (
-                        <div className="flex items-center justify-between">
-                          <span>Day rate</span>
-                          <span>${dailyPrice.toLocaleString()}</span>
-                        </div>
-                      ) : hourlyPrice != null && dayOpenSpan != null ? (
-                        <div className="flex items-center justify-between">
+                    {breakdown.basis === "daily" ? (
+                      <div className="flex items-center justify-between">
+                        <span>Day rate</span>
+                        <span>${breakdown.base.toLocaleString()}</span>
+                      </div>
+                    ) : breakdown.basis === "capped_to_daily" ? (
+                      <>
+                        <div className="flex items-center justify-between text-slate-500 line-through">
                           <span>
-                            ${hourlyPrice} x {dayOpenSpan} hours
+                            ${hourlyPrice} x {hours} hrs
                           </span>
-                          <span>${subtotal.toLocaleString()}</span>
+                          <span>${(hourlyPrice! * hours).toLocaleString()}</span>
                         </div>
-                      ) : null
-                    ) : hourlyPrice != null && hours > 0 ? (
+                        <div className="flex items-center justify-between">
+                          <span>Capped at day rate</span>
+                          <span>${breakdown.base.toLocaleString()}</span>
+                        </div>
+                      </>
+                    ) : breakdown.basis === "hourly" ? (
                       <div className="flex items-center justify-between">
                         <span>
                           ${hourlyPrice} x {hours} {hours === 1 ? "hour" : "hours"}
                         </span>
-                        <span>${subtotal.toLocaleString()}</span>
+                        <span>${breakdown.base.toLocaleString()}</span>
+                      </div>
+                    ) : breakdown.basis === "hourly_day_span" ? (
+                      <div className="flex items-center justify-between">
+                        <span>
+                          ${hourlyPrice} x {breakdown.units} hours
+                        </span>
+                        <span>${breakdown.base.toLocaleString()}</span>
                       </div>
                     ) : null}
+
+                    {breakdown.discountPercent > 0 ? (
+                      <div className="flex items-center justify-between text-emerald-700">
+                        <span>Volume discount ({breakdown.discountPercent}%)</span>
+                        <span>−${breakdown.discountAmount.toLocaleString()}</span>
+                      </div>
+                    ) : null}
+
                     <div className="border-t border-slate-200" />
                     <div className="flex items-center justify-between font-semibold text-slate-900">
                       <span>Total before taxes</span>
-                      <span>${subtotal.toLocaleString()}</span>
+                      <span>${breakdown.total.toLocaleString()}</span>
                     </div>
                   </div>
                 ) : (

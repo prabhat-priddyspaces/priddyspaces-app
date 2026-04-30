@@ -36,6 +36,7 @@ export default function NewSpacePage() {
     capacity: "4",
     price_monthly: "",
     price_daily: "",
+    price_hourly: "",
     availability_start_time: "",
     availability_end_time: "",
     visibility: "public",
@@ -94,6 +95,7 @@ export default function NewSpacePage() {
             capacity,
             price_monthly: form.price_monthly ? Number(form.price_monthly) : null,
             price_daily: form.price_daily ? Number(form.price_daily) : null,
+            price_hourly: form.price_hourly ? Number(form.price_hourly) : null,
             availability_start_time: form.availability_start_time || null,
             availability_end_time: form.availability_end_time || null,
             visibility: form.visibility,
@@ -201,23 +203,38 @@ export default function NewSpacePage() {
               Amenities are now managed at the location level. Create or edit them from the
               location form and organization settings.
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2 md:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="monthly">Monthly price</Label>
+                <Label htmlFor="hourly">Hourly price (cents)</Label>
                 <Input
-                  id="monthly"
-                  value={form.price_monthly}
-                  onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
-                  placeholder="1200"
+                  id="hourly"
+                  value={form.price_hourly}
+                  onChange={(e) => setForm({ ...form, price_hourly: e.target.value })}
+                  placeholder="3000"
                 />
+                <div className="text-xs text-textMuted">
+                  Required for meeting rooms billed by the hour. Enter in cents (3000 = $30/hr).
+                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="daily">Daily price</Label>
+                <Label htmlFor="daily">Daily price (cents)</Label>
                 <Input
                   id="daily"
                   value={form.price_daily}
                   onChange={(e) => setForm({ ...form, price_daily: e.target.value })}
-                  placeholder="150"
+                  placeholder="20000"
+                />
+                <div className="text-xs text-textMuted">
+                  Used when a customer picks "Full day". Hourly bookings are auto-capped to this amount.
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="monthly">Monthly price (cents)</Label>
+                <Input
+                  id="monthly"
+                  value={form.price_monthly}
+                  onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
+                  placeholder="120000"
                 />
               </div>
             </div>

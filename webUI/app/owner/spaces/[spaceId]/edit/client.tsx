@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LeaseTermsManager } from "@/components/lease-terms-manager";
+import { VolumeDiscountManager } from "@/components/volume-discount-manager";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 
@@ -20,6 +21,7 @@ interface Space {
   capacity: number;
   price_monthly: number | null;
   price_daily: number | null;
+  price_hourly: number | null;
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
@@ -36,6 +38,7 @@ export function EditSpaceClient() {
     capacity: "1",
     price_monthly: "",
     price_daily: "",
+    price_hourly: "",
     availability_status: "available",
     availability_start_time: "",
     availability_end_time: "",
@@ -56,6 +59,7 @@ export function EditSpaceClient() {
           capacity: String(space.capacity),
           price_monthly: space.price_monthly != null ? String(space.price_monthly) : "",
           price_daily: space.price_daily != null ? String(space.price_daily) : "",
+          price_hourly: space.price_hourly != null ? String(space.price_hourly) : "",
           availability_status: space.availability_status,
           availability_start_time: space.availability_start_time || "",
           availability_end_time: space.availability_end_time || "",
@@ -79,6 +83,7 @@ export function EditSpaceClient() {
             capacity: Number(form.capacity || 1),
             price_monthly: form.price_monthly ? Number(form.price_monthly) : null,
             price_daily: form.price_daily ? Number(form.price_daily) : null,
+            price_hourly: form.price_hourly ? Number(form.price_hourly) : null,
             availability_status: form.availability_status,
             availability_start_time: form.availability_start_time || null,
             availability_end_time: form.availability_end_time || null,
@@ -143,23 +148,38 @@ export function EditSpaceClient() {
                 placeholder="4"
               />
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2 md:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="monthly">Monthly price</Label>
+                <Label htmlFor="hourly">Hourly price (cents)</Label>
                 <Input
-                  id="monthly"
-                  value={form.price_monthly}
-                  onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
-                  placeholder="1200"
+                  id="hourly"
+                  value={form.price_hourly}
+                  onChange={(e) => setForm({ ...form, price_hourly: e.target.value })}
+                  placeholder="3000"
                 />
+                <div className="text-xs text-textMuted">
+                  Required for hourly meeting-room bookings (3000 = $30/hr).
+                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="daily">Daily price</Label>
+                <Label htmlFor="daily">Daily price (cents)</Label>
                 <Input
                   id="daily"
                   value={form.price_daily}
                   onChange={(e) => setForm({ ...form, price_daily: e.target.value })}
-                  placeholder="150"
+                  placeholder="20000"
+                />
+                <div className="text-xs text-textMuted">
+                  Used for "Full day". Hourly bookings auto-cap to this amount.
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="monthly">Monthly price (cents)</Label>
+                <Input
+                  id="monthly"
+                  value={form.price_monthly}
+                  onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
+                  placeholder="120000"
                 />
               </div>
             </div>
@@ -232,6 +252,9 @@ export function EditSpaceClient() {
             spaceType={form.space_type as "private_office" | "suite"}
             spaceCapacity={Number(form.capacity || 1)}
           />
+        ) : null}
+        {form.space_type === "conference_room" || form.space_type === "shared_desk" ? (
+          <VolumeDiscountManager spacePublicId={spaceId} />
         ) : null}
       </div>
     </AppShell>
