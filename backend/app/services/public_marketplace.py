@@ -198,8 +198,18 @@ def _contact_title(role: UserRole) -> str:
 def _space_hourly_prices(
     space_id: int,
     pricing_rules_map: dict[int, list[int]],
+    space_price_hourly: int | None = None,
 ) -> list[int]:
-    return pricing_rules_map.get(space_id, [])
+    """Surface hourly prices for the marketplace.
+
+    Combines Space.price_hourly (the simple per-space field set in the owner UI) with
+    PricingRule rows (time-windowed promo overrides). Both sources show as "starting
+    hourly price" candidates so the lowest wins on the search card.
+    """
+    prices = list(pricing_rules_map.get(space_id, []))
+    if space_price_hourly is not None:
+        prices.append(space_price_hourly)
+    return prices
 
 
 def _space_membership_prices(
@@ -536,7 +546,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             if distance_miles is None or distance_miles > filters.radius_miles:
                 continue
 
-        hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
+        hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
         membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
         if not _space_matches_time_window(
             space,
@@ -662,7 +672,7 @@ def get_public_location_detail(
             space_amenities=space_amenities,
         ):
             continue
-        hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
+        hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
         membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
         if not _space_matches_time_window(
             space,
@@ -772,8 +782,24 @@ def get_public_space_detail(
         [space.tenant_id],
         space_type=space.space_type,
     )
-    hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map)
+    hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
     membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+
+    from app.models.space_volume_discount import SpaceVolumeDiscount
+    volume_tiers = (
+        db.query(SpaceVolumeDiscount)
+        .filter(
+            SpaceVolumeDiscount.space_id == space.id,
+            SpaceVolumeDiscount.is_active.is_(True),
+        )
+        .order_by(SpaceVolumeDiscount.min_hours.asc())
+        .all()
+    )
+    volume_discount_payload = [
+        {"min_hours": tier.min_hours, "discount_percent": tier.discount_percent}
+        for tier in volume_tiers
+    ]
+
     cancellation_policy = (
         db.query(CancellationPolicy)
         .filter(
@@ -826,6 +852,7 @@ def get_public_space_detail(
             "hourly_price": min(hourly_prices) if hourly_prices else None,
             "membership_price": min(membership_prices) if membership_prices else None,
             "amenities": amenities,
+            "volume_discounts": volume_discount_payload,
         },
         "images": [
             {

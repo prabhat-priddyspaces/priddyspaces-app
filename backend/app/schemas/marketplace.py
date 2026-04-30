@@ -82,6 +82,11 @@ class MarketplaceSpaceImageOut(BaseModel):
     sort_order: int
 
 
+class MarketplaceVolumeDiscountTierOut(BaseModel):
+    min_hours: float
+    discount_percent: int
+
+
 class MarketplaceSpaceDetailSpaceOut(BaseModel):
     public_id: str
     name: str
@@ -95,6 +100,7 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
     hourly_price: int | None = None
     membership_price: int | None = None
     amenities: list[str]
+    volume_discounts: list[MarketplaceVolumeDiscountTierOut] = []
 
 
 class MarketplaceSpaceDetailLocationOut(BaseModel):
