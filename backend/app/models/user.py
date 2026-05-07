@@ -27,3 +27,5 @@ class User(PublicIdMixin, TimestampMixin, Base):
     company_name = Column(String(255), nullable=True)
     stripe_customer_id = Column(String(255), nullable=True)
     stripe_default_payment_method_id = Column(String(255), nullable=True)
+    email_unsubscribed_at = Column(DateTime(timezone=True), nullable=True)
+    email_unsubscribe_reason = Column(String(64), nullable=True)

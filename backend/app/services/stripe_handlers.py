@@ -185,6 +185,7 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
             to_email=customer_email,
             subject="Payment receipt",
             body=f"Your payment for booking {booking.public_id} is confirmed.",
+            db=db,
         )
 
 
@@ -242,12 +243,14 @@ def _handle_subscription_invoice_event(db: Session, event_type: str, data: dict[
             to_email=customer_email,
             subject="Membership payment received",
             body=f"Your membership payment was recorded. Invoice {invoice.public_id} is available.",
+            db=db,
         )
     else:
         send_email(
             to_email=customer_email,
             subject="Membership payment failed",
             body="We could not process your membership payment. Please update your billing details.",
+            db=db,
         )
 
 

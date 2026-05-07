@@ -2,6 +2,8 @@ from app.models.audit_log import AuditLog
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.email_event import EmailEvent
+from app.models.email_subscription_group import EmailSubscriptionGroup
 from app.models.floor_plan import FloorPlan
 from app.models.floor_plan_marker import FloorPlanMarker
 from app.models.invoice import Invoice
@@ -37,6 +39,8 @@ __all__ = [
     "Booking",
     "BookingRequest",
     "CustomerOwnerPaymentMethod",
+    "EmailEvent",
+    "EmailSubscriptionGroup",
     "FloorPlan",
     "FloorPlanMarker",
     "Invoice",
