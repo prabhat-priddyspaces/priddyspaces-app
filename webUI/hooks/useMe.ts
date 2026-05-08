@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
 import { apiFetch } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
+import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 import type { MeResponse } from "@/lib/me";
 
 // Module-level singleton so all layout guards share one fetch per TTL window.
@@ -29,7 +31,7 @@ type MeState = {
   refresh: () => void;
 };
 
-export function useMe(): MeState {
+function useMeClerk(): MeState {
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [me, setMe] = useState<MeResponse | null>(_cache);
@@ -72,3 +74,39 @@ export function useMe(): MeState {
 
   return { me, loading, error, refresh: () => doFetch(true) };
 }
+
+function useMeLocal(): MeState {
+  const [me, setMe] = useState<MeResponse | null>(_cache);
+  const [loading, setLoading] = useState(_cache === null);
+  const [error, setError] = useState(false);
+
+  const doFetch = useCallback(async (force = false) => {
+    if (!force && _cache && Date.now() - _cacheTime < CACHE_TTL_MS) {
+      setMe(_cache);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(false);
+    try {
+      const token = getAccessToken();
+      const data = await apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined);
+      updateMeCache(data);
+      setMe(data);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    doFetch();
+  }, [doFetch]);
+
+  return { me, loading, error, refresh: () => doFetch(true) };
+}
+
+// IS_E2E_BYPASS is a build-time constant (NEXT_PUBLIC_E2E_BYPASS_CLERK).
+// Aliasing to one implementation keeps rules-of-hooks happy.
+export const useMe: () => MeState = IS_E2E_BYPASS ? useMeLocal : useMeClerk;

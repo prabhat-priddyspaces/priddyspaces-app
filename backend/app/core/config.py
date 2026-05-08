@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     AWS_SECRET_NAME: str = ""
     AWS_REGION: str = "us-east-1"
 
+    # Internal JWT (legacy email/password flow + admin impersonation tokens).
+    # Clerk handles primary auth, but issue_token() in app/core/jwt.py still
+    # mints these for the impersonation stop endpoint.
+    JWT_SECRET: str = ""
+    JWT_ISSUER: str = "priddyspaces"
+    JWT_AUDIENCE: str = "priddyspaces"
+    JWT_EXPIRE_SECONDS: int = 86400
+
     # Clerk — identity provider
     CLERK_SECRET_KEY: str = ""
     CLERK_WEBHOOK_SECRET: str = ""

@@ -41,6 +41,11 @@ export default defineConfig({
       // Use a separate build cache so the test-only NEXT_PUBLIC_* values
       // don't get baked into the .next dir that `npm run dev` reuses.
       NEXT_DIST_DIR: ".next-playwright",
+      // Bypass Clerk auth in e2e: middleware no-ops, ClerkProvider is unmounted,
+      // and layouts use a localStorage-backed useMe variant. The existing
+      // mockSession() helper sets the access token under the same key.
+      E2E_BYPASS_CLERK: process.env.E2E_BYPASS_CLERK || "1",
+      NEXT_PUBLIC_E2E_BYPASS_CLERK: process.env.NEXT_PUBLIC_E2E_BYPASS_CLERK || "1",
     },
   },
 });
