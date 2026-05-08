@@ -2,10 +2,13 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { useAuth as useClerkAuth } from "@clerk/expo";
 
 import { useAuth } from "../context/AuthContext";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
+import { OnboardingScreen } from "../screens/OnboardingScreen";
+import { OrgOnboardingScreen } from "../screens/OrgOnboardingScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { BookingsScreen } from "../screens/BookingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
@@ -34,7 +37,7 @@ function MarketplaceStack() {
           <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
           </TouchableOpacity>
-        )
+        ),
       })}
     >
       <CustomerStack.Screen name="MarketplaceHome" component={HomeScreen} options={{ title: "Marketplace" }} />
@@ -53,7 +56,7 @@ function CustomerTabs() {
           <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
           </TouchableOpacity>
-        )
+        ),
       })}
     >
       <Tabs.Screen name="Marketplace" component={MarketplaceStack} options={{ headerShown: false }} />
@@ -72,7 +75,7 @@ function OwnerTabs() {
           <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
           </TouchableOpacity>
-        )
+        ),
       })}
     >
       <Tabs.Screen name="Dashboard" component={OwnerDashboardScreen} />
@@ -83,10 +86,48 @@ function OwnerTabs() {
   );
 }
 
-export function AppNavigator() {
-  const { token, me, loading } = useAuth();
+function MainApp() {
+  const { me } = useAuth();
 
-  if (loading) {
+  if (!me?.role) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+      </Stack.Navigator>
+    );
+  }
+
+  if (me.role === "owner" && !me.has_organization) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="OrgOnboarding" component={OrgOnboardingScreen} />
+      </Stack.Navigator>
+    );
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: true }}>
+      <Stack.Screen
+        name="App"
+        component={me.role === "owner" ? OwnerTabs : CustomerTabs}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: "Booking" }} />
+      <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ title: "Success" }} />
+      <Stack.Screen name="Menu" component={MenuScreen} options={{ title: "Menu" }} />
+      <Stack.Screen name="Invoices" component={InvoicesScreen} options={{ title: "Invoices" }} />
+      <Stack.Screen name="Payments" component={PaymentsScreen} options={{ title: "Payments" }} />
+      <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
+      <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
+    </Stack.Navigator>
+  );
+}
+
+export function AppNavigator() {
+  const { isLoaded, isSignedIn } = useClerkAuth();
+  const { loading } = useAuth();
+
+  if (!isLoaded || loading) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator />
@@ -96,22 +137,9 @@ export function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: true }}>
-        {token ? (
-          <>
-            <Stack.Screen
-              name="App"
-              component={me?.role === "owner" ? OwnerTabs : CustomerTabs}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: "Booking" }} />
-            <Stack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} options={{ title: "Success" }} />
-            <Stack.Screen name="Menu" component={MenuScreen} options={{ title: "Menu" }} />
-            <Stack.Screen name="Invoices" component={InvoicesScreen} options={{ title: "Invoices" }} />
-            <Stack.Screen name="Payments" component={PaymentsScreen} options={{ title: "Payments" }} />
-            <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
-            <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
-          </>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isSignedIn ? (
+          <Stack.Screen name="Main" component={MainApp} />
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />

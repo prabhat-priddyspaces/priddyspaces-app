@@ -7,6 +7,7 @@ from app.core.auth import get_current_user
 from app.db.deps import get_db
 from app.models.booking import Booking
 from app.models.location import Location
+from app.models.organization import Organization
 from app.models.space import Space
 from app.models.subscription import Subscription
 from app.schemas.auth import ImpersonationContextOut, MeOut, MeUpdateIn
@@ -33,6 +34,7 @@ def get_me(
     impersonating = is_impersonating(token)
     app_role = user.role
     platform_role = platform_member.role if platform_member else None
+    has_org = db.query(Organization).filter(Organization.owner_id == user.id).first() is not None
     return MeOut(
         public_id=str(user.public_id),
         email=user.email,
@@ -43,10 +45,12 @@ def get_me(
         role=user.role.value if user.role else None,
         app_role=app_role,
         platform_role=platform_role,
+        has_organization=has_org,
         default_route=build_default_route(
             app_role=app_role,
             platform_role=platform_role,
             impersonating=impersonating,
+            has_organization=has_org,
         ),
         impersonation=ImpersonationContextOut(
             is_impersonating=impersonating,
@@ -127,6 +131,7 @@ def update_me(
     impersonating = is_impersonating(token)
     app_role = user.role
     platform_role = platform_member.role if platform_member else None
+    has_org = db.query(Organization).filter(Organization.owner_id == user.id).first() is not None
     return MeOut(
         public_id=str(user.public_id),
         email=user.email,
@@ -137,10 +142,12 @@ def update_me(
         role=user.role.value if user.role else None,
         app_role=app_role,
         platform_role=platform_role,
+        has_organization=has_org,
         default_route=build_default_route(
             app_role=app_role,
             platform_role=platform_role,
             impersonating=impersonating,
+            has_organization=has_org,
         ),
         impersonation=ImpersonationContextOut(
             is_impersonating=impersonating,

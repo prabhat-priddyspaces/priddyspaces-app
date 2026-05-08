@@ -1,0 +1,195 @@
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../constants";
+
+export function OnboardingScreen() {
+  const { getToken } = useAuth();
+
+  const [role, setRole] = useState<"owner" | "customer">("customer");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit() {
+    if (!termsAccepted) {
+      Alert.alert("Terms required", "Please accept the Terms and Privacy Policy.");
+      return;
+    }
+    if (!fullName.trim()) {
+      Alert.alert("Name required", "Please enter your full name.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE_URL}/api/onboarding/profile`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          role,
+          full_name: fullName.trim(),
+          phone: phone || undefined,
+          country: country || undefined,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          terms_accepted: true,
+          privacy_policy_accepted: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "Profile update failed");
+      }
+      // AuthContext will refresh state on next render cycle
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Complete your profile</Text>
+      <Text style={styles.subtitle}>Tell us how you&apos;ll use Priddyspaces.</Text>
+
+      <Text style={styles.label}>I am a</Text>
+      <View style={styles.roleRow}>
+        <TouchableOpacity
+          style={[styles.roleButton, role === "owner" && styles.roleButtonActive]}
+          onPress={() => setRole("owner")}
+        >
+          <Text style={[styles.roleButtonText, role === "owner" && styles.roleButtonTextActive]}>
+            Space Owner
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.roleButton, role === "customer" && styles.roleButtonActive]}
+          onPress={() => setRole("customer")}
+        >
+          <Text style={[styles.roleButtonText, role === "customer" && styles.roleButtonTextActive]}>
+            Customer
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.label}>Full name *</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Jane Doe"
+        value={fullName}
+        onChangeText={setFullName}
+        autoComplete="name"
+      />
+
+      <Text style={styles.label}>Phone (optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="+1 555 000 0000"
+        value={phone}
+        onChangeText={setPhone}
+        keyboardType="phone-pad"
+      />
+
+      <Text style={styles.label}>Country (ISO code)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="US"
+        value={country}
+        onChangeText={setCountry}
+        maxLength={2}
+        autoCapitalize="characters"
+      />
+
+      <TouchableOpacity
+        style={styles.checkRow}
+        onPress={() => setTermsAccepted(!termsAccepted)}
+      >
+        <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+          {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+        </View>
+        <Text style={styles.checkLabel}>
+          I agree to the Terms and Conditions and Privacy Policy.
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={handleSubmit}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.primaryButtonText}>Continue</Text>
+        )}
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { padding: 24 },
+  title: { fontSize: 24, fontWeight: "600", color: "#111827", marginBottom: 4 },
+  subtitle: { fontSize: 14, color: "#6B7280", marginBottom: 24 },
+  label: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 6 },
+  roleRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  roleButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#FFF",
+  },
+  roleButtonActive: { borderColor: "#111827", backgroundColor: "#111827" },
+  roleButtonText: { fontSize: 14, color: "#374151" },
+  roleButtonTextActive: { color: "#FFF", fontWeight: "600" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 16,
+    backgroundColor: "#FFF",
+  },
+  checkRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 24 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  checkboxChecked: { backgroundColor: "#111827", borderColor: "#111827" },
+  checkmark: { color: "#FFF", fontSize: 12 },
+  checkLabel: { flex: 1, fontSize: 13, color: "#6B7280", lineHeight: 20 },
+  primaryButton: {
+    backgroundColor: "#111827",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  primaryButtonText: { color: "#FFF", fontWeight: "600", fontSize: 15 },
+});

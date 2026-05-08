@@ -15,12 +15,15 @@ from app.models.user import User
 
 
 def get_user_for_token_subject(db: Session, subject: str | None) -> User | None:
+    """Look up a user by their Clerk user ID (stored in auth_subject)."""
     if not subject:
         return None
-    user = db.query(User).filter(User.public_id == subject).first()
+    # Clerk user IDs are stored in auth_subject (format: user_xxx)
+    user = db.query(User).filter(User.auth_subject == subject).first()
     if user:
         return user
-    return db.query(User).filter(User.auth_subject == subject).first()
+    # Legacy fallback for public_id-based tokens
+    return db.query(User).filter(User.public_id == subject).first()
 
 
 def get_effective_user(db: Session, token: dict) -> User:
@@ -124,20 +127,22 @@ def build_default_route(
     app_role: UserAppRole | None,
     platform_role: PlatformTeamRole | None,
     impersonating: bool,
+    has_organization: bool = True,
 ) -> str:
     if impersonating:
         if app_role == UserAppRole.CUSTOMER:
             return "/customer"
         if app_role == UserAppRole.OWNER:
             return "/owner"
-        return "/onboarding"
+        return "/onboarding/personal"
     if platform_role is not None:
         return "/admin"
     if app_role == UserAppRole.CUSTOMER:
         return "/customer"
     if app_role == UserAppRole.OWNER:
-        return "/owner"
-    return "/onboarding"
+        return "/owner" if has_organization else "/onboarding/organization"
+    # No role yet → onboarding
+    return "/onboarding/personal"
 
 
 def touch_platform_last_login(db: Session, user_id: int) -> None:

@@ -1,4 +1,40 @@
+import json
+import logging
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+def _load_aws_secrets() -> None:
+    """Fetch a JSON blob from AWS Secrets Manager and merge into os.environ.
+
+    Activated when AWS_SECRET_NAME is set (production / staging).
+    No-op in local dev where .env files are used instead.
+    Explicit env vars (e.g., injected by ECS SecretOptions) take precedence.
+    """
+    secret_name = os.environ.get("AWS_SECRET_NAME")
+    if not secret_name:
+        return
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    try:
+        import boto3
+
+        client = boto3.client("secretsmanager", region_name=region)
+        response = client.get_secret_value(SecretId=secret_name)
+        secrets: dict = json.loads(response["SecretString"])
+        injected = 0
+        for key, value in secrets.items():
+            if key not in os.environ:
+                os.environ[key] = str(value)
+                injected += 1
+        logger.info("Loaded %d secrets from Secrets Manager (%s)", injected, secret_name)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not load secrets from AWS Secrets Manager: %s", exc)
+
+
+_load_aws_secrets()
 
 
 class Settings(BaseSettings):
@@ -12,22 +48,16 @@ class Settings(BaseSettings):
     PAYMENT_CHARGE_ON_APPROVAL: bool = True
     PAYMENT_CREDENTIAL_ENCRYPTION_KEY: str = ""
     EMAIL_VERIFICATION_REQUIRED: bool = True
-    AUTH_JWKS_URL: str = ""
-    AUTH_AUDIENCE: str = ""
-    AUTH_ISSUER: str = ""
-    JWT_SECRET: str = ""
-    JWT_ISSUER: str = "priddyspaces"
-    JWT_AUDIENCE: str = "priddyspaces"
-    JWT_EXPIRE_SECONDS: int = 86400
+    # AWS (Secrets Manager key name for production; leave blank in local dev)
+    AWS_SECRET_NAME: str = ""
+    AWS_REGION: str = "us-east-1"
+
+    # Clerk — identity provider
+    CLERK_SECRET_KEY: str = ""
+    CLERK_WEBHOOK_SECRET: str = ""
+    CLERK_JWKS_URL: str = ""
     BACKEND_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"
-    OAUTH_GOOGLE_CLIENT_ID: str = ""
-    OAUTH_GOOGLE_CLIENT_SECRET: str = ""
-    OAUTH_APPLE_CLIENT_ID: str = ""
-    OAUTH_APPLE_TEAM_ID: str = ""
-    OAUTH_APPLE_KEY_ID: str = ""
-    OAUTH_APPLE_PRIVATE_KEY: str = ""
-    OAUTH_STATE_TTL_SECONDS: int = 600
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
     S3_BUCKET: str = ""
     S3_REGION: str = ""

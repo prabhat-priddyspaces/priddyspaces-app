@@ -2,43 +2,38 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
 import { apiFetch } from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
 import { getDefaultRoute, type MeResponse } from "@/lib/me";
 
-export default function OwnerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function OwnerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const [allowed, setAllowed] = useState(false);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.replace("/login");
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      router.replace("/sign-in");
       return;
     }
-    apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
+    getToken()
+      .then((token) => apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined))
       .then((me) => {
         const ownerAllowed =
-          me.app_role === "owner" && (!me.platform_role || me.impersonation.is_impersonating);
+          me.app_role === "owner" &&
+          (!me.platform_role || me.impersonation.is_impersonating);
         if (!ownerAllowed) {
           router.replace(getDefaultRoute(me));
         } else {
           setAllowed(true);
         }
       })
-      .catch(() => {
-        router.replace("/login");
-      })
-      .finally(() => {
-        setChecking(false);
-      });
-  }, [router]);
+      .catch(() => router.replace("/sign-in"))
+      .finally(() => setChecking(false));
+  }, [isLoaded, isSignedIn, getToken, router]);
 
   if (checking || !allowed) {
     return (

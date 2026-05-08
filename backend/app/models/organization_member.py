@@ -9,6 +9,7 @@ class OrganizationMember(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "organization_members"
 
     id = Column(Integer, primary_key=True)
+    clerk_membership_id = Column(String(255), nullable=True, unique=True, index=True)
     organization_id = Column(Integer, nullable=False)
     tenant_id = Column(Integer, nullable=False)
     user_id = Column(Integer, nullable=False)

@@ -2,47 +2,43 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth, useClerk } from "@clerk/nextjs";
 
 import { apiFetch } from "@/lib/api";
-import { clearAccessToken, getAccessToken } from "@/lib/auth";
 import { CustomerSideNav } from "@/components/customer-side-nav";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { getDefaultRoute, type MeResponse } from "@/lib/me";
 
-export default function CustomerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { signOut } = useClerk();
   const [allowed, setAllowed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [me, setMe] = useState<MeResponse | null>(null);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.replace("/login");
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      router.replace("/sign-in");
       return;
     }
-    apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
-      .then((me) => {
+    getToken()
+      .then((token) => apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined))
+      .then((data) => {
         const customerAllowed =
-          me.app_role === "customer" && (!me.platform_role || me.impersonation.is_impersonating);
+          data.app_role === "customer" &&
+          (!data.platform_role || data.impersonation.is_impersonating);
         if (!customerAllowed) {
-          router.replace(getDefaultRoute(me));
+          router.replace(getDefaultRoute(data));
         } else {
           setAllowed(true);
-          setMe(me);
+          setMe(data);
         }
       })
-      .catch(() => {
-        router.replace("/login");
-      })
-      .finally(() => {
-        setChecking(false);
-      });
-  }, [router]);
+      .catch(() => router.replace("/sign-in"))
+      .finally(() => setChecking(false));
+  }, [isLoaded, isSignedIn, getToken, router]);
 
   if (checking || !allowed) {
     return (
@@ -74,10 +70,7 @@ export default function CustomerLayout({
         </div>
         <button
           type="button"
-          onClick={() => {
-            clearAccessToken();
-            router.replace("/login");
-          }}
+          onClick={() => signOut(() => router.replace("/sign-in"))}
           className="text-sm text-textSecondary hover:underline"
         >
           Logout
