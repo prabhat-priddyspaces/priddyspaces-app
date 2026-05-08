@@ -21,7 +21,7 @@ export function CustomerSideNav() {
 
   function handleLogout() {
     clearAccessToken();
-    router.replace("/login");
+    router.replace("/sign-in");
   }
 
   return (

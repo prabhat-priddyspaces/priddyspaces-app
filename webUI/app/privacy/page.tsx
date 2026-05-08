@@ -27,8 +27,8 @@ export default function PrivacyPage() {
             You may request access to or deletion of your data by contacting support.
           </p>
         </div>
-        <Link href="/login" className="mt-8 inline-block text-sm text-accent hover:underline">
-          Back to login
+        <Link href="/sign-in" className="mt-8 inline-block text-sm text-accent hover:underline">
+          Back to sign in
         </Link>
       </div>
     </main>

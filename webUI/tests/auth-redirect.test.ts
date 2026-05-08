@@ -42,9 +42,9 @@ describe("sanitizeNext", () => {
 });
 
 describe("buildLoginHref", () => {
-  it("URL-encodes the next value", () => {
+  it("URL-encodes the redirect_url value and points at /sign-in", () => {
     expect(buildLoginHref("/spaces/abc?date=2026-05-10")).toBe(
-      "/login?next=%2Fspaces%2Fabc%3Fdate%3D2026-05-10",
+      "/sign-in?redirect_url=%2Fspaces%2Fabc%3Fdate%3D2026-05-10",
     );
   });
 });

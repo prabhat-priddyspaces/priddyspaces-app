@@ -16,7 +16,7 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     if (!token) {
-      router.replace("/login");
+      router.replace("/sign-in");
       return;
     }
     setAccessToken(token);
@@ -34,8 +34,8 @@ function AuthCallbackContent() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6">
         <p className="text-sm text-error">{error}</p>
-        <a href="/login" className="text-sm text-accent hover:underline">
-          Back to login
+        <a href="/sign-in" className="text-sm text-accent hover:underline">
+          Back to sign in
         </a>
       </div>
     );

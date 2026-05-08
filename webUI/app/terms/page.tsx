@@ -26,8 +26,8 @@ export default function TermsPage() {
             For questions, please contact support.
           </p>
         </div>
-        <Link href="/login" className="mt-8 inline-block text-sm text-accent hover:underline">
-          Back to login
+        <Link href="/sign-in" className="mt-8 inline-block text-sm text-accent hover:underline">
+          Back to sign in
         </Link>
       </div>
     </main>

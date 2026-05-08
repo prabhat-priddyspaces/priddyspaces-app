@@ -49,7 +49,7 @@ export function AdminSideNav({ platformRole }: { platformRole: string | null }) 
             type="button"
             onClick={() => {
               clearAccessToken();
-              router.replace("/login");
+              router.replace("/sign-in");
             }}
             className="w-full rounded-sm px-3 py-2 text-left text-sm text-textSecondary hover:bg-surface2"
           >
