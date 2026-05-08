@@ -27,7 +27,7 @@ export function SideNav() {
 
   function handleLogout() {
     clearAccessToken();
-    router.replace("/login");
+    router.replace("/sign-in");
   }
 
   return (

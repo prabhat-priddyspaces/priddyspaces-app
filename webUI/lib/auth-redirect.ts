@@ -7,7 +7,11 @@ export function sanitizeNext(value: string | null | undefined): string | null {
 }
 
 export function buildLoginHref(next: string): string {
-  return `/login?next=${encodeURIComponent(next)}`;
+  return `/sign-in?redirect_url=${encodeURIComponent(next)}`;
+}
+
+export function buildRegisterHref(next: string): string {
+  return `/sign-up?redirect_url=${encodeURIComponent(next)}`;
 }
 
 export function stashOauthNext(next: string | null | undefined): void {

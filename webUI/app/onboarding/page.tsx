@@ -27,7 +27,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     const token = getAccessToken();
     if (!token) {
-      router.replace("/login");
+      router.replace("/sign-in");
       return;
     }
     apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
@@ -50,7 +50,7 @@ export default function OnboardingPage() {
     }
     const token = getAccessToken();
     if (!token) {
-      router.replace("/login");
+      router.replace("/sign-in");
       return;
     }
     setLoading(true);

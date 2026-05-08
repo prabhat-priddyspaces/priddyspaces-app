@@ -103,10 +103,10 @@ export function MarketplaceBrowser({
             </div>
           ) : showAuthActions ? (
             <div className="flex items-center gap-2">
-              <Link href="/login">
+              <Link href="/sign-in">
                 <Button variant="secondary">Sign in</Button>
               </Link>
-              <Link href="/register">
+              <Link href="/sign-up">
                 <Button>Create account</Button>
               </Link>
             </div>
