@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -521,3 +521,213 @@ class TestOnboardingOrganization:
 
         assert resp.status_code == 200
         assert resp.json()["has_organization"] is True
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fix 4 — JWKS failure backoff
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestJwksBackoff:
+    def test_backoff_blocks_retry_after_failure(self):
+        """After a JWKS fetch failure, _get_clerk_jwks should raise 503 immediately
+        without hitting the network again until the backoff window expires."""
+        import app.core.auth as auth_mod
+
+        # Reset state
+        auth_mod._jwks_retry_after = 0.0
+        auth_mod._fetch_clerk_jwks.cache_clear()
+
+        with patch("app.core.auth.settings") as mock_settings:
+            mock_settings.CLERK_JWKS_URL = "https://clerk.example.com/.well-known/jwks.json"
+            with patch("httpx.get", side_effect=ConnectionError("network down")) as mock_get:
+                from fastapi import HTTPException as FastHTTPException
+                # First call — triggers network attempt, fails, sets backoff
+                with pytest.raises(FastHTTPException) as exc_info:
+                    auth_mod._get_clerk_jwks()
+                assert exc_info.value.status_code == 503
+                assert mock_get.call_count == 1
+
+                # Second call within backoff — must NOT hit the network
+                with pytest.raises(FastHTTPException) as exc_info2:
+                    auth_mod._get_clerk_jwks()
+                assert exc_info2.value.status_code == 503
+                assert mock_get.call_count == 1  # still 1, no extra network call
+
+        # Cleanup
+        auth_mod._jwks_retry_after = 0.0
+        auth_mod._fetch_clerk_jwks.cache_clear()
+
+    def test_successful_fetch_resets_backoff(self):
+        """A successful JWKS fetch clears the backoff timer."""
+        import app.core.auth as auth_mod
+
+        auth_mod._jwks_retry_after = 0.0
+        auth_mod._fetch_clerk_jwks.cache_clear()
+
+        fake_jwks = {"keys": [{"kid": "k1", "kty": "RSA"}]}
+        with patch("app.core.auth.settings") as mock_settings:
+            mock_settings.CLERK_JWKS_URL = "https://clerk.example.com/.well-known/jwks.json"
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = fake_jwks
+            mock_resp.raise_for_status = MagicMock()
+            with patch("httpx.get", return_value=mock_resp):
+                result = auth_mod._get_clerk_jwks()
+
+        assert result == fake_jwks
+        assert auth_mod._jwks_retry_after == 0.0
+
+        auth_mod._fetch_clerk_jwks.cache_clear()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fix 6 — Role re-assignment guard
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestRoleReassignmentGuard:
+    def test_owner_with_org_cannot_switch_to_customer(self, client_factory, db_session):
+        user = User(email="switch@example.com", auth_subject="user_switch", role=UserAppRole.OWNER)
+        db_session.add(user)
+        db_session.commit()
+
+        org = Organization(
+            name="Existing Org",
+            owner_id=user.id,
+            review_status=OrganizationReviewStatus.APPROVED,
+            onboarding_completed=True,
+        )
+        db_session.add(org)
+        db_session.commit()
+
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory({"sub": "user_switch"}).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "terms_accepted": True},
+            )
+
+        assert resp.status_code == 409
+        assert "organization" in resp.json()["detail"].lower()
+
+    def test_owner_without_org_can_switch_to_customer(self, client_factory, db_session):
+        user = User(email="noorg@example.com", auth_subject="user_noorg", role=UserAppRole.OWNER)
+        db_session.add(user)
+        db_session.commit()
+
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory({"sub": "user_noorg"}).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "terms_accepted": True},
+            )
+
+        assert resp.status_code == 200
+        db_session.refresh(user)
+        assert user.role == UserAppRole.CUSTOMER
+
+    def test_same_role_resubmit_is_allowed(self, client_factory, db_session):
+        """Re-submitting the same role (e.g., to update name) must succeed."""
+        user = User(
+            email="resubmit@example.com", auth_subject="user_resubmit", role=UserAppRole.CUSTOMER
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory({"sub": "user_resubmit"}).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "full_name": "Updated Name"},
+            )
+
+        assert resp.status_code == 200
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fix 7 — Country and website validation
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestProfileValidation:
+    def _user_token(self, db_session, suffix="val"):
+        user = User(email=f"{suffix}@example.com", auth_subject=f"user_{suffix}")
+        db_session.add(user)
+        db_session.commit()
+        return user, {"sub": f"user_{suffix}"}
+
+    def test_valid_country_code_accepted(self, client_factory, db_session):
+        _, token = self._user_token(db_session, "cok")
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory(token).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "country": "GB"},
+            )
+        assert resp.status_code == 200
+
+    def test_lowercase_country_code_normalized(self, client_factory, db_session):
+        _, token = self._user_token(db_session, "clow")
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory(token).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "country": "us"},
+            )
+        assert resp.status_code == 200
+
+    def test_invalid_country_code_returns_422(self, client_factory, db_session):
+        _, token = self._user_token(db_session, "cbad")
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory(token).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "country": "USA"},  # 3 letters — invalid
+            )
+        assert resp.status_code == 422
+
+    def test_numeric_country_code_returns_422(self, client_factory, db_session):
+        _, token = self._user_token(db_session, "cnum")
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory(token).post(
+                "/api/onboarding/profile",
+                json={"role": "customer", "country": "12"},
+            )
+        assert resp.status_code == 422
+
+
+class TestOrgWebsiteValidation:
+    def _owner_token(self, db_session, suffix="wval"):
+        user = User(
+            email=f"{suffix}@example.com",
+            auth_subject=f"user_{suffix}",
+            role=UserAppRole.OWNER,
+        )
+        db_session.add(user)
+        db_session.commit()
+        return user, {"sub": f"user_{suffix}"}
+
+    def test_https_website_accepted(self, client_factory, db_session):
+        _, token = self._owner_token(db_session, "wok")
+        with patch("app.services.amenities.seed_default_amenities"):
+            resp = client_factory(token).post(
+                "/api/onboarding/organization",
+                json={"name": "My Org", "website": "https://example.com"},
+            )
+        assert resp.status_code == 200
+
+    def test_http_website_accepted(self, client_factory, db_session):
+        _, token = self._owner_token(db_session, "whttp")
+        with patch("app.services.amenities.seed_default_amenities"):
+            resp = client_factory(token).post(
+                "/api/onboarding/organization",
+                json={"name": "My Org 2", "website": "http://example.com"},
+            )
+        assert resp.status_code == 200
+
+    def test_invalid_website_returns_422(self, client_factory, db_session):
+        _, token = self._owner_token(db_session, "wbad")
+        resp = client_factory(token).post(
+            "/api/onboarding/organization",
+            json={"name": "My Org 3", "website": "not-a-url"},
+        )
+        assert resp.status_code == 422
+
+    def test_ftp_website_returns_422(self, client_factory, db_session):
+        _, token = self._owner_token(db_session, "wftp")
+        resp = client_factory(token).post(
+            "/api/onboarding/organization",
+            json={"name": "My Org 4", "website": "ftp://files.example.com"},
+        )
+        assert resp.status_code == 422

@@ -121,10 +121,7 @@ def _handle_user_upsert(db: Session, data: dict) -> None:
             user.last_name = last_name
         if full_name and not user.full_name:
             user.full_name = full_name
-        # Only set app role if not already chosen (onboarding may have set it)
-        if app_role is not None and user.role is None:
-            user.role = app_role
-        elif app_role is not None:
+        if app_role is not None:
             user.role = app_role
     else:
         user = User(

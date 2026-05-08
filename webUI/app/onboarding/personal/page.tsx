@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { useUser, useAuth } from "@clerk/nextjs";
 
 import { API_BASE_URL } from "@/lib/api";
+import { type MeResponse } from "@/lib/me";
+import { updateMeCache } from "@/hooks/useMe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,8 +74,10 @@ export default function OnboardingPersonalPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Profile update failed");
       }
-      const me = await res.json();
-      // Reload Clerk session so new publicMetadata.role is in the JWT
+      const me: MeResponse = await res.json();
+      // Prime the shared cache so layout guards read fresh data on redirect
+      updateMeCache(me);
+      // Reload Clerk session so new publicMetadata.role is reflected in the JWT
       await user?.reload();
       router.replace(me.default_route);
     } catch (err: unknown) {

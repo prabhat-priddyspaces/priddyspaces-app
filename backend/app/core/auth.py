@@ -1,4 +1,5 @@
 """API auth: verify Clerk JWT (RS256, JWKS) on every protected request."""
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -11,14 +12,36 @@ from app.core.config import settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+# After a JWKS fetch failure, block retries for this many seconds.
+# Prevents a thundering herd of outbound HTTP calls during a Clerk outage.
+_JWKS_BACKOFF_SECONDS = 30.0
+_jwks_retry_after: float = 0.0
+
 
 @lru_cache(maxsize=1)
-def _get_clerk_jwks() -> dict[str, Any]:
+def _fetch_clerk_jwks() -> dict[str, Any]:
+    """Fetch Clerk JWKS from the network. Result is cached indefinitely until
+    manually cleared (key rotation) or the process restarts."""
     if not settings.CLERK_JWKS_URL:
-        raise HTTPException(status_code=500, detail="CLERK_JWKS_URL not configured")
+        raise RuntimeError("CLERK_JWKS_URL not configured")
     resp = httpx.get(settings.CLERK_JWKS_URL, timeout=5.0)
     resp.raise_for_status()
     return resp.json()
+
+
+def _get_clerk_jwks() -> dict[str, Any]:
+    """Return the cached JWKS, applying a backoff on repeated failures."""
+    global _jwks_retry_after
+    if time.monotonic() < _jwks_retry_after:
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable")
+    try:
+        return _fetch_clerk_jwks()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _jwks_retry_after = time.monotonic() + _JWKS_BACKOFF_SECONDS
+        _fetch_clerk_jwks.cache_clear()
+        raise HTTPException(status_code=503, detail="Auth service temporarily unavailable") from exc
 
 
 def verify_token(token: str) -> dict[str, Any]:
@@ -37,7 +60,7 @@ def verify_token(token: str) -> dict[str, Any]:
     key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if not key:
         # JWKS may have rotated — bust the cache and retry once
-        _get_clerk_jwks.cache_clear()
+        _fetch_clerk_jwks.cache_clear()
         jwks = _get_clerk_jwks()
         key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if not key:

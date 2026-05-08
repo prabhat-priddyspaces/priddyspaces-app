@@ -1,38 +1,30 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-import { apiFetch } from "@/lib/api";
-import { getDefaultRoute, type MeResponse } from "@/lib/me";
+import { getDefaultRoute } from "@/lib/me";
+import { useMe } from "@/hooks/useMe";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { getToken, isLoaded, isSignedIn } = useAuth();
-  const [allowed, setAllowed] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const { isLoaded, isSignedIn } = useAuth();
+  const { me, loading, error } = useMe();
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
+    if (!isLoaded || loading) return;
+    if (!isSignedIn || error) {
       router.replace("/sign-in");
       return;
     }
-    getToken()
-      .then((token) => apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined))
-      .then((me) => {
-        if (me.impersonation.is_impersonating || !me.platform_role) {
-          router.replace(getDefaultRoute(me));
-          return;
-        }
-        setAllowed(true);
-      })
-      .catch(() => router.replace("/sign-in"))
-      .finally(() => setChecking(false));
-  }, [isLoaded, isSignedIn, getToken, router]);
+    if (!me) return;
+    if (me.impersonation.is_impersonating || !me.platform_role) {
+      router.replace(getDefaultRoute(me));
+    }
+  }, [isLoaded, isSignedIn, loading, error, me, router]);
 
-  if (checking || !allowed) {
+  if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
         Loading...

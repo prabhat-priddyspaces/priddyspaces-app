@@ -24,7 +24,6 @@ type AuthContextValue = AuthState & {
     password: string;
     first_name: string;
     last_name: string;
-    role: "owner" | "customer";
   }) => Promise<void>;
   signOut: () => Promise<void>;
   /** Fetch a fresh Clerk JWT for API calls */
@@ -110,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password: string;
       first_name: string;
       last_name: string;
-      role: "owner" | "customer";
     }) => {
       if (!signUpLoaded || !clerkSignUp) throw new Error("Auth not ready");
       setState((prev) => ({ ...prev, loading: true }));

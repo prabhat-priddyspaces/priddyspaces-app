@@ -1,46 +1,33 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { useAuth, useClerk } from "@clerk/nextjs";
 
-import { apiFetch } from "@/lib/api";
 import { CustomerSideNav } from "@/components/customer-side-nav";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { getDefaultRoute, type MeResponse } from "@/lib/me";
+import { getDefaultRoute } from "@/lib/me";
+import { useMe } from "@/hooks/useMe";
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
-  const [allowed, setAllowed] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [me, setMe] = useState<MeResponse | null>(null);
+  const { me, loading, error } = useMe();
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
+    if (!isLoaded || loading) return;
+    if (!isSignedIn || error) {
       router.replace("/sign-in");
       return;
     }
-    getToken()
-      .then((token) => apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined))
-      .then((data) => {
-        const customerAllowed =
-          data.app_role === "customer" &&
-          (!data.platform_role || data.impersonation.is_impersonating);
-        if (!customerAllowed) {
-          router.replace(getDefaultRoute(data));
-        } else {
-          setAllowed(true);
-          setMe(data);
-        }
-      })
-      .catch(() => router.replace("/sign-in"))
-      .finally(() => setChecking(false));
-  }, [isLoaded, isSignedIn, getToken, router]);
+    if (!me) return;
+    const customerAllowed =
+      me.app_role === "customer" && (!me.platform_role || me.impersonation.is_impersonating);
+    if (!customerAllowed) router.replace(getDefaultRoute(me));
+  }, [isLoaded, isSignedIn, loading, error, me, router]);
 
-  if (checking || !allowed) {
+  if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
         Loading...

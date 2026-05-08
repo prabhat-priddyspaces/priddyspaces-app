@@ -5,8 +5,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import logging
+
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+import re
+
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -51,6 +55,13 @@ class ProfileIn(BaseModel):
             raise ValueError("full_name cannot be blank")
         return v
 
+    @field_validator("country")
+    @classmethod
+    def country_iso_alpha2(cls, v: str | None) -> str | None:
+        if v is not None and not re.fullmatch(r"[A-Za-z]{2}", v):
+            raise ValueError("country must be a 2-letter ISO 3166-1 alpha-2 code (e.g. US)")
+        return v.upper() if v else v
+
 
 class OrgIn(BaseModel):
     name: str
@@ -72,11 +83,26 @@ class OrgIn(BaseModel):
             raise ValueError(f"size must be one of {_ORG_SIZES}")
         return v
 
+    @field_validator("website")
+    @classmethod
+    def website_url(cls, v: str | None) -> str | None:
+        if v is not None and not re.match(r"https?://", v, re.IGNORECASE):
+            raise ValueError("website must be a valid URL starting with http:// or https://")
+        return v
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+_log = logging.getLogger(__name__)
+
+
 def _update_clerk_metadata(clerk_id: str, metadata: dict) -> None:
-    """PATCH Clerk user publicMetadata via REST API. Best-effort: logs on failure."""
+    """PATCH Clerk user publicMetadata via REST API.
+
+    Called as a BackgroundTask — runs after the response is sent so it never
+    adds latency to the onboarding request. Best-effort: the Clerk webhook will
+    reconcile on the next user.updated event if this call fails.
+    """
     if not settings.CLERK_SECRET_KEY:
         return
     try:
@@ -93,8 +119,8 @@ def _update_clerk_metadata(clerk_id: str, metadata: dict) -> None:
             json={"public_metadata": merged},
             timeout=5.0,
         )
-    except Exception:  # noqa: BLE001
-        pass  # Webhook will reconcile eventually
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("Failed to sync publicMetadata to Clerk for %s: %s", clerk_id, exc)
 
 
 def _has_organization(db: Session, user_id: int) -> bool:
@@ -144,12 +170,25 @@ def _build_me_out(db: Session, user: User, token: dict) -> MeOut:
 @router.post("/profile", response_model=MeOut)
 def complete_profile(
     payload: ProfileIn,
+    background: BackgroundTasks,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ) -> MeOut:
     """Set role, basic profile fields, and accept T&C. Called once after sign-up."""
     user = get_effective_user(db, token)
     now = datetime.now(timezone.utc)
+
+    # Prevent switching away from owner when an org already exists — orphaned org
+    # records would break routing and billing.  Contact support for role changes.
+    if user.role is not None and user.role != payload.role:
+        if user.role == UserAppRole.OWNER and _has_organization(db, user.id):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot change role while you have an active organization. "
+                    "Please contact support."
+                ),
+            )
 
     user.role = payload.role
     if payload.full_name:
@@ -168,10 +207,10 @@ def complete_profile(
     db.commit()
     db.refresh(user)
 
-    # Sync role to Clerk publicMetadata so JWT claims are updated on next token
+    # Sync role to Clerk publicMetadata after the response is sent (zero added latency)
     clerk_id: str = token.get("sub", "")
     if clerk_id:
-        _update_clerk_metadata(clerk_id, {"role": payload.role.value})
+        background.add_task(_update_clerk_metadata, clerk_id, {"role": payload.role.value})
 
     return _build_me_out(db, user, token)
 

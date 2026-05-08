@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
 import { API_BASE_URL } from "@/lib/api";
+import { type MeResponse } from "@/lib/me";
+import { updateMeCache } from "@/hooks/useMe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +60,8 @@ export default function OnboardingOrganizationPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Organization creation failed");
       }
+      const me: MeResponse = await res.json();
+      updateMeCache(me);
       router.replace("/owner");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Creation failed");
