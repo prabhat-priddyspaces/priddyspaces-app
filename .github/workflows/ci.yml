@@ -77,24 +77,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: us-east-1
-
-      - name: Resolve Clerk keys from SSM
-        id: clerk
-        shell: bash
-        run: |
-          set -euo pipefail
-          PREFIX="/priddyspaces/dev/deploy"
-          CLERK_PK=$(aws ssm get-parameter --name "$PREFIX/clerk_publishable_key" --query 'Parameter.Value' --output text 2>/dev/null || echo "")
-          CLERK_SK=$(aws ssm get-parameter --name "$PREFIX/clerk_secret_key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
-          echo "::add-mask::$CLERK_SK"
-          echo "publishable_key=$CLERK_PK" >> "$GITHUB_OUTPUT"
-          echo "secret_key=$CLERK_SK" >> "$GITHUB_OUTPUT"
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -114,10 +96,13 @@ jobs:
         run: npx playwright install --with-deps chrome
 
       - name: Run webUI e2e
+        # Real Clerk keys live in environment-scoped secrets (used by
+        # deploy-frontend.yml). For e2e we use the build-time bypass flag
+        # instead — middleware no-ops, ClerkProvider is unmounted, and
+        # layouts use the localStorage-backed useMe variant that
+        # mockSession() already populates.
         env:
           CI: true
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ steps.clerk.outputs.publishable_key }}
-          CLERK_SECRET_KEY: ${{ steps.clerk.outputs.secret_key }}
           E2E_BYPASS_CLERK: "1"
           NEXT_PUBLIC_E2E_BYPASS_CLERK: "1"
         run: npm run test:e2e
