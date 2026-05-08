@@ -1,46 +1,31 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
-import { apiFetch } from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
-import { getDefaultRoute, type MeResponse } from "@/lib/me";
+import { getDefaultRoute } from "@/lib/me";
+import { useMe } from "@/hooks/useMe";
+import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
-export default function OwnerLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function ClerkOwnerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [allowed, setAllowed] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const { isLoaded, isSignedIn } = useAuth();
+  const { me, loading, error } = useMe();
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.replace("/login");
+    if (!isLoaded || loading) return;
+    if (!isSignedIn || error) {
+      router.replace("/sign-in");
       return;
     }
-    apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
-      .then((me) => {
-        const ownerAllowed =
-          me.app_role === "owner" && (!me.platform_role || me.impersonation.is_impersonating);
-        if (!ownerAllowed) {
-          router.replace(getDefaultRoute(me));
-        } else {
-          setAllowed(true);
-        }
-      })
-      .catch(() => {
-        router.replace("/login");
-      })
-      .finally(() => {
-        setChecking(false);
-      });
-  }, [router]);
+    if (!me) return;
+    const ownerAllowed =
+      me.app_role === "owner" && (!me.platform_role || me.impersonation.is_impersonating);
+    if (!ownerAllowed) router.replace(getDefaultRoute(me));
+  }, [isLoaded, isSignedIn, loading, error, me, router]);
 
-  if (checking || !allowed) {
+  if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
         Loading...
@@ -49,4 +34,25 @@ export default function OwnerLayout({
   }
 
   return <>{children}</>;
+}
+
+function BypassOwnerLayout({ children }: { children: React.ReactNode }) {
+  const { me, loading } = useMe();
+
+  if (loading || !me) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
+        Loading...
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+export default function OwnerLayout({ children }: { children: React.ReactNode }) {
+  if (IS_E2E_BYPASS) {
+    return <BypassOwnerLayout>{children}</BypassOwnerLayout>;
+  }
+  return <ClerkOwnerLayout>{children}</ClerkOwnerLayout>;
 }

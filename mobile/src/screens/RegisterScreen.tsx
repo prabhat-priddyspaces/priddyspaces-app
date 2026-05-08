@@ -10,7 +10,6 @@ export function RegisterScreen() {
     password: "",
     first_name: "",
     last_name: "",
-    role: "customer" as "owner" | "customer"
   });
 
   async function handleRegister() {
@@ -24,7 +23,7 @@ export function RegisterScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create account</Text>
-      <Text style={styles.subtitle}>Join as an owner or customer</Text>
+      <Text style={styles.subtitle}>You'll choose your role in the next step.</Text>
       <TextInput
         style={styles.input}
         placeholder="First name"
@@ -37,24 +36,6 @@ export function RegisterScreen() {
         value={form.last_name}
         onChangeText={(value) => setForm({ ...form, last_name: value })}
       />
-      <View style={styles.roleRow}>
-        <TouchableOpacity
-          style={[styles.roleButton, form.role === "customer" && styles.roleButtonActive]}
-          onPress={() => setForm({ ...form, role: "customer" })}
-        >
-          <Text style={[styles.roleButtonText, form.role === "customer" && styles.roleButtonTextActive]}>
-            Customer
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.roleButton, form.role === "owner" && styles.roleButtonActive]}
-          onPress={() => setForm({ ...form, role: "owner" })}
-        >
-          <Text style={[styles.roleButtonText, form.role === "owner" && styles.roleButtonTextActive]}>
-            Owner
-          </Text>
-        </TouchableOpacity>
-      </View>
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -105,30 +86,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
     backgroundColor: "#FFFFFF"
-  },
-  roleRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 12
-  },
-  roleButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    alignItems: "center"
-  },
-  roleButtonActive: {
-    backgroundColor: "#111827",
-    borderColor: "#111827"
-  },
-  roleButtonText: {
-    color: "#111827",
-    fontWeight: "600"
-  },
-  roleButtonTextActive: {
-    color: "#FFFFFF"
   },
   primaryButton: {
     marginTop: 4,

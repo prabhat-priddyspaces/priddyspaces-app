@@ -58,6 +58,7 @@ class MeOut(BaseModel):
     role: str | None
     app_role: UserAppRole | None
     platform_role: PlatformTeamRole | None
+    has_organization: bool = False
     default_route: str
     impersonation: ImpersonationContextOut
     terms_accepted_at: datetime | None

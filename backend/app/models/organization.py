@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
 
 from app.models.base import Base
 from app.models.enums import OrganizationReviewStatus, enum_values
@@ -9,9 +9,14 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "organizations"
 
     id = Column(Integer, primary_key=True)
+    clerk_org_id = Column(String(255), nullable=True, unique=True, index=True)
     name = Column(String(255), nullable=False)
     owner_id = Column(Integer, nullable=False)
+    onboarding_completed = Column(Boolean, default=False, nullable=False)
     branding = Column(String(1024), nullable=True)
+    industry = Column(String(128), nullable=True)
+    size = Column(String(32), nullable=True)
+    website = Column(String(512), nullable=True)
     stripe_account_id = Column(String(255), nullable=True)
     payment_provider = Column(String(32), nullable=True)
     review_status = Column(

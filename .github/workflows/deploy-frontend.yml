@@ -53,6 +53,10 @@ jobs:
           echo "::add-mask::$GMAPS_KEY"
           echo "google_maps_api_key=$GMAPS_KEY" >> "$GITHUB_OUTPUT"
 
+          # Clerk publishable key (public, safe to embed in static bundle)
+          CLERK_PK=$(aws ssm get-parameter --name "$PREFIX/clerk_publishable_key" --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+          echo "clerk_publishable_key=$CLERK_PK" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -69,6 +73,7 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: ${{ steps.meta.outputs.api_origin }}
           NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
           NEXT_OUTPUT_MODE: export
         run: npm run build:export
 

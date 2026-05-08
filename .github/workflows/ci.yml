@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: read
 
 jobs:
   changes:
@@ -95,8 +96,15 @@ jobs:
         run: npx playwright install --with-deps chrome
 
       - name: Run webUI e2e
+        # Real Clerk keys live in environment-scoped secrets (used by
+        # deploy-frontend.yml). For e2e we use the build-time bypass flag
+        # instead — middleware no-ops, ClerkProvider is unmounted, and
+        # layouts use the localStorage-backed useMe variant that
+        # mockSession() already populates.
         env:
           CI: true
+          E2E_BYPASS_CLERK: "1"
+          NEXT_PUBLIC_E2E_BYPASS_CLERK: "1"
         run: npm run test:e2e
 
   deploy-backend-dev:

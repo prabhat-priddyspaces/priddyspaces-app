@@ -1,16 +1,19 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useAuth, useSignIn, useSignUp } from "@clerk/expo";
 
 import { API_BASE_URL } from "../constants";
-import { clearToken, setToken as persistToken } from "../lib/storage";
 
-type MeResponse = {
+type MeData = {
   email: string;
   role: string | null;
+  app_role: string | null;
+  has_organization: boolean;
+  default_route: string;
 };
 
 type AuthState = {
   token: string | null;
-  me: MeResponse | null;
+  me: MeData | null;
   loading: boolean;
 };
 
@@ -21,51 +24,84 @@ type AuthContextValue = AuthState & {
     password: string;
     first_name: string;
     last_name: string;
-    role: "owner" | "customer";
   }) => Promise<void>;
   signOut: () => Promise<void>;
-  hydrate: (token: string) => Promise<void>;
-  clear: () => Promise<void>;
+  /** Fetch a fresh Clerk JWT for API calls */
+  getToken: () => Promise<string | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>({ token: null, me: null, loading: false });
+  const {
+    isLoaded: authLoaded,
+    isSignedIn,
+    getToken: clerkGetToken,
+    signOut: clerkSignOut,
+  } = useAuth();
+  const { signIn: clerkSignIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
+  const { signUp: clerkSignUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
 
-  const hydrate = useCallback(async (token: string) => {
-    setState((prev) => ({ ...prev, loading: true }));
+  const [state, setState] = useState<AuthState>({ token: null, me: null, loading: true });
+
+  const fetchMe = useCallback(async (token: string): Promise<MeData | null> => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/me`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        throw new Error("Unauthorized");
-      }
+      if (!res.ok) return null;
       const data = await res.json();
-      setState({ token, me: { email: data.email, role: data.role }, loading: false });
+      return {
+        email: data.email,
+        role: data.role,
+        app_role: data.app_role,
+        has_organization: data.has_organization ?? false,
+        default_route: data.default_route ?? "/onboarding/personal",
+      };
     } catch {
-      await clearToken();
-      setState({ token: null, me: null, loading: false });
+      return null;
     }
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    setState((prev) => ({ ...prev, loading: true }));
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setState((prev) => ({ ...prev, loading: false }));
-      throw new Error(data.detail || "Login failed");
+  // Sync auth state whenever Clerk session changes
+  useEffect(() => {
+    if (!authLoaded) return;
+    if (!isSignedIn) {
+      setState({ token: null, me: null, loading: false });
+      return;
     }
-    const data = await res.json();
-    await persistToken(data.access_token);
-    await hydrate(data.access_token);
-  }, [hydrate]);
+    setState((prev) => ({ ...prev, loading: true }));
+    clerkGetToken()
+      .then(async (token) => {
+        if (!token) {
+          setState({ token: null, me: null, loading: false });
+          return;
+        }
+        const me = await fetchMe(token);
+        setState({ token, me, loading: false });
+      })
+      .catch(() => setState({ token: null, me: null, loading: false }));
+  }, [authLoaded, isSignedIn, clerkGetToken, fetchMe]);
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      if (!signInLoaded || !clerkSignIn) throw new Error("Auth not ready");
+      setState((prev) => ({ ...prev, loading: true }));
+      try {
+        const result = await clerkSignIn.create({ identifier: email, password });
+        if (result.status === "complete") {
+          await setSignInActive({ session: result.createdSessionId });
+          // State will sync via the useEffect above
+        } else {
+          throw new Error("Sign-in incomplete: " + result.status);
+        }
+      } catch (err) {
+        setState((prev) => ({ ...prev, loading: false }));
+        throw err;
+      }
+    },
+    [signInLoaded, clerkSignIn, setSignInActive]
+  );
 
   const signUp = useCallback(
     async (payload: {
@@ -73,50 +109,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password: string;
       first_name: string;
       last_name: string;
-      role: "owner" | "customer";
     }) => {
+      if (!signUpLoaded || !clerkSignUp) throw new Error("Auth not ready");
       setState((prev) => ({ ...prev, loading: true }));
-      const res = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...payload,
-          terms_accepted: true,
-          privacy_policy_accepted: true
-        })
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      try {
+        const result = await clerkSignUp.create({
+          emailAddress: payload.email,
+          password: payload.password,
+          firstName: payload.first_name,
+          lastName: payload.last_name,
+        });
+        if (result.status === "complete") {
+          await setSignUpActive({ session: result.createdSessionId });
+          // Role will be set during onboarding
+        } else {
+          // Email verification required
+          await clerkSignUp.prepareEmailAddressVerification({ strategy: "email_code" });
+          throw new Error("verify_email");
+        }
+      } catch (err) {
         setState((prev) => ({ ...prev, loading: false }));
-        throw new Error(data.detail || "Registration failed");
+        throw err;
       }
-      const data = await res.json();
-      await persistToken(data.access_token);
-      await hydrate(data.access_token);
     },
-    [hydrate]
+    [signUpLoaded, clerkSignUp, setSignUpActive]
   );
 
   const signOut = useCallback(async () => {
-    await clearToken();
+    await clerkSignOut();
     setState({ token: null, me: null, loading: false });
-  }, []);
+  }, [clerkSignOut]);
 
-  const clear = useCallback(async () => {
-    await clearToken();
-    setState({ token: null, me: null, loading: false });
-  }, []);
+  const getToken = useCallback(() => clerkGetToken(), [clerkGetToken]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      ...state,
-      signIn,
-      signUp,
-      signOut,
-      hydrate,
-      clear
-    }),
-    [state, signIn, signUp, signOut, hydrate, clear]
+    () => ({ ...state, signIn, signUp, signOut, getToken }),
+    [state, signIn, signUp, signOut, getToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -124,8 +152,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }

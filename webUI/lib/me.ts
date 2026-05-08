@@ -18,32 +18,33 @@ export interface MeResponse {
   role: string | null;
   app_role: string | null;
   platform_role: string | null;
+  has_organization: boolean;
   default_route: string;
   impersonation: ImpersonationContext;
 }
 
 export function getDefaultRoute(me: MeResponse): string {
-  if (me.app_role === "customer" && (!me.default_route || me.default_route === "/customer")) {
-    return "/coworking";
-  }
-  if (me.default_route) {
-    return me.default_route;
-  }
-  if (me.platform_role) {
-    return "/admin";
-  }
+  // Platform admins
+  if (me.platform_role) return "/admin";
+
+  // No role yet → personal onboarding
+  if (!me.app_role) return "/onboarding/personal";
+
+  // Owner: needs org first
   if (me.app_role === "owner") {
-    return "/owner";
+    return me.has_organization ? "/owner" : "/onboarding/organization";
   }
-  if (me.app_role === "customer") {
-    return "/coworking";
-  }
-  return "/onboarding";
+
+  // Customer
+  if (me.app_role === "customer") return "/coworking";
+
+  // Server-provided default or fallback
+  return me.default_route || "/onboarding/personal";
 }
 
 export function getDashboardHref(me: MeResponse): string {
   if (me.platform_role) return "/admin";
   if (me.app_role === "owner") return "/owner";
   if (me.app_role === "customer") return "/customer/requests";
-  return "/onboarding";
+  return "/onboarding/personal";
 }
