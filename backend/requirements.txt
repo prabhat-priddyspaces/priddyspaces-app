@@ -10,7 +10,7 @@ stripe==10.9.0
 svix==1.14.0
 uuid6==2024.1.12
 python-multipart==0.0.9
-pyjwt==2.9.0
+pyjwt[crypto]==2.9.0
 bcrypt>=4.0.0
 httpx==0.27.0
 boto3==1.35.36
