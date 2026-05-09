@@ -83,7 +83,18 @@ jobs:
 
           aws ecs describe-task-definition --task-definition "$CURRENT_TASK_DEF" --query 'taskDefinition' > taskdef.json
 
+          # Patch image, and idempotently inject CLERK_* secrets into the
+          # backend container's `secrets` array. The Secrets Manager ARN is
+          # derived from any existing entry in `secrets` (all secrets live in
+          # the same /priddyspaces/<env>/app/config blob), so no extra IAM
+          # permissions are needed beyond what the task already has.
           jq --arg IMAGE_URI "$IMAGE_URI" '
+            def base_arn:
+              (.[0].valueFrom // "") | split(":") | .[0:7] | join(":");
+            def ensure(name; baseArn):
+              if any(.[]; .name == name) then .
+              else . + [{name: name, valueFrom: (baseArn + ":" + name + "::")}]
+              end;
             del(
               .taskDefinitionArn,
               .revision,
@@ -93,7 +104,18 @@ jobs:
               .registeredAt,
               .registeredBy
             )
-            | .containerDefinitions |= map(if .name == "backend" then .image = $IMAGE_URI else . end)
+            | .containerDefinitions |= map(
+                if .name == "backend" then
+                  .image = $IMAGE_URI
+                  | ((.secrets // []) | base_arn) as $arn
+                  | .secrets = (
+                      (.secrets // [])
+                      | ensure("CLERK_JWKS_URL"; $arn)
+                      | ensure("CLERK_SECRET_KEY"; $arn)
+                      | ensure("CLERK_WEBHOOK_SECRET"; $arn)
+                    )
+                else . end
+              )
           ' taskdef.json > taskdef-updated.json
 
           NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
