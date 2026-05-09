@@ -30,8 +30,10 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - '.github/workflows/deploy-backend.yml'
             webui:
               - 'webUI/**'
+              - '.github/workflows/deploy-frontend.yml'
 
   backend-tests:
     needs: changes
