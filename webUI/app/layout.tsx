@@ -3,6 +3,7 @@ import "../styles/globals.css";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import { ClerkTokenSync } from "@/components/clerk-token-sync";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
 export const metadata = {
@@ -15,11 +16,30 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const tree = (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
+  if (IS_E2E_BYPASS) {
+    return (
+      <html lang="en">
+        <body>{children}</body>
+      </html>
+    );
+  }
+  return (
+    <ClerkProvider
+      // Both flows funnel through /dashboard, which reads /api/me and routes
+      // by role: no role → /onboarding/personal; owner-no-org →
+      // /onboarding/organization; owner → /owner; customer → /coworking;
+      // platform → /admin.
+      signInForceRedirectUrl="/dashboard"
+      signUpForceRedirectUrl="/dashboard"
+      signInFallbackRedirectUrl="/dashboard"
+      signUpFallbackRedirectUrl="/dashboard"
+    >
+      <html lang="en">
+        <body>
+          <ClerkTokenSync />
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   );
-  if (IS_E2E_BYPASS) return tree;
-  return <ClerkProvider>{tree}</ClerkProvider>;
 }
