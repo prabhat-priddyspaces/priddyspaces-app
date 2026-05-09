@@ -63,8 +63,14 @@ function ClerkCustomerLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded || loading) return;
-    if (!isSignedIn || error) {
+    if (!isSignedIn) {
       router.replace("/sign-in");
+      return;
+    }
+    // /api/me failed while Clerk says we're signed in — bounce to /dashboard
+    // which renders an error UI instead of looping through /sign-in.
+    if (error) {
+      router.replace("/dashboard");
       return;
     }
     if (!me) return;

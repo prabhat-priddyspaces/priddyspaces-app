@@ -15,8 +15,12 @@ function ClerkOwnerLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded || loading) return;
-    if (!isSignedIn || error) {
+    if (!isSignedIn) {
       router.replace("/sign-in");
+      return;
+    }
+    if (error) {
+      router.replace("/dashboard");
       return;
     }
     if (!me) return;
