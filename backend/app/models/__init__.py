@@ -31,6 +31,20 @@ from app.models.subscription import Subscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.membership_plan import MembershipPlan
+from app.models.marketing import (
+    AudienceSegment,
+    BusinessMarketingSenderSetting,
+    CampaignRecipient,
+    EmailSuppression,
+    MarketingCampaign,
+    MarketingTemplate,
+    MarketingVerifiedSender,
+    OutboundMessage,
+    Workflow,
+    WorkflowRun,
+    WorkflowRunEvent,
+    WorkflowVersion,
+)
 from app.models.meeting_room_hour_ledger import MeetingRoomHourLedger
 from app.models.user import User
 
@@ -68,6 +82,18 @@ __all__ = [
     "SubscriptionPlan",
     "SpaceBookingMode",
     "MembershipPlan",
+    "AudienceSegment",
+    "BusinessMarketingSenderSetting",
+    "CampaignRecipient",
+    "EmailSuppression",
+    "MarketingCampaign",
+    "MarketingTemplate",
+    "MarketingVerifiedSender",
+    "OutboundMessage",
+    "Workflow",
+    "WorkflowRun",
+    "WorkflowRunEvent",
+    "WorkflowVersion",
     "MeetingRoomHourLedger",
     "User"
 ]

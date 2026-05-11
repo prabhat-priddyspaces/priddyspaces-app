@@ -20,6 +20,7 @@
     "@clerk/nextjs": "^7.3.2",
     "@stripe/react-stripe-js": "^2.8.0",
     "@stripe/stripe-js": "^3.0.10",
+    "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
