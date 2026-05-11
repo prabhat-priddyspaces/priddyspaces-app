@@ -3,6 +3,7 @@ import "../styles/globals.css";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import { AssistantMount } from "@/components/assistant-mount";
 import { ClerkTokenSync } from "@/components/clerk-token-sync";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
@@ -19,7 +20,10 @@ export default function RootLayout({
   if (IS_E2E_BYPASS) {
     return (
       <html lang="en">
-        <body>{children}</body>
+        <body>
+          {children}
+          <AssistantMount />
+        </body>
       </html>
     );
   }
@@ -38,6 +42,7 @@ export default function RootLayout({
         <body>
           <ClerkTokenSync />
           {children}
+          <AssistantMount />
         </body>
       </html>
     </ClerkProvider>

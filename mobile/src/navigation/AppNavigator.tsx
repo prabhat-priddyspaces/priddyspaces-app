@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { useAuth as useClerkAuth } from "@clerk/expo";
 
+import { API_BASE_URL } from "../constants";
 import { useAuth } from "../context/AuthContext";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
@@ -24,10 +26,51 @@ import { PaymentSuccessScreen } from "../screens/PaymentSuccessScreen";
 import { MenuScreen } from "../screens/MenuScreen";
 import { InvoicesScreen } from "../screens/InvoicesScreen";
 import { PaymentsScreen } from "../screens/PaymentsScreen";
+import { AssistantScreen } from "../screens/AssistantScreen";
 
 const Stack = createNativeStackNavigator();
 const CustomerStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+
+function openAssistant(navigation: any) {
+  let current = navigation;
+  while (current) {
+    const routeNames = current.getState?.().routeNames || [];
+    if (routeNames.includes("Assistant")) {
+      current.navigate("Assistant");
+      return;
+    }
+    current = current.getParent?.();
+  }
+  navigation.navigate?.("Assistant");
+}
+
+function AssistantHeaderButton({ navigation }: { navigation: any }) {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE_URL}/api/assistant/status`)
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((data) => {
+        if (active) setEnabled(Boolean(data.enabled));
+      })
+      .catch(() => {
+        if (active) setEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!enabled) return null;
+
+  return (
+    <TouchableOpacity style={{ marginRight: 12 }} onPress={() => openAssistant(navigation)}>
+      <Text style={{ fontSize: 20, color: "#4f46e5" }}>✦</Text>
+    </TouchableOpacity>
+  );
+}
 
 function MarketplaceStack() {
   return (
@@ -38,6 +81,7 @@ function MarketplaceStack() {
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
           </TouchableOpacity>
         ),
+        headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
       <CustomerStack.Screen name="MarketplaceHome" component={HomeScreen} options={{ title: "Marketplace" }} />
@@ -57,6 +101,7 @@ function CustomerTabs() {
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
           </TouchableOpacity>
         ),
+        headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
       <Tabs.Screen name="Marketplace" component={MarketplaceStack} options={{ headerShown: false }} />
@@ -76,6 +121,7 @@ function OwnerTabs() {
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
           </TouchableOpacity>
         ),
+        headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
       <Tabs.Screen name="Dashboard" component={OwnerDashboardScreen} />
@@ -119,6 +165,7 @@ function MainApp() {
       <Stack.Screen name="Payments" component={PaymentsScreen} options={{ title: "Payments" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
       <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
+      <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} />
     </Stack.Navigator>
   );
 }

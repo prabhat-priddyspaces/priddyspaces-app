@@ -77,6 +77,32 @@ class Settings(BaseSettings):
     SENDGRID_WEBHOOK_VERIFICATION_KEY: str = ""
     MARKETING_LINK_SECRET: str = ""
     PLATFORM_ADMIN_EMAILS: str = ""
+
+    # Assistant V1. Disabled by default; web/mobile hide the assistant until this
+    # is explicitly enabled in the runtime environment.
+    ASSISTANT_ENABLED: bool = False
+    OPENAI_API_KEY: str = ""
+    ASSISTANT_PRIMARY_MODEL: str = "gpt-4o"
+    ASSISTANT_SUMMARY_MODEL: str = "gpt-4o-mini"
+    ASSISTANT_DAILY_COST_CAP_USD: float = 50.0
+    ASSISTANT_MAX_TOOL_HOPS: int = 5
+    ASSISTANT_SUPPORT_EMAIL: str = ""
+    ASSISTANT_ANON_PER_MINUTE: int = 5
+    ASSISTANT_ANON_PER_DAY: int = 30
+    ASSISTANT_GUEST_PER_MINUTE: int = 10
+    ASSISTANT_GUEST_PER_DAY: int = 50
+    ASSISTANT_CUSTOMER_PER_MINUTE: int = 20
+    ASSISTANT_CUSTOMER_PER_DAY: int = 200
+    ASSISTANT_STAFF_PER_MINUTE: int = 30
+    ASSISTANT_STAFF_PER_DAY: int = 500
+    ASSISTANT_OWNER_PER_MINUTE: int = 40
+    ASSISTANT_OWNER_PER_DAY: int = 1000
+    ASSISTANT_PLATFORM_ADMIN_PER_MINUTE: int = 60
+    ASSISTANT_PLATFORM_ADMIN_PER_DAY: int = 1000000
+    ASSISTANT_PRIMARY_INPUT_COST_PER_1M: float = 5.0
+    ASSISTANT_PRIMARY_OUTPUT_COST_PER_1M: float = 15.0
+    ASSISTANT_SUMMARY_INPUT_COST_PER_1M: float = 0.15
+    ASSISTANT_SUMMARY_OUTPUT_COST_PER_1M: float = 0.60
     model_config = SettingsConfigDict(env_file=".env")
 
 

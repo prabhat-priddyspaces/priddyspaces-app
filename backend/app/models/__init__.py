@@ -1,4 +1,13 @@
 from app.models.audit_log import AuditLog
+from app.models.assistant import (
+    AssistantConversation,
+    AssistantFeedback,
+    AssistantMessage,
+    AssistantRateLimit,
+    OwnerPolicyKB,
+    SpaceAlert,
+    SupportTicket,
+)
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
@@ -50,6 +59,13 @@ from app.models.user import User
 
 __all__ = [
     "AuditLog",
+    "AssistantConversation",
+    "AssistantFeedback",
+    "AssistantMessage",
+    "AssistantRateLimit",
+    "OwnerPolicyKB",
+    "SpaceAlert",
+    "SupportTicket",
     "Booking",
     "BookingRequest",
     "CustomerOwnerPaymentMethod",
