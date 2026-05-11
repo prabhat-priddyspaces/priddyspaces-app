@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     S3_REGION: str = ""
     SENDGRID_API_KEY: str = ""
     SENDGRID_FROM_EMAIL: str = "no-reply@priddyspaces.local"
+    SENDGRID_MARKETING_FROM_EMAIL: str = "marketing@priddyspaces.local"
+    SENDGRID_MARKETING_FROM_NAME: str = "Priddyspaces"
+    SENDGRID_MARKETING_ASM_GROUP_ID: int = 0
+    SENDGRID_WEBHOOK_VERIFICATION_KEY: str = ""
+    MARKETING_LINK_SECRET: str = ""
     PLATFORM_ADMIN_EMAILS: str = ""
     model_config = SettingsConfigDict(env_file=".env")
 
