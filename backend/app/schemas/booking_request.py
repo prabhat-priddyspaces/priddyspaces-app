@@ -1,8 +1,36 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.enums import BookingRequestKind, BookingRequestStatus
+
+
+class GuestBookingRequestCreate(BaseModel):
+    """Guest (unauthenticated) hourly or day-pass booking request."""
+
+    space_public_id: str
+    start_datetime: datetime
+    end_datetime: datetime
+    booking_mode: str = "hourly"  # 'hourly' | 'day_pass'
+    full_day: bool = False
+
+    guest_email: EmailStr
+    guest_full_name: str = Field(min_length=1, max_length=255)
+    guest_phone: str | None = Field(default=None, max_length=64)
+    guest_company_name: str | None = Field(default=None, max_length=255)
+    guest_notes: str | None = Field(default=None, max_length=1024)
+
+
+class GuestBookingRequestOut(BaseModel):
+    public_id: str
+    status: BookingRequestStatus
+    start_datetime: datetime
+    end_datetime: datetime
+    space_public_id: str | None = None
+    estimated_amount: int | None = None
+    message: str = "Your request has been submitted. The owner will review it and get back to you."
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BookingRequestCreate(BaseModel):
@@ -60,7 +88,7 @@ class BookingRequestOut(BaseModel):
     public_id: str
     space_id: int
     space_public_id: str | None = None
-    user_id: int
+    user_id: int | None = None
     booking_id: int | None = None
     booking_public_id: str | None = None
     start_datetime: datetime
@@ -94,6 +122,13 @@ class BookingRequestOut(BaseModel):
     desired_start_date: date | None = None
     seats_requested: int = 1
     commitment_months_snapshot: int | None = None
+
+    is_guest_checkout: bool = False
+    guest_email: str | None = None
+    guest_full_name: str | None = None
+    guest_phone: str | None = None
+    guest_company_name: str | None = None
+    guest_notes: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

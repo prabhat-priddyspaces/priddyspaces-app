@@ -48,6 +48,7 @@ import { AvailabilityCalendar } from "@/components/availability-calendar";
 import { SubscriptionModal } from "@/components/subscription-modal";
 import { PublicLocationMiniMap } from "@/components/public-location-mini-map";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
+import { GuestCheckoutModal } from "@/components/guest-checkout-modal";
 
 const AVAILABILITY_RANGE_DAYS = 60;
 
@@ -130,6 +131,8 @@ export function PublicSpaceDetailView({
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
   const [authorizationConsent, setAuthorizationConsent] = useState(false);
+  const [guestCheckoutOpen, setGuestCheckoutOpen] = useState(false);
+  const [guestPayload, setGuestPayload] = useState<ReservationPayload | null>(null);
 
   useEffect(() => {
     if (!spaceId) {
@@ -427,7 +430,15 @@ export function PublicSpaceDetailView({
 
     const token = getAccessToken() ?? undefined;
     if (!token) {
-      router.push(buildLoginHref(buildSelfNextHref()));
+      const guestReservationPayload: ReservationPayload = {
+        space_public_id: detail.space.public_id,
+        start_datetime: start.toISOString(),
+        end_datetime: end.toISOString(),
+        booking_mode: allDay ? "day_pass" : "hourly",
+        full_day: allDay,
+      };
+      setGuestPayload(guestReservationPayload);
+      setGuestCheckoutOpen(true);
       return;
     }
     if (!authorizationConsent) {
@@ -468,7 +479,8 @@ export function PublicSpaceDetailView({
 
   function handleMembershipClick(plan: SubscriptionPlan) {
     if (!getAccessToken()) {
-      router.push(buildLoginHref(buildSelfNextHref()));
+      setGuestPayload(null);
+      setGuestCheckoutOpen(true);
       return;
     }
     setSelectedPlan(plan);
@@ -1019,6 +1031,16 @@ export function PublicSpaceDetailView({
           }
         }}
       />
+      {guestCheckoutOpen ? (
+        <GuestCheckoutModal
+          payload={guestPayload}
+          onClose={() => setGuestCheckoutOpen(false)}
+          onSignIn={() => {
+            setGuestCheckoutOpen(false);
+            router.push(buildLoginHref(buildSelfNextHref()));
+          }}
+        />
+      ) : null}
     </main>
   );
 }
