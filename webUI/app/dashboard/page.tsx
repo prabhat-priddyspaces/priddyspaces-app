@@ -2,15 +2,16 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { getDefaultRoute } from "@/lib/me";
 import { useMe } from "@/hooks/useMe";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
-  const { signOut } = useClerk();
+  const appSignOut = useAppSignOut();
   const { me, loading, error, refresh } = useMe();
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function DashboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => signOut(() => router.replace("/sign-in"))}
+              onClick={() => void appSignOut()}
               className="rounded-sm border border-border bg-white px-3 py-1.5 text-sm text-textSecondary hover:bg-surface2"
             >
               Sign out
