@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum, Integer, String
 
 from app.models.base import Base
 from app.models.enums import BookingRequestStatus, enum_values
@@ -10,7 +10,7 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(Integer, nullable=False)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=True)
     space_id = Column(Integer, nullable=False)
     booking_id = Column(Integer, nullable=True)
     owner_payment_setting_id = Column(Integer, nullable=True)
@@ -40,3 +40,12 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     desired_start_date = Column(Date, nullable=True)
     seats_requested = Column(Integer, nullable=False, default=1, server_default="1")
     commitment_months_snapshot = Column(Integer, nullable=True)
+
+    is_guest_checkout = Column(Boolean, nullable=False, default=False, server_default="false")
+    guest_email = Column(String(255), nullable=True)
+    guest_full_name = Column(String(255), nullable=True)
+    guest_phone = Column(String(64), nullable=True)
+    guest_company_name = Column(String(255), nullable=True)
+    guest_notes = Column(String(1024), nullable=True)
+    guest_token = Column(String(64), nullable=True, unique=True)
+    guest_token_expires_at = Column(DateTime(timezone=True), nullable=True)

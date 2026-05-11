@@ -1,3 +1,6 @@
+import secrets
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -34,6 +37,8 @@ from app.schemas.booking_request import (
     BookingRequestDecision,
     BookingRequestOut,
     BookingRequestRetryPayment,
+    GuestBookingRequestCreate,
+    GuestBookingRequestOut,
 )
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids, require_location_roles
@@ -55,7 +60,13 @@ from app.services.pricing import (
     VolumeDiscount,
     estimate_booking_price,
 )
-from app.services.notifications import send_email
+from app.services.notifications import (
+    send_email,
+    send_guest_approval_email,
+    send_guest_booking_confirmation,
+    send_guest_rejection_email,
+    send_owner_booking_request_notification,
+)
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
 
@@ -247,6 +258,12 @@ def _to_out(
         desired_start_date=req.desired_start_date,
         seats_requested=req.seats_requested or 1,
         commitment_months_snapshot=req.commitment_months_snapshot,
+        is_guest_checkout=req.is_guest_checkout or False,
+        guest_email=req.guest_email,
+        guest_full_name=req.guest_full_name,
+        guest_phone=req.guest_phone,
+        guest_company_name=req.guest_company_name,
+        guest_notes=req.guest_notes,
     )
 
 
@@ -436,6 +453,148 @@ def _create_membership_purchase_request(
     return req
 
 
+def _owner_emails_for_space(db: Session, space: Space) -> list[str]:
+    """Return email addresses of all active OWNER/ADMIN members for the space's location."""
+    from app.models.organization import Organization
+    from app.models.organization_member import OrganizationMember
+
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        return []
+    org = db.query(Organization).filter(Organization.id == location.organization_id).first() if hasattr(location, "organization_id") else None
+    owner_user_ids: set[int] = set()
+    if org:
+        members = (
+            db.query(OrganizationMember)
+            .filter(
+                OrganizationMember.organization_id == org.id,
+                OrganizationMember.is_active.is_(True),
+                OrganizationMember.role.in_(["owner", "admin"]),
+            )
+            .all()
+        )
+        for m in members:
+            owner_user_ids.add(m.user_id)
+    if not owner_user_ids:
+        owner_user = db.query(User).filter(User.id == space.tenant_id).first()
+        if owner_user:
+            return [owner_user.email]
+        return []
+    users = db.query(User).filter(User.id.in_(owner_user_ids)).all()
+    return [u.email for u in users if u.email]
+
+
+@router.post("/guest/booking-requests", response_model=GuestBookingRequestOut)
+def create_guest_booking_request(
+    payload: GuestBookingRequestCreate,
+    db: Session = Depends(get_db),
+):
+    space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+
+    from app.models.enums import SpaceVisibility
+    if space.visibility != SpaceVisibility.PUBLIC:
+        raise HTTPException(status_code=404, detail="Space not found")
+
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Space not found")
+
+    start_dt = _as_utc(payload.start_datetime)
+    end_dt = _as_utc(payload.end_datetime)
+
+    if end_dt <= start_dt:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+
+    if subscription_overlaps(db, space.id, start_dt.date(), end_dt.date()):
+        raise HTTPException(status_code=409, detail="Space already subscribed for that date")
+
+    if booking_overlaps(db, space.id, start_dt, end_dt):
+        raise HTTPException(status_code=409, detail="Booking overlaps an existing booking")
+
+    if booking_request_overlaps(db, space.id, start_dt, end_dt):
+        raise HTTPException(status_code=409, detail="A booking request already exists for that time")
+
+    is_day_pass = payload.full_day or payload.booking_mode == "day_pass"
+    chosen_kind = (
+        BookingRequestKind.DAILY_BOOKING.value if is_day_pass else BookingRequestKind.HOURLY_BOOKING.value
+    )
+    guest_token = secrets.token_urlsafe(32)
+    token_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+
+    req = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=None,
+        space_id=space.id,
+        start_datetime=start_dt,
+        end_datetime=end_dt,
+        status=BookingRequestStatus.REQUESTED,
+        request_kind=chosen_kind,
+        is_guest_checkout=True,
+        guest_email=str(payload.guest_email),
+        guest_full_name=payload.guest_full_name,
+        guest_phone=payload.guest_phone,
+        guest_company_name=payload.guest_company_name,
+        guest_notes=payload.guest_notes,
+        guest_token=guest_token,
+        guest_token_expires_at=token_expires_at,
+    )
+    req.cancellation_deadline_at = cancellation_deadline_for_request(db, req, space)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    # Price estimate for the confirmation response
+    estimated: int | None = None
+    try:
+        tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
+        tax_rate = tax.rate_percent if tax else None
+        granularity_minutes = 60
+        if location.booking_granularity:
+            granularity_minutes = _granularity_to_minutes(location.booking_granularity)
+        rule = _get_active_pricing_rule(db, space.id)
+        rate_type = rule.rate_type if rule else None
+        rate_amount = rule.rate_amount if rule else None
+        est = estimate_booking_price(
+            start_dt,
+            end_dt,
+            price_hourly=space.price_hourly,
+            price_daily=space.price_daily,
+            price_monthly=space.price_monthly,
+            rate_type=rate_type,
+            rate_amount=rate_amount,
+            booking_mode="day_pass" if is_day_pass else "hourly",
+            full_day=is_day_pass,
+            volume_discounts=_active_volume_discounts(db, space.id),
+            granularity_minutes=granularity_minutes,
+            tax_rate_percent=tax_rate,
+        )
+        estimated = est.total_cents // 100 if est else None
+    except Exception:
+        pass
+
+    send_guest_booking_confirmation(
+        guest_email=str(payload.guest_email),
+        guest_name=payload.guest_full_name,
+        req=req,
+        space=space,
+        location=location,
+    )
+
+    for owner_email in _owner_emails_for_space(db, space):
+        send_owner_booking_request_notification(db, owner_email, req, space, location)
+
+    return GuestBookingRequestOut(
+        public_id=req.public_id,
+        status=req.status,
+        start_datetime=req.start_datetime,
+        end_datetime=req.end_datetime,
+        space_public_id=space.public_id,
+        estimated_amount=estimated,
+    )
+
+
 @router.post("/booking-requests", response_model=BookingRequestOut)
 def create_booking_request(
     payload: BookingRequestCreate,
@@ -448,6 +607,11 @@ def create_booking_request(
         req = _create_membership_purchase_request(payload, user, db)
         space = db.query(Space).filter(Space.id == req.space_id).first()
         send_email(user.email, "Membership request submitted", f"Request {req.public_id} submitted.")
+        if space:
+            location = db.query(Location).filter(Location.id == space.location_id).first()
+            if location:
+                for owner_email in _owner_emails_for_space(db, space):
+                    send_owner_booking_request_notification(db, owner_email, req, space, location)
         return _to_out(req, space, None, db)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
@@ -525,6 +689,10 @@ def create_booking_request(
         return _to_out(req, space, booking, db)
 
     send_email(user.email, "Booking request submitted", f"Request {req.public_id} submitted.")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if location:
+        for owner_email in _owner_emails_for_space(db, space):
+            send_owner_booking_request_notification(db, owner_email, req, space, location)
     return _to_out(req, space, None, db)
 
 
@@ -671,9 +839,18 @@ def approve_booking_request(
         db.commit()
         db.refresh(req)
         after_status = req.status
-    customer = db.query(User).filter(User.id == req.user_id).first()
-    if customer and req.status == BookingRequestStatus.APPROVED:
-        send_email(customer.email, "Booking request approved", f"Request {req.public_id} approved.")
+    if req.status == BookingRequestStatus.APPROVED:
+        if req.is_guest_checkout and req.guest_email:
+            send_guest_approval_email(
+                guest_email=req.guest_email,
+                guest_name=req.guest_full_name or "Guest",
+                req=req,
+                space=space,
+            )
+        else:
+            customer = db.query(User).filter(User.id == req.user_id).first()
+            if customer:
+                send_email(customer.email, "Booking request approved", f"Request {req.public_id} approved.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -743,9 +920,17 @@ def reject_booking_request(
     db.add(req)
     db.commit()
     db.refresh(req)
-    customer = db.query(User).filter(User.id == req.user_id).first()
-    if customer:
-        send_email(customer.email, "Booking request rejected", f"Request {req.public_id} rejected.")
+    if req.is_guest_checkout and req.guest_email:
+        send_guest_rejection_email(
+            guest_email=req.guest_email,
+            guest_name=req.guest_full_name or "Guest",
+            req=req,
+            space=space,
+        )
+    else:
+        customer = db.query(User).filter(User.id == req.user_id).first()
+        if customer:
+            send_email(customer.email, "Booking request rejected", f"Request {req.public_id} rejected.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -783,7 +968,7 @@ def cancel_booking_request(
 
     is_customer = user.role == UserAppRole.CUSTOMER
     if is_customer:
-        if req.user_id != user.id:
+        if req.user_id is None or req.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking request not found")
     else:
         require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
@@ -811,7 +996,10 @@ def cancel_booking_request(
     db.refresh(req)
     if booking:
         db.refresh(booking)
-    customer = db.query(User).filter(User.id == req.user_id).first()
-    if customer:
-        send_email(customer.email, "Booking canceled", f"Request {req.public_id} has been canceled.")
+    if req.is_guest_checkout and req.guest_email:
+        send_email(req.guest_email, "Booking canceled", f"Your booking request {req.public_id} has been canceled.")
+    else:
+        customer = db.query(User).filter(User.id == req.user_id).first()
+        if customer:
+            send_email(customer.email, "Booking canceled", f"Request {req.public_id} has been canceled.")
     return _to_out(req, space, booking, db)

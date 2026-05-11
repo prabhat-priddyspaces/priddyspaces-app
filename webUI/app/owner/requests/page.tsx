@@ -21,6 +21,12 @@ interface BookingRequest {
   estimated_amount: number | null;
   operator_notes: string | null;
   failure_reason: string | null;
+  is_guest_checkout: boolean;
+  guest_email: string | null;
+  guest_full_name: string | null;
+  guest_phone: string | null;
+  guest_company_name: string | null;
+  guest_notes: string | null;
 }
 
 type StatusFilter = "all" | "requested" | "approved" | "payment_failed" | "rejected" | "cancelled";
@@ -164,8 +170,15 @@ export default function OwnerRequestsPage() {
                 <div className="grid gap-4">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="text-sm">
-                      <div className="font-medium text-textPrimary">
-                        Request {request.public_id.slice(0, 8)}...
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-textPrimary">
+                          Request {request.public_id.slice(0, 8)}...
+                        </span>
+                        {request.is_guest_checkout ? (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                            Guest
+                          </span>
+                        ) : null}
                       </div>
                       <div className="text-textSecondary">
                         {new Date(request.start_datetime).toLocaleString()} -{" "}
@@ -223,6 +236,33 @@ export default function OwnerRequestsPage() {
                       </div>
                     ) : null}
                   </div>
+                  {request.is_guest_checkout && (request.guest_email || request.guest_full_name) ? (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                      <div className="mb-2 font-semibold text-amber-800">Guest contact</div>
+                      <div className="grid gap-1 text-amber-900">
+                        {request.guest_full_name ? (
+                          <div><span className="font-medium">Name:</span> {request.guest_full_name}</div>
+                        ) : null}
+                        {request.guest_email ? (
+                          <div>
+                            <span className="font-medium">Email:</span>{" "}
+                            <a href={`mailto:${request.guest_email}`} className="underline hover:no-underline">
+                              {request.guest_email}
+                            </a>
+                          </div>
+                        ) : null}
+                        {request.guest_phone ? (
+                          <div><span className="font-medium">Phone:</span> {request.guest_phone}</div>
+                        ) : null}
+                        {request.guest_company_name ? (
+                          <div><span className="font-medium">Company:</span> {request.guest_company_name}</div>
+                        ) : null}
+                        {request.guest_notes ? (
+                          <div><span className="font-medium">Message:</span> {request.guest_notes}</div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                   {request.status === "payment_failed" ? (
                     <div className="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
                       <div className="font-medium">Payment failed</div>
