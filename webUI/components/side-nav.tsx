@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
-import { clearAccessToken } from "@/lib/auth";
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 
 const nav = [
   { href: "/owner", label: "Dashboard" },
@@ -25,11 +24,10 @@ const nav = [
 ];
 
 export function SideNav() {
-  const router = useRouter();
+  const appSignOut = useAppSignOut();
 
   function handleLogout() {
-    clearAccessToken();
-    router.replace("/sign-in");
+    void appSignOut();
   }
 
   return (

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
-import { clearAccessToken } from "@/lib/auth";
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 
 const baseNav = [
   { href: "/admin", label: "Dashboard" },
@@ -20,8 +20,8 @@ const baseNav = [
 ];
 
 export function AdminSideNav({ platformRole }: { platformRole: string | null }) {
-  const router = useRouter();
   const pathname = usePathname();
+  const appSignOut = useAppSignOut();
   const nav = [...baseNav];
   if (platformRole === "superadmin") {
     nav.push({ href: "/admin/platform-team", label: "Platform Team" });
@@ -48,10 +48,7 @@ export function AdminSideNav({ platformRole }: { platformRole: string | null }) 
         <div className="mt-6 border-t border-border pt-4">
           <button
             type="button"
-            onClick={() => {
-              clearAccessToken();
-              router.replace("/sign-in");
-            }}
+            onClick={() => void appSignOut()}
             className="w-full rounded-sm px-3 py-2 text-left text-sm text-textSecondary hover:bg-surface2"
           >
             Logout

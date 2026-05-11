@@ -2,10 +2,11 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 
 import { CustomerSideNav } from "@/components/customer-side-nav";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { getDefaultRoute, type MeResponse } from "@/lib/me";
 import { useMe } from "@/hooks/useMe";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
@@ -58,7 +59,7 @@ function Shell({
 function ClerkCustomerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
-  const { signOut } = useClerk();
+  const appSignOut = useAppSignOut();
   const { me, loading, error } = useMe();
 
   useEffect(() => {
@@ -88,7 +89,7 @@ function ClerkCustomerLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <Shell me={me} onSignOut={() => signOut(() => router.replace("/sign-in"))}>
+    <Shell me={me} onSignOut={() => void appSignOut()}>
       {children}
     </Shell>
   );

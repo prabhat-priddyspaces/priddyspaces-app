@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { apiFetch } from "@/lib/api";
 import { clearAccessToken, getAccessToken } from "@/lib/auth";
 import { getDashboardHref, type MeResponse } from "@/lib/me";
@@ -14,6 +15,7 @@ type AuthState =
 
 export function PublicTopbar({ subtitle = "Public Marketplace" }: { subtitle?: string }) {
   const [auth, setAuth] = useState<AuthState>({ status: "unknown", me: null });
+  const appSignOut = useAppSignOut();
 
   useEffect(() => {
     const token = getAccessToken();
@@ -30,8 +32,10 @@ export function PublicTopbar({ subtitle = "Public Marketplace" }: { subtitle?: s
   }, []);
 
   function handleSignOut() {
-    clearAccessToken();
-    setAuth({ status: "guest", me: null });
+    void appSignOut({
+      redirectTo: null,
+      onSignedOut: () => setAuth({ status: "guest", me: null }),
+    });
   }
 
   return (

@@ -15,3 +15,20 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/link", () => ({
   default: ({ children }: { children: React.ReactNode }) => children
 }));
+
+vi.mock("@clerk/nextjs", () => ({
+  ClerkProvider: ({ children }: { children: unknown }) => children,
+  SignIn: () => null,
+  SignUp: () => null,
+  useAuth: () => ({
+    isLoaded: true,
+    isSignedIn: false,
+    getToken: vi.fn(() => Promise.resolve(null)),
+  }),
+  useClerk: () => ({
+    signOut: vi.fn((callback?: () => void) => {
+      callback?.();
+      return Promise.resolve();
+    }),
+  }),
+}));
