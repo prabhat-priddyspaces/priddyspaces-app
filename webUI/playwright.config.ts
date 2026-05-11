@@ -8,9 +8,10 @@ const webServerCommand =
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
-  // CI's shared Next.js dev server gets overwhelmed when several specs hit
-  // first-time route compilation in parallel — retry once before failing.
+  fullyParallel: false,
+  workers: 1,
+  // The Next.js dev server compiles routes on demand during E2E. Keep these
+  // specs serial so route compilation and mocked API timing stay deterministic.
   retries: process.env.CI ? 2 : 0,
   timeout: 30_000,
   expect: {

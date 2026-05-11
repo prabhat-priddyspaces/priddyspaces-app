@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useAuth, useSignIn, useSignUp } from "@clerk/expo";
+import { useAuth as useClerkAuth, useSignIn, useSignUp } from "@clerk/expo";
 
 import { API_BASE_URL } from "../constants";
 
@@ -38,9 +38,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSignedIn,
     getToken: clerkGetToken,
     signOut: clerkSignOut,
-  } = useAuth();
-  const { signIn: clerkSignIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
-  const { signUp: clerkSignUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
+  } = useClerkAuth();
+  const {
+    signIn: clerkSignIn,
+    setActive: setSignInActive,
+    isLoaded: signInLoaded,
+  } = useSignIn() as unknown as {
+    signIn: { create: (payload: { identifier: string; password: string }) => Promise<any> } | null;
+    setActive: (payload: { session: string | null }) => Promise<void>;
+    isLoaded: boolean;
+  };
+  const {
+    signUp: clerkSignUp,
+    setActive: setSignUpActive,
+    isLoaded: signUpLoaded,
+  } = useSignUp() as unknown as {
+    signUp:
+      | {
+          create: (payload: {
+            emailAddress: string;
+            password: string;
+            firstName: string;
+            lastName: string;
+          }) => Promise<any>;
+          prepareEmailAddressVerification: (payload: { strategy: "email_code" }) => Promise<void>;
+        }
+      | null;
+    setActive: (payload: { session: string | null }) => Promise<void>;
+    isLoaded: boolean;
+  };
 
   const [state, setState] = useState<AuthState>({ token: null, me: null, loading: true });
 

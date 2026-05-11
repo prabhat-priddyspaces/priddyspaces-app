@@ -15,6 +15,7 @@ const baseNav = [
   { href: "/admin/listings", label: "Listings" },
   { href: "/admin/bookings", label: "Bookings" },
   { href: "/admin/payments", label: "Payments" },
+  { href: "/admin/assistant-quality", label: "Assistant Quality" },
   { href: "/admin/audit-logs", label: "Audit Logs" },
 ];
 

@@ -20,6 +20,7 @@ const nav = [
   { href: "/owner/payments", label: "Payments" },
   { href: "/owner/invoices", label: "Invoices" },
   { href: "/owner/settings/payments", label: "Payment Settings" },
+  { href: "/owner/settings/assistant-policies", label: "Assistant Policies" },
   { href: "/owner/settings", label: "Settings" },
 ];
 

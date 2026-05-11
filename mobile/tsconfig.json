@@ -2,7 +2,7 @@
   "compilerOptions": {
     "strict": true,
     "target": "ES2020",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "jsx": "react-native",
     "noEmit": true
   },
