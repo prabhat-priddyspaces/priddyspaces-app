@@ -88,12 +88,18 @@ jobs:
           # derived from any existing entry in `secrets` (all secrets live in
           # the same /priddyspaces/<env>/app/config blob), so no extra IAM
           # permissions are needed beyond what the task already has.
-          jq --arg IMAGE_URI "$IMAGE_URI" '
+          jq --arg IMAGE_URI "$IMAGE_URI" --arg ENVIRONMENT "${{ inputs.environment }}" '
             def base_arn:
               (.[0].valueFrom // "") | split(":") | .[0:7] | join(":");
             def ensure(name; baseArn):
               if any(.[]; .name == name) then .
               else . + [{name: name, valueFrom: (baseArn + ":" + name + "::")}]
+              end;
+            def ensure_env(name; value):
+              if any(.[]; .name == name) then
+                map(if .name == name then .value = value else . end)
+              else
+                . + [{name: name, value: value}]
               end;
             del(
               .taskDefinitionArn,
@@ -114,6 +120,9 @@ jobs:
                       | ensure("CLERK_SECRET_KEY"; $arn)
                       | ensure("CLERK_WEBHOOK_SECRET"; $arn)
                     )
+                  | if $ENVIRONMENT == "dev" then
+                      .environment = ((.environment // []) | ensure_env("ASSISTANT_ENABLED"; "true"))
+                    else . end
                 else . end
               )
           ' taskdef.json > taskdef-updated.json
