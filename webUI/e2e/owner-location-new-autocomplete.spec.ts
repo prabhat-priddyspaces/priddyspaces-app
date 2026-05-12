@@ -22,7 +22,7 @@ test("owner location new: address autocomplete loads and binds without warnings"
       return;
     }
     if (key === "GET /api/orgs") {
-      await json(route, [{ public_id: "org_1", name: "Skyline Works" }]);
+      await json(route, []);
       return;
     }
     if (url.pathname.startsWith("/api/amenities") || url.pathname.startsWith("/api/orgs/")) {
@@ -48,14 +48,21 @@ test("owner location new: address autocomplete loads and binds without warnings"
         window.google.maps = window.google.maps || {};
         window.google.maps.places = window.google.maps.places || {};
         var calls = (window.__priddyAutocompleteCalls = []);
+        var instances = (window.__priddyAutocompleteInstances = []);
         window.google.maps.places.Autocomplete = function (input, opts) {
           calls.push({ input: input.id, opts: opts });
           this._listeners = {};
+          this._place = {};
           this.addListener = function (event, handler) {
             this._listeners[event] = handler;
             return { remove: function () {} };
           };
-          this.getPlace = function () { return {}; };
+          this.getPlace = function () { return this._place; };
+          instances.push(this);
+        };
+        window.__priddySelectFirstPlace = function (place) {
+          instances[0]._place = place;
+          instances[0]._listeners.place_changed();
         };
         window["${callbackName}"] && window["${callbackName}"]();
       })();
@@ -67,6 +74,8 @@ test("owner location new: address autocomplete loads and binds without warnings"
 
   const addressInput = page.locator("input#address");
   await expect(addressInput).toBeVisible();
+  const orgNameInput = page.getByLabel("New organization name");
+  const locationNameInput = page.getByLabel("Location name");
 
   // The two failure-mode strings the component renders. Neither should appear.
   const sdkFailure = page.getByText("Could not load Google Maps", { exact: false });
@@ -80,5 +89,38 @@ test("owner location new: address autocomplete loads and binds without warnings"
   );
   expect(autocompleteCalls.length, "Autocomplete should have been instantiated").toBeGreaterThan(0);
   expect(autocompleteCalls[0].input).toBe("address");
-});
 
+  await orgNameInput.fill("Priddy spaces");
+  await locationNameInput.fill("prabhat new york1");
+  await addressInput.fill("Empire State");
+
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        __priddySelectFirstPlace: (place: unknown) => void;
+      }
+    ).__priddySelectFirstPlace({
+      address_components: [
+        { long_name: "20", short_name: "20", types: ["street_number"] },
+        { long_name: "West 34th Street", short_name: "W 34th St", types: ["route"] },
+        { long_name: "New York", short_name: "New York", types: ["locality"] },
+        { long_name: "New York", short_name: "NY", types: ["administrative_area_level_1"] },
+        { long_name: "United States", short_name: "US", types: ["country"] },
+        { long_name: "10001", short_name: "10001", types: ["postal_code"] },
+      ],
+      formatted_address: "20 W 34th St., New York, NY 10001, USA",
+      geometry: {
+        location: {
+          lat: () => 40.7484,
+          lng: () => -73.9857,
+        },
+      },
+    });
+  });
+
+  await expect(orgNameInput).toHaveValue("Priddy spaces");
+  await expect(locationNameInput).toHaveValue("prabhat new york1");
+  await expect(addressInput).toHaveValue("20 West 34th Street");
+  await expect(page.getByText("New York, NY, 10001", { exact: false })).toBeVisible();
+  await expect(page.getByText("40.7484, -73.9857", { exact: false })).toBeVisible();
+});

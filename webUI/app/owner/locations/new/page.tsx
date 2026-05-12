@@ -217,7 +217,12 @@ export default function NewLocation() {
               <select
                 id="org"
                 value={form.organization_public_id}
-                onChange={(e) => setForm({ ...form, organization_public_id: e.target.value })}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    organization_public_id: e.target.value,
+                  }))
+                }
                 className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
                 disabled={loadingOrgs}
               >
@@ -235,7 +240,12 @@ export default function NewLocation() {
                 <Input
                   id="organization_name"
                   value={form.organization_name}
-                  onChange={(e) => setForm({ ...form, organization_name: e.target.value })}
+                  onChange={(e) =>
+                    setForm((current) => ({
+                      ...current,
+                      organization_name: e.target.value,
+                    }))
+                  }
                   placeholder="Priddyspaces Downtown"
                 />
               </div>
@@ -245,7 +255,12 @@ export default function NewLocation() {
               <Input
                 id="name"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: e.target.value,
+                  }))
+                }
                 placeholder="Downtown HQ"
               />
             </div>
@@ -254,7 +269,12 @@ export default function NewLocation() {
               <PlaceAutocomplete
                 id="address"
                 value={form.address}
-                onChange={(value) => setForm({ ...form, address: value })}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    address: value,
+                  }))
+                }
                 onSelect={applyPlace}
                 placeholder="Start typing an address…"
               />
@@ -279,7 +299,12 @@ export default function NewLocation() {
                   <Input
                     id="city"
                     value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        city: e.target.value,
+                      }))
+                    }
                     placeholder="San Francisco"
                   />
                 </div>
@@ -289,7 +314,12 @@ export default function NewLocation() {
                     <Input
                       id="state"
                       value={form.state}
-                      onChange={(e) => setForm({ ...form, state: e.target.value })}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          state: e.target.value,
+                        }))
+                      }
                       placeholder="CA"
                     />
                   </div>
@@ -298,7 +328,12 @@ export default function NewLocation() {
                     <Input
                       id="postal_code"
                       value={form.postal_code}
-                      onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          postal_code: e.target.value,
+                        }))
+                      }
                       placeholder="94105"
                     />
                   </div>
@@ -308,7 +343,12 @@ export default function NewLocation() {
                   <Input
                     id="neighborhood"
                     value={form.neighborhood}
-                    onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        neighborhood: e.target.value,
+                      }))
+                    }
                     placeholder="SoMa"
                   />
                 </div>
@@ -318,7 +358,12 @@ export default function NewLocation() {
                     <Input
                       id="lat"
                       value={form.lat}
-                      onChange={(e) => setForm({ ...form, lat: e.target.value })}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          lat: e.target.value,
+                        }))
+                      }
                       placeholder="37.7749"
                     />
                   </div>
@@ -327,7 +372,12 @@ export default function NewLocation() {
                     <Input
                       id="lng"
                       value={form.lng}
-                      onChange={(e) => setForm({ ...form, lng: e.target.value })}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          lng: e.target.value,
+                        }))
+                      }
                       placeholder="-122.4194"
                     />
                   </div>

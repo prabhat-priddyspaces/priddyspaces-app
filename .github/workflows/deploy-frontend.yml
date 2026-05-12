@@ -83,6 +83,14 @@ jobs:
           set -euo pipefail
           aws s3 sync webUI/out "s3://${{ steps.meta.outputs.frontend_bucket }}" --delete
 
+      - name: Upload extensionless route aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          node webUI/scripts/static-route-aliases.js upload \
+            webUI/out \
+            "s3://${{ steps.meta.outputs.frontend_bucket }}"
+
       - name: Invalidate CloudFront cache
         shell: bash
         run: |

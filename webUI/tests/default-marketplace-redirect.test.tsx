@@ -2,7 +2,10 @@ import React from "react";
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DefaultMarketplaceRedirect } from "../components/default-marketplace-redirect";
+import {
+  DefaultMarketplaceRedirect,
+  defaultMarketplaceFallbackHref,
+} from "../components/default-marketplace-redirect";
 
 const replaceMock = vi.hoisted(() => vi.fn());
 
@@ -53,7 +56,13 @@ describe("DefaultMarketplaceRedirect", () => {
     render(<DefaultMarketplaceRedirect />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/spaces.html");
+      expect(replaceMock).toHaveBeenCalledWith("/spaces");
     });
+  });
+
+  it("does not send protected static-export misses to the public marketplace", () => {
+    expect(defaultMarketplaceFallbackHref("/owner/locations/new", "")).toBeNull();
+    expect(defaultMarketplaceFallbackHref("/admin/members", "")).toBeNull();
+    expect(defaultMarketplaceFallbackHref("/member/requests", "")).toBeNull();
   });
 });
