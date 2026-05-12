@@ -1,6 +1,6 @@
 """instant booking inventory and payment ledger
 
-Revision ID: 0035_instant_booking_inventory_payments
+Revision ID: 0035_instant_booking_payments
 Revises: 0033_assistant_v1
 Create Date: 2026-05-12
 """
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0035_instant_booking_inventory_payments"
+revision = "0035_instant_booking_payments"
 down_revision = "0033_assistant_v1"
 branch_labels = None
 depends_on = None
