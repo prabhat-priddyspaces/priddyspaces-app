@@ -27,7 +27,7 @@ def booking_request_overlaps(db: Session, space_id: int, start: datetime, end: d
         db.query(BookingRequest)
         .filter(
             BookingRequest.space_id == space_id,
-            BookingRequest.status.in_([BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED]),
+            BookingRequest.status == BookingRequestStatus.REQUESTED,
             BookingRequest.start_datetime < end,
             BookingRequest.end_datetime > start
         )

@@ -636,7 +636,11 @@ def test_public_marketplace_space_detail_returns_listing_content(db_session, cli
         "Fast, Secure Wi-Fi",
         "Dedicated On-Site Staff",
     ]
-    assert body["cancellation_policy"] == {"cancel_window_hours": 24, "refund_percent": 100}
+    assert body["cancellation_policy"] == {
+        "cancel_window_hours": 24,
+        "refund_percent": 100,
+        "tiers": [{"min_hours_before_start": 24, "refund_percent": 100}],
+    }
     assert body["support_contacts"] == [
         {"name": "Denis Khakovsky", "title": "Owner"},
         {"name": "Brian Mina", "title": "Admin"},

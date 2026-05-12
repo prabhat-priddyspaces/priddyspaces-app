@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.cancellation_policy import CancellationPolicy
+from app.models.cancellation_policy_tier import CancellationPolicyTier
 from app.models.enums import AvailabilityStatus, LocationStatus, OrganizationReviewStatus, SpaceType, SpaceVisibility, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
@@ -809,6 +810,14 @@ def get_public_space_detail(
         .order_by(CancellationPolicy.id.desc())
         .first()
     )
+    cancellation_tiers = []
+    if cancellation_policy:
+        cancellation_tiers = (
+            db.query(CancellationPolicyTier)
+            .filter(CancellationPolicyTier.cancellation_policy_id == cancellation_policy.id)
+            .order_by(CancellationPolicyTier.min_hours_before_start.desc())
+            .all()
+        )
     contact_rows = (
         db.query(OrganizationMember, User)
         .join(User, User.id == OrganizationMember.user_id)
@@ -847,6 +856,8 @@ def get_public_space_detail(
             "availability_status": space.availability_status.value,
             "availability_start_time": _serialize_space_time(space.availability_start_time),
             "availability_end_time": _serialize_space_time(space.availability_end_time),
+            "buffer_before_minutes": space.buffer_before_minutes or 0,
+            "buffer_after_minutes": space.buffer_after_minutes or 0,
             "price_daily": space.price_daily,
             "price_monthly": space.price_monthly,
             "hourly_price": min(hourly_prices) if hourly_prices else None,
@@ -886,6 +897,19 @@ def get_public_space_detail(
             {
                 "cancel_window_hours": cancellation_policy.cancel_window_hours,
                 "refund_percent": cancellation_policy.refund_percent,
+                "tiers": [
+                    {
+                        "min_hours_before_start": tier.min_hours_before_start,
+                        "refund_percent": tier.refund_percent,
+                    }
+                    for tier in cancellation_tiers
+                ]
+                or [
+                    {
+                        "min_hours_before_start": cancellation_policy.cancel_window_hours,
+                        "refund_percent": cancellation_policy.refund_percent,
+                    }
+                ],
             }
             if cancellation_policy
             else None

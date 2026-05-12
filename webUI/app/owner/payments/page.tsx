@@ -25,15 +25,38 @@ interface Invoice {
   payment_id: number | null;
 }
 
+interface Organization {
+  public_id: string;
+  name: string;
+}
+
+interface PayoutSummary {
+  gross_cents: number;
+  tax_cents: number;
+  refunded_cents: number;
+  platform_fee_cents: number;
+  owner_net_cents: number;
+  succeeded_count: number;
+  failed_count: number;
+}
+
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
 });
 
+const currencyFromCents = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
 export default function OwnerPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [orgId, setOrgId] = useState("");
+  const [payoutSummary, setPayoutSummary] = useState<PayoutSummary | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -41,13 +64,31 @@ export default function OwnerPaymentsPage() {
     Promise.all([
       apiFetch<Payment[]>("/api/payments", { method: "GET" }, token).catch(() => []),
       apiFetch<Invoice[]>("/api/invoices", { method: "GET" }, token).catch(() => []),
+      apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token).catch(() => []),
     ])
-      .then(([paymentsResp, invoicesResp]) => {
+      .then(([paymentsResp, invoicesResp, orgsResp]) => {
         setPayments(paymentsResp);
         setInvoices(invoicesResp);
+        setOrgs(orgsResp);
+        setOrgId((current) => current || orgsResp[0]?.public_id || "");
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payments"));
   }, []);
+
+  useEffect(() => {
+    if (!orgId) {
+      setPayoutSummary(null);
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    apiFetch<PayoutSummary>(
+      `/api/owner/payout-summary?organization_public_id=${encodeURIComponent(orgId)}`,
+      { method: "GET" },
+      token,
+    )
+      .then(setPayoutSummary)
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payout summary"));
+  }, [orgId]);
 
   const invoiceByPaymentId = useMemo(() => {
     const map = new Map<number, Invoice>();
@@ -82,6 +123,21 @@ export default function OwnerPaymentsPage() {
             Track booking and membership charges, including failed renewals from Stripe webhooks.
           </p>
         </div>
+        {orgs.length > 1 ? (
+          <div className="max-w-sm">
+            <select
+              value={orgId}
+              onChange={(event) => setOrgId(event.target.value)}
+              className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+            >
+              {orgs.map((org) => (
+                <option key={org.public_id} value={org.public_id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         {message ? <div className="text-sm text-textMuted">{message}</div> : null}
 
         <div className="grid gap-4 md:grid-cols-4">
@@ -92,6 +148,32 @@ export default function OwnerPaymentsPage() {
             </Card>
           ))}
         </div>
+
+        <Card className="grid gap-3 p-4">
+          <div>
+            <div className="text-sm font-semibold text-textPrimary">Payout ledger summary</div>
+            <div className="text-xs text-textMuted">Internal payment ledger, net of recorded refunds.</div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-5">
+            {[
+              ["Gross", payoutSummary?.gross_cents ?? 0],
+              ["Tax", payoutSummary?.tax_cents ?? 0],
+              ["Refunded", payoutSummary?.refunded_cents ?? 0],
+              ["Platform fees", payoutSummary?.platform_fee_cents ?? 0],
+              ["Owner net", payoutSummary?.owner_net_cents ?? 0],
+            ].map(([label, cents]) => (
+              <div key={label} className="rounded-md border border-border bg-surface2 p-3">
+                <div className="text-xs text-textMuted">{label}</div>
+                <div className="mt-1 text-lg font-semibold text-textPrimary">
+                  {currencyFromCents.format(Number(cents) / 100)}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-textMuted">
+            Successful ledger entries: {payoutSummary?.succeeded_count ?? 0} • Failed entries: {payoutSummary?.failed_count ?? 0}
+          </div>
+        </Card>
 
         <Card className="p-4">
           {payments.length === 0 ? (

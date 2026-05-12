@@ -366,6 +366,8 @@ def get_marketplace_space_availability(
         granularity_minutes=granularity,
         availability_start_time=_serialize_time(space.availability_start_time),
         availability_end_time=_serialize_time(space.availability_end_time),
+        buffer_before_minutes=space.buffer_before_minutes or 0,
+        buffer_after_minutes=space.buffer_after_minutes or 0,
         hourly_price=hourly_price,
         daily_price=space.price_daily,
         days=days,

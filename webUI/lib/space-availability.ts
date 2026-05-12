@@ -232,3 +232,34 @@ export function todayIsoInZone(timeZone: string): string {
     return todayIso();
   }
 }
+
+function timeZoneOffsetMinutes(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const value = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const match = value.match(/^GMT(?:(?<sign>[+-])(?<hours>\d{1,2})(?::(?<minutes>\d{2}))?)?$/);
+  if (!match?.groups?.sign) return 0;
+  const hours = Number(match.groups.hours || 0);
+  const minutes = Number(match.groups.minutes || 0);
+  const sign = match.groups.sign === "-" ? -1 : 1;
+  return sign * (hours * 60 + minutes);
+}
+
+export function zonedDateTimeToUtc(dateIso: string, timeValue: string, timeZone: string): Date {
+  const [year, month, day] = dateIso.split("-").map((part) => Number(part));
+  const [hour, minute] = timeValue.split(":").map((part) => Number(part));
+  if (![year, month, day, hour, minute].every((value) => Number.isFinite(value))) {
+    return new Date(Number.NaN);
+  }
+
+  const localWallMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let utcMs = localWallMs;
+  for (let i = 0; i < 2; i += 1) {
+    utcMs = localWallMs - timeZoneOffsetMinutes(new Date(utcMs), timeZone) * 60_000;
+  }
+  return new Date(utcMs);
+}

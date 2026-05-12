@@ -11,6 +11,9 @@ type BookingLike = {
   start_datetime: string;
   end_datetime: string;
   status: string;
+  payment_status?: string | null;
+  refund_amount_cents?: number | null;
+  refunded_amount_cents?: number | null;
   estimated_amount?: number | null;
   booking_public_id?: string | null;
 };
@@ -87,10 +90,16 @@ export function BookingDetailScreen() {
         <>
           <Text style={styles.title}>Booking</Text>
           <Text style={styles.subtitle}>Status: {booking.status}</Text>
+          {booking.payment_status ? <Text style={styles.subtitle}>Payment: {booking.payment_status}</Text> : null}
           <Text style={styles.subtitle}>Start: {booking.start_datetime}</Text>
           <Text style={styles.subtitle}>End: {booking.end_datetime}</Text>
           {booking.estimated_amount != null ? (
             <Text style={styles.subtitle}>Estimated: ${booking.estimated_amount}</Text>
+          ) : null}
+          {booking.refund_amount_cents != null || booking.refunded_amount_cents != null ? (
+            <Text style={styles.subtitle}>
+              Refund: ${((booking.refund_amount_cents ?? booking.refunded_amount_cents ?? 0) / 100).toFixed(2)}
+            </Text>
           ) : null}
           {booking.status === "approved" && booking.booking_public_id ? (
             <TouchableOpacity style={styles.primaryButton} onPress={handlePay} disabled={paying}>

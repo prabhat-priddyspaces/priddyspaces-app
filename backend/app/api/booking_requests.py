@@ -1,3 +1,4 @@
+import json
 import secrets
 from datetime import timedelta
 
@@ -9,10 +10,12 @@ from app.core.config import settings
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
 from app.models.booking import Booking
+from app.models.booking_series import BookingSeries
 from app.models.enums import (
     BookingRequestKind,
     BookingRequestStatus,
     BookingStatus,
+    SpaceType,
     SubscriptionStatusEnum,
     UserAppRole,
     UserRole,
@@ -31,6 +34,7 @@ from app.models.subscription import Subscription
 from app.models.tax_config import TaxConfig
 from app.models.feature_flag import FeatureFlag
 from app.models.user import User
+from sqlalchemy.exc import IntegrityError
 from app.schemas.booking_request import (
     BookingPaymentSummary,
     BookingRequestCreate,
@@ -43,6 +47,12 @@ from app.schemas.booking_request import (
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids, require_location_roles
 from app.services.availability import booking_overlaps, booking_request_overlaps, subscription_overlaps
+from app.services.booking_inventory import (
+    create_pending_booking_hold,
+    expand_occurrences,
+    instant_booking_allowed,
+    validate_occurrences_available,
+)
 from app.services.booking_modes import RECURRING_BOOKING_MODES
 from app.services.booking_payments import cancellation_deadline_for_request, charge_booking_request, refund_booking_payment
 from app.services.meeting_room_balance import (
@@ -195,6 +205,10 @@ def _to_out(
         )
         estimated = estimate.total_cents // 100 if estimate else None
     payment_method_public_id = None
+    booking_series_public_id = None
+    if db and req.booking_series_id:
+        series = db.query(BookingSeries).filter(BookingSeries.id == req.booking_series_id).first()
+        booking_series_public_id = series.public_id if series else None
     if db and req.customer_owner_payment_method_id:
         payment_method = (
             db.query(CustomerOwnerPaymentMethod)
@@ -222,6 +236,18 @@ def _to_out(
                 attempted_at=last_payment.created_at,
             )
             failure_reason = last_payment.failure_reason
+    payment_breakdown = None
+    refund_policy_snapshot = None
+    if req.pricing_snapshot:
+        try:
+            payment_breakdown = json.loads(req.pricing_snapshot)
+        except json.JSONDecodeError:
+            payment_breakdown = None
+    if req.refund_policy_snapshot:
+        try:
+            refund_policy_snapshot = json.loads(req.refund_policy_snapshot)
+        except json.JSONDecodeError:
+            refund_policy_snapshot = None
     return BookingRequestOut(
         public_id=req.public_id,
         space_id=req.space_id,
@@ -240,6 +266,15 @@ def _to_out(
         cancellation_deadline_at=req.cancellation_deadline_at,
         payment_authorization_consent_at=req.payment_authorization_consent_at,
         operator_notes=req.operator_notes,
+        instant_booking=req.instant_booking or False,
+        booking_series_public_id=booking_series_public_id,
+        occurrence_count=req.occurrence_count or 1,
+        recurrence_frequency=req.recurrence_frequency,
+        recurrence_interval=req.recurrence_interval,
+        recurrence_count=req.recurrence_count,
+        recurrence_until_date=req.recurrence_until_date,
+        payment_breakdown=payment_breakdown,
+        refund_policy_snapshot=refund_policy_snapshot,
         price_daily=price_daily,
         price_monthly=price_monthly,
         price_hourly=price_hourly,
@@ -617,19 +652,39 @@ def create_booking_request(
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
-
-    if subscription_overlaps(db, space.id, payload.start_datetime.date(), payload.end_datetime.date()):
-        raise HTTPException(status_code=409, detail="Space already subscribed for that date")
-
-    if booking_overlaps(db, space.id, payload.start_datetime, payload.end_datetime):
-        raise HTTPException(status_code=409, detail="Booking overlaps existing booking")
-
-    if booking_request_overlaps(db, space.id, payload.start_datetime, payload.end_datetime):
-        raise HTTPException(status_code=409, detail="Booking request already exists for that time")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
 
     owner_payment_setting = None
     payment_method = None
     consent_at = None
+    is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
+    mode_requested = payload.booking_mode is not None or is_day_pass
+    instant = mode_requested and instant_booking_allowed(space, booking_mode=payload.booking_mode, full_day=is_day_pass)
+    if _instant_booking_enabled(db, space) and space.space_type not in {SpaceType.PRIVATE_OFFICE, SpaceType.SUITE}:
+        instant = True
+    chosen_kind = (
+        BookingRequestKind.DAILY_BOOKING.value
+        if is_day_pass
+        else BookingRequestKind.HOURLY_BOOKING.value
+    )
+    occurrences = expand_occurrences(
+        start_datetime=payload.start_datetime,
+        end_datetime=payload.end_datetime,
+        location=location,
+        space=space,
+        recurrence_frequency=payload.recurrence.frequency if payload.recurrence else None,
+        recurrence_interval=payload.recurrence.interval if payload.recurrence else None,
+        recurrence_count=payload.recurrence.count if payload.recurrence else None,
+        recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
+    )
+
+    # Lock the space row while validating and creating durable holds. This keeps
+    # app-level checks deterministic; PostgreSQL also enforces active overlap.
+    db.query(Space).filter(Space.id == space.id).with_for_update().first()
+    validate_occurrences_available(db, space=space, location=location, occurrences=occurrences)
+
     if settings.PAYMENT_METHOD_REQUIRED_FOR_REQUEST:
         owner_payment_setting, payment_method, consent_at = require_payment_method_for_request(
             db,
@@ -639,55 +694,80 @@ def create_booking_request(
             payload.payment_authorization_consent,
         )
 
-    instant = _instant_booking_enabled(db, space)
-    is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
-    chosen_kind = (
-        BookingRequestKind.DAILY_BOOKING.value
-        if is_day_pass
-        else BookingRequestKind.HOURLY_BOOKING.value
-    )
     req = BookingRequest(
         tenant_id=space.tenant_id,
         user_id=user.id,
         space_id=space.id,
-        start_datetime=payload.start_datetime,
-        end_datetime=payload.end_datetime,
-        status=BookingRequestStatus.APPROVED if instant and not settings.PAYMENT_CHARGE_ON_APPROVAL else BookingRequestStatus.REQUESTED,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
+        status=BookingRequestStatus.REQUESTED,
         owner_payment_setting_id=owner_payment_setting.id if owner_payment_setting else None,
         payment_provider=owner_payment_setting.provider if owner_payment_setting else None,
         customer_owner_payment_method_id=payment_method.id if payment_method else None,
         payment_status="not_charged" if owner_payment_setting else None,
         payment_authorization_consent_at=consent_at,
         request_kind=chosen_kind,
+        instant_booking=instant,
+        recurrence_frequency=payload.recurrence.frequency if payload.recurrence else None,
+        recurrence_interval=payload.recurrence.interval if payload.recurrence else None,
+        recurrence_count=payload.recurrence.count if payload.recurrence else None,
+        recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
+        occurrence_count=len(occurrences),
     )
     req.cancellation_deadline_at = cancellation_deadline_for_request(db, req, space)
     db.add(req)
-    db.commit()
-    db.refresh(req)
-    if instant and settings.PAYMENT_CHARGE_ON_APPROVAL:
-        req, booking, _payment = charge_booking_request(db, req)
-        if req.status == BookingRequestStatus.APPROVED:
-            send_email(user.email, "Booking approved", f"Request {req.public_id} approved instantly.")
-        return _to_out(req, space, booking, db)
-    if instant:
-        booking = Booking(
-            user_id=req.user_id,
-            space_id=req.space_id,
-            tenant_id=req.tenant_id,
-            start_datetime=req.start_datetime,
-            end_datetime=req.end_datetime,
-            status=BookingStatus.PENDING
-        )
-        db.add(booking)
-        db.commit()
-        db.refresh(booking)
-        req.booking_id = booking.id
-        db.add(req)
+    try:
+        db.flush()
+        if instant:
+            series = None
+            if len(occurrences) > 1:
+                series = BookingSeries(
+                    tenant_id=space.tenant_id,
+                    user_id=user.id,
+                    space_id=space.id,
+                    booking_request_id=req.id,
+                    recurrence_frequency=payload.recurrence.frequency if payload.recurrence else "single",
+                    recurrence_interval=payload.recurrence.interval if payload.recurrence else 1,
+                    occurrence_count=len(occurrences),
+                    first_start_datetime=occurrences[0].start_datetime,
+                    last_end_datetime=occurrences[-1].end_datetime,
+                    status="pending_payment",
+                )
+                db.add(series)
+                db.flush()
+                req.booking_series_id = series.id
+            first_booking = None
+            for occurrence in occurrences:
+                booking_hold = create_pending_booking_hold(
+                    db,
+                    user_id=user.id,
+                    space=space,
+                    occurrence=occurrence,
+                    booking_request_id=req.id,
+                    booking_series_id=series.id if series else None,
+                )
+                if first_booking is None:
+                    first_booking = booking_hold
+            if first_booking:
+                req.booking_id = first_booking.id
+            db.add(req)
         db.commit()
         db.refresh(req)
-        send_email(user.email, "Booking approved", f"Request {req.public_id} approved instantly.")
-        return _to_out(req, space, booking, db)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Booking overlaps existing booking")
 
+    if instant:
+        req, booking, _payment = charge_booking_request(db, req)
+        if req.status == BookingRequestStatus.APPROVED:
+            if req.booking_series_id:
+                series = db.query(BookingSeries).filter(BookingSeries.id == req.booking_series_id).first()
+                if series:
+                    series.status = "active"
+                    db.add(series)
+                    db.commit()
+            send_email(user.email, "Booking confirmed", f"Request {req.public_id} was booked and charged.")
+        return _to_out(req, space, booking, db)
     send_email(user.email, "Booking request submitted", f"Request {req.public_id} submitted.")
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if location:
@@ -812,6 +892,31 @@ def approve_booking_request(
         booking = None
     elif settings.PAYMENT_CHARGE_ON_APPROVAL:
         before_status = req.status
+        if not req.booking_id:
+            occurrences = expand_occurrences(
+                start_datetime=req.start_datetime,
+                end_datetime=req.end_datetime,
+                location=location,
+                space=space,
+            )
+            validate_occurrences_available(
+                db,
+                space=space,
+                location=location,
+                occurrences=occurrences,
+                ignore_booking_request_id=req.id,
+            )
+            booking_hold = create_pending_booking_hold(
+                db,
+                user_id=req.user_id,
+                space=space,
+                occurrence=occurrences[0],
+                booking_request_id=req.id,
+            )
+            req.booking_id = booking_hold.id
+            db.add(req)
+            db.commit()
+            db.refresh(req)
         req, booking, payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
         after_status = req.status
     else:
@@ -823,12 +928,28 @@ def approve_booking_request(
         db.commit()
         db.refresh(req)
 
+        occurrences = expand_occurrences(
+            start_datetime=req.start_datetime,
+            end_datetime=req.end_datetime,
+            location=location,
+            space=space,
+        )
+        validate_occurrences_available(
+            db,
+            space=space,
+            location=location,
+            occurrences=occurrences,
+            ignore_booking_request_id=req.id,
+        )
         booking = Booking(
             user_id=req.user_id,
             space_id=req.space_id,
             tenant_id=req.tenant_id,
             start_datetime=req.start_datetime,
             end_datetime=req.end_datetime,
+            inventory_start_datetime=occurrences[0].inventory_start_datetime,
+            inventory_end_datetime=occurrences[0].inventory_end_datetime,
+            booking_request_id=req.id,
             status=BookingStatus.PENDING
         )
         db.add(booking)
@@ -889,6 +1010,26 @@ def retry_booking_request_payment(
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
     if req.status != BookingRequestStatus.PAYMENT_FAILED:
         raise HTTPException(status_code=400, detail="Request is not payment failed")
+    existing_booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+    if not existing_booking or existing_booking.status == BookingStatus.CANCELED:
+        occurrences = expand_occurrences(
+            start_datetime=req.start_datetime,
+            end_datetime=req.end_datetime,
+            location=location,
+            space=space,
+        )
+        validate_occurrences_available(db, space=space, location=location, occurrences=occurrences)
+        booking_hold = create_pending_booking_hold(
+            db,
+            user_id=req.user_id,
+            space=space,
+            occurrence=occurrences[0],
+            booking_request_id=req.id,
+        )
+        req.booking_id = booking_hold.id
+        db.add(req)
+        db.commit()
+        db.refresh(req)
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
     return _to_out(req, space, booking, db)
 
@@ -978,9 +1119,6 @@ def cancel_booking_request(
 
     now = datetime.now(timezone.utc)
     booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
-    if is_customer and booking and req.cancellation_deadline_at and now > _as_utc(req.cancellation_deadline_at):
-        raise HTTPException(status_code=400, detail="Cancellation deadline has passed")
-
     if booking:
         payment = refund_booking_payment(db, req=req, booking=booking)
         booking.status = BookingStatus.CANCELED

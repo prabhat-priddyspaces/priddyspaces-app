@@ -14,6 +14,8 @@ class SpaceCreate(BaseModel):
     price_hourly: int | None = None
     availability_start_time: time | None = None
     availability_end_time: time | None = None
+    buffer_before_minutes: int = 0
+    buffer_after_minutes: int = 0
     visibility: SpaceVisibility = SpaceVisibility.PUBLIC
     amenities: str | None = None
 
@@ -29,6 +31,8 @@ class SpaceOut(BaseModel):
     availability_status: AvailabilityStatus
     availability_start_time: time | None
     availability_end_time: time | None
+    buffer_before_minutes: int = 0
+    buffer_after_minutes: int = 0
     visibility: SpaceVisibility
     amenities: str | None
     model_config = ConfigDict(from_attributes=True)
@@ -44,5 +48,7 @@ class SpaceUpdate(BaseModel):
     availability_status: AvailabilityStatus | None = None
     availability_start_time: time | None = None
     availability_end_time: time | None = None
+    buffer_before_minutes: int | None = None
+    buffer_after_minutes: int | None = None
     visibility: SpaceVisibility | None = None
     amenities: str | None = None

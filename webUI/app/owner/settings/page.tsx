@@ -59,6 +59,12 @@ interface CancellationPolicy {
   space_type: string;
   cancel_window_hours: number;
   refund_percent: number;
+  tiers: Array<{
+    public_id?: string | null;
+    min_hours_before_start: number;
+    refund_percent: number;
+    sort_order?: number;
+  }>;
 }
 
 interface SubscriptionPlan {
@@ -109,8 +115,11 @@ export default function OwnerSettingsPage() {
   });
   const [policyForm, setPolicyForm] = useState({
     space_type: "conference_room",
-    cancel_window_hours: "24",
-    refund_percent: "0",
+    tiers: [
+      { min_hours_before_start: "48", refund_percent: "100" },
+      { min_hours_before_start: "24", refund_percent: "50" },
+      { min_hours_before_start: "0", refund_percent: "0" },
+    ],
   });
   const [planForm, setPlanForm] = useState({
     name: "",
@@ -427,17 +436,38 @@ export default function OwnerSettingsPage() {
     await loadFeatureFlags();
   }
 
+  function updatePolicyTier(
+    index: number,
+    field: "min_hours_before_start" | "refund_percent",
+    value: string,
+  ) {
+    setPolicyForm((current) => ({
+      ...current,
+      tiers: current.tiers.map((tier, tierIndex) =>
+        tierIndex === index ? { ...tier, [field]: value } : tier,
+      ),
+    }));
+  }
+
   async function createPolicy() {
     if (!orgId) return;
     const token = getAccessToken() ?? undefined;
+    const tiers = policyForm.tiers
+      .map((tier) => ({
+        min_hours_before_start: Number(tier.min_hours_before_start || 0),
+        refund_percent: Number(tier.refund_percent || 0),
+      }))
+      .filter((tier) => !Number.isNaN(tier.min_hours_before_start) && !Number.isNaN(tier.refund_percent))
+      .sort((a, b) => b.min_hours_before_start - a.min_hours_before_start);
     await apiFetch(
       `/api/cancellation-policies?organization_public_id=${encodeURIComponent(orgId)}`,
       {
         method: "POST",
         body: JSON.stringify({
           space_type: policyForm.space_type,
-          cancel_window_hours: Number(policyForm.cancel_window_hours),
-          refund_percent: Number(policyForm.refund_percent),
+          cancel_window_hours: tiers[0]?.min_hours_before_start ?? 0,
+          refund_percent: tiers[0]?.refund_percent ?? 0,
+          tiers,
         }),
       },
       token
@@ -731,7 +761,7 @@ export default function OwnerSettingsPage() {
 
         <Card className="grid gap-4 p-4">
           <div className="text-sm font-semibold">Cancellation policies</div>
-          <div className="grid gap-2 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-start">
             <select
               className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
               value={policyForm.space_type}
@@ -742,16 +772,22 @@ export default function OwnerSettingsPage() {
               <option value="shared_desk">Shared Desk</option>
               <option value="virtual_office">Virtual Office</option>
             </select>
-            <Input
-              value={policyForm.cancel_window_hours}
-              onChange={(e) => setPolicyForm({ ...policyForm, cancel_window_hours: e.target.value })}
-              placeholder="Window hours"
-            />
-            <Input
-              value={policyForm.refund_percent}
-              onChange={(e) => setPolicyForm({ ...policyForm, refund_percent: e.target.value })}
-              placeholder="Refund %"
-            />
+            <div className="grid gap-2">
+              {policyForm.tiers.map((tier, index) => (
+                <div key={index} className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={tier.min_hours_before_start}
+                    onChange={(e) => updatePolicyTier(index, "min_hours_before_start", e.target.value)}
+                    placeholder="Hours before start"
+                  />
+                  <Input
+                    value={tier.refund_percent}
+                    onChange={(e) => updatePolicyTier(index, "refund_percent", e.target.value)}
+                    placeholder="Refund %"
+                  />
+                </div>
+              ))}
+            </div>
             <Button type="button" onClick={createPolicy} disabled={!orgId}>
               Add policy
             </Button>
@@ -759,7 +795,17 @@ export default function OwnerSettingsPage() {
           <div className="grid gap-2 text-xs text-textMuted">
             {policies.map((policy) => (
               <div key={policy.public_id}>
-                {policy.space_type} • {policy.cancel_window_hours}h • {policy.refund_percent}%
+                {policy.space_type} •{" "}
+                {(policy.tiers?.length ? policy.tiers : [
+                  {
+                    min_hours_before_start: policy.cancel_window_hours,
+                    refund_percent: policy.refund_percent,
+                  },
+                ])
+                  .slice()
+                  .sort((a, b) => b.min_hours_before_start - a.min_hours_before_start)
+                  .map((tier) => `${tier.refund_percent}% at ${tier.min_hours_before_start}+h`)
+                  .join(" / ")}
               </div>
             ))}
             {policies.length === 0 ? <div>No cancellation policies configured.</div> : null}

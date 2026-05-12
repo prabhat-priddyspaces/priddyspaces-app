@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import { useStripe } from "@stripe/stripe-react-native";
 
@@ -10,11 +10,14 @@ type Space = {
   public_id: string;
   space_type: string;
   capacity: number;
+  price_hourly?: number | null;
   price_daily?: number | null;
   price_monthly?: number | null;
   availability_status: string;
   availability_start_time?: string | null;
   availability_end_time?: string | null;
+  buffer_before_minutes?: number | null;
+  buffer_after_minutes?: number | null;
   amenities?: string | null;
 };
 
@@ -31,6 +34,58 @@ type SubscriptionPlan = {
   price: number;
 };
 
+type PaymentMethodResolve = {
+  is_configured: boolean;
+  has_payment_method: boolean;
+  payment_method_public_id: string | null;
+  message: string | null;
+};
+
+type BookingRequestResult = {
+  status: string;
+  payment_status?: string | null;
+  booking_public_id?: string | null;
+};
+
+function toDateIso(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.slice(0, 5).split(":").map((part) => Number(part));
+  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
+}
+
+function minutesToTime(value: number) {
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function nextDateOptions() {
+  return Array.from({ length: 14 }).map((_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+    return toDateIso(date);
+  });
+}
+
+function buildTimeOptions(space: Space | null) {
+  const open = timeToMinutes(space?.availability_start_time || "09:00");
+  const close = timeToMinutes(space?.availability_end_time || "18:00");
+  const options: string[] = [];
+  for (let mins = open; mins <= close; mins += 30) {
+    options.push(minutesToTime(mins));
+  }
+  return options;
+}
+
+function instantEligible(space: Space) {
+  if (space.space_type === "conference_room") return true;
+  if (space.space_type === "shared_desk") return true;
+  return false;
+}
+
 export function SpaceDetailScreen() {
   const { token } = useAuth();
   const route = useRoute<any>();
@@ -40,8 +95,10 @@ export function SpaceDetailScreen() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [startDatetime, setStartDatetime] = useState("");
-  const [endDatetime, setEndDatetime] = useState("");
+  const [bookingDate, setBookingDate] = useState(toDateIso(new Date()));
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:00");
+  const [fullDay, setFullDay] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const stripe = useStripe();
@@ -62,37 +119,68 @@ export function SpaceDetailScreen() {
         setSpace(spaceResp);
         setImages(imageResp);
         setPlans(planResp);
+        const options = buildTimeOptions(spaceResp);
+        if (options.length > 0) {
+          setStartTime(options[0]);
+          setEndTime(options[1] || options[0]);
+        }
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load space"))
       .finally(() => setLoading(false));
   }, [token, spaceId]);
 
   const hero = images.find((img) => img.is_primary) || images[0];
+  const dateOptions = nextDateOptions();
+  const timeOptions = buildTimeOptions(space);
+  const actionLabel = space && instantEligible(space) ? "Reserve & Pay" : "Request to book";
 
   async function handleRequest() {
     if (!token || !space) return;
-    if (!startDatetime || !endDatetime) {
-      setMessage("Enter start and end date/time");
+    const effectiveStart = fullDay ? (space.availability_start_time || "09:00").slice(0, 5) : startTime;
+    const effectiveEnd = fullDay ? (space.availability_end_time || "18:00").slice(0, 5) : endTime;
+    const start = new Date(`${bookingDate}T${effectiveStart}:00`);
+    const end = new Date(`${bookingDate}T${effectiveEnd}:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      setMessage("Choose a valid booking window");
       return;
     }
     setSubmitting(true);
     setMessage("");
     try {
-      await apiFetch(
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(space.public_id)}`,
+        { method: "GET" },
+        token
+      );
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || "This owner has not configured payments.");
+      }
+      if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
+        throw new Error("Add a saved payment method on web before booking this space.");
+      }
+      const result = await apiFetch<BookingRequestResult>(
         "/api/booking-requests",
         {
           method: "POST",
           body: JSON.stringify({
             space_public_id: space.public_id,
-            start_datetime: new Date(startDatetime).toISOString(),
-            end_datetime: new Date(endDatetime).toISOString()
+            start_datetime: start.toISOString(),
+            end_datetime: end.toISOString(),
+            booking_mode: fullDay ? "day_pass" : "hourly",
+            full_day: fullDay,
+            customer_owner_payment_method_public_id: resolved.payment_method_public_id,
+            payment_authorization_consent: true
           })
         },
         token
       );
-      setMessage("Request submitted");
-      setStartDatetime("");
-      setEndDatetime("");
+      if (result.status === "approved" && result.payment_status === "succeeded") {
+        setMessage("Payment successful. Your booking is confirmed.");
+      } else if (result.status === "payment_failed") {
+        setMessage("Payment failed. Use requests to retry with another method.");
+      } else {
+        setMessage("Request submitted for owner review.");
+      }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -151,21 +239,79 @@ export function SpaceDetailScreen() {
             </Text>
           ) : null}
           {space.amenities ? <Text style={styles.subtitle}>Amenities: {space.amenities}</Text> : null}
-          <TextInput
-            style={styles.input}
-            placeholder="Start (YYYY-MM-DD HH:mm)"
-            value={startDatetime}
-            onChangeText={setStartDatetime}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="End (YYYY-MM-DD HH:mm)"
-            value={endDatetime}
-            onChangeText={setEndDatetime}
-          />
+          {space.buffer_before_minutes || space.buffer_after_minutes ? (
+            <Text style={styles.subtitle}>
+              Buffer: {space.buffer_before_minutes || 0} min before, {space.buffer_after_minutes || 0} min after
+            </Text>
+          ) : null}
+          <Text style={styles.sectionLabel}>Date</Text>
+          <View style={styles.chipRow}>
+            {dateOptions.slice(0, 7).map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[styles.chip, bookingDate === option ? styles.chipActive : null]}
+                onPress={() => setBookingDate(option)}
+              >
+                <Text style={[styles.chipText, bookingDate === option ? styles.chipTextActive : null]}>{option.slice(5)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.modeRow}>
+            <TouchableOpacity
+              style={[styles.modeButton, !fullDay ? styles.modeButtonActive : null]}
+              onPress={() => setFullDay(false)}
+            >
+              <Text style={[styles.modeText, !fullDay ? styles.modeTextActive : null]}>Hourly</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeButton, fullDay ? styles.modeButtonActive : null]}
+              onPress={() => setFullDay(true)}
+              disabled={!space.price_daily}
+            >
+              <Text style={[styles.modeText, fullDay ? styles.modeTextActive : null]}>Full day</Text>
+            </TouchableOpacity>
+          </View>
+          {!fullDay ? (
+            <>
+              <Text style={styles.sectionLabel}>Start</Text>
+              <View style={styles.chipRow}>
+                {timeOptions
+                  .filter((option) => timeToMinutes(option) + 30 <= timeToMinutes(space.availability_end_time || "18:00"))
+                  .slice(0, 10)
+                  .map((option) => (
+                  <TouchableOpacity
+                    key={`start-${option}`}
+                    style={[styles.chip, startTime === option ? styles.chipActive : null]}
+                    onPress={() => {
+                      setStartTime(option);
+                      const next = timeOptions.find((time) => timeToMinutes(time) > timeToMinutes(option));
+                      if (next) setEndTime(next);
+                    }}
+                  >
+                    <Text style={[styles.chipText, startTime === option ? styles.chipTextActive : null]}>{option}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.sectionLabel}>End</Text>
+              <View style={styles.chipRow}>
+                {timeOptions
+                  .filter((option) => timeToMinutes(option) > timeToMinutes(startTime))
+                  .slice(0, 10)
+                  .map((option) => (
+                    <TouchableOpacity
+                      key={`end-${option}`}
+                      style={[styles.chip, endTime === option ? styles.chipActive : null]}
+                      onPress={() => setEndTime(option)}
+                    >
+                      <Text style={[styles.chipText, endTime === option ? styles.chipTextActive : null]}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            </>
+          ) : null}
           <TouchableOpacity style={styles.primaryButton} onPress={handleRequest} disabled={submitting}>
             <Text style={styles.primaryButtonText}>
-              {submitting ? "Submitting..." : "Request booking"}
+              {submitting ? "Submitting..." : actionLabel}
             </Text>
           </TouchableOpacity>
           {plans.length > 0 ? (
@@ -218,15 +364,62 @@ const styles = StyleSheet.create({
     color: "#DC2626",
     fontSize: 12
   },
-  input: {
-    marginTop: 10,
+  sectionLabel: {
+    marginTop: 14,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151"
+  },
+  chipRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  chip: {
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     backgroundColor: "#FFFFFF"
+  },
+  chipActive: {
+    borderColor: "#111827",
+    backgroundColor: "#111827"
+  },
+  chipText: {
+    color: "#374151",
+    fontWeight: "600",
+    fontSize: 12
+  },
+  chipTextActive: {
+    color: "#FFFFFF"
+  },
+  modeRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8
+  },
+  modeButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF"
+  },
+  modeButtonActive: {
+    borderColor: "#111827",
+    backgroundColor: "#111827"
+  },
+  modeText: {
+    color: "#374151",
+    fontWeight: "600"
+  },
+  modeTextActive: {
+    color: "#FFFFFF"
   },
   primaryButton: {
     marginTop: 16,

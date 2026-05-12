@@ -7,6 +7,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.location import Location
 from app.models.space import Space
 from app.models.booking import Booking
+from app.models.booking_series import BookingSeries
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
 from app.services.payment_providers import ChargeResult
@@ -298,6 +299,87 @@ def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypa
     data = create.json()
     assert data["status"] == BookingRequestStatus.APPROVED.value
     assert data["booking_id"] is not None
+
+
+def test_explicit_instant_booking_confirms_and_blocks_overlap(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
+    owner, space = _seed_owner_space(db_session)
+    customer = User(
+        email="instant@example.com",
+        auth_subject="sub-instant",
+        role=UserAppRole.CUSTOMER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(customer)
+    db_session.commit()
+    db_session.refresh(customer)
+    method = _seed_payment_method(db_session, customer, space)
+    customer_client = client_factory({
+        "sub": "sub-instant",
+        "email": customer.email,
+        "email_verified": True,
+    })
+    payload = _request_payload(space, method, 13)
+    payload["booking_mode"] = "hourly"
+
+    create = customer_client.post("/api/booking-requests", json=payload)
+    assert create.status_code == 200
+    body = create.json()
+    assert body["instant_booking"] is True
+    assert body["status"] == BookingRequestStatus.APPROVED.value
+    assert body["payment_status"] == "succeeded"
+    assert body["booking_id"] is not None
+
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
+    owner_client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True,
+    })
+    summary = owner_client.get(f"/api/owner/payout-summary?organization_public_id={org.public_id}")
+    assert summary.status_code == 200
+    assert summary.json()["gross_cents"] == 100
+
+    overlap = customer_client.post("/api/booking-requests", json=payload)
+    assert overlap.status_code == 409, overlap.text
+
+
+def test_recurring_instant_booking_creates_confirmed_series(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
+    _owner, space = _seed_owner_space(db_session)
+    customer = User(
+        email="recurring@example.com",
+        auth_subject="sub-recurring",
+        role=UserAppRole.CUSTOMER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(customer)
+    db_session.commit()
+    db_session.refresh(customer)
+    method = _seed_payment_method(db_session, customer, space)
+    customer_client = client_factory({
+        "sub": "sub-recurring",
+        "email": customer.email,
+        "email_verified": True,
+    })
+    payload = _request_payload(space, method, 14)
+    payload["booking_mode"] = "hourly"
+    payload["recurrence"] = {"frequency": "weekly", "interval": 1, "count": 3}
+
+    create = customer_client.post("/api/booking-requests", json=payload)
+    assert create.status_code == 200
+    body = create.json()
+    assert body["status"] == BookingRequestStatus.APPROVED.value
+    assert body["occurrence_count"] == 3
+    assert body["booking_series_public_id"] is not None
+
+    series = db_session.query(BookingSeries).filter(BookingSeries.public_id == body["booking_series_public_id"]).first()
+    assert series is not None
+    bookings = db_session.query(Booking).filter(Booking.booking_series_id == series.id).all()
+    assert len(bookings) == 3
+    assert {booking.status for booking in bookings} == {BookingStatus.CONFIRMED}
 
 
 def test_booking_request_requires_payment_method(db_session, client_factory):

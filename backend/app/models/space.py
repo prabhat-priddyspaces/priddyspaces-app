@@ -26,6 +26,8 @@ class Space(PublicIdMixin, TimestampMixin, Base):
     )
     availability_start_time = Column(Time, nullable=True)
     availability_end_time = Column(Time, nullable=True)
+    buffer_before_minutes = Column(Integer, nullable=False, default=0, server_default="0")
+    buffer_after_minutes = Column(Integer, nullable=False, default=0, server_default="0")
     visibility = Column(
         Enum(
             SpaceVisibility,
