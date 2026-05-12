@@ -20,6 +20,7 @@ from app.services.platform_auth import get_audit_actor_context
 from app.services.notifications import send_email
 from app.models.user import User
 from app.services.booking_payments import refund_booking_payment
+from app.services.cancellation_refunds import refund_percent_from_snapshot
 
 router = APIRouter()
 
@@ -221,14 +222,17 @@ def cancel_booking(
     if policy:
         deadline = _as_utc(booking.start_datetime) - timedelta(hours=policy.cancel_window_hours)
     now = datetime.now(timezone.utc)
-    if user.role == UserAppRole.CUSTOMER and now > deadline:
-        raise HTTPException(status_code=400, detail="Cancellation deadline has passed")
-
     before_status = booking.status
     req = db.query(BookingRequest).filter(BookingRequest.booking_id == booking.id).first()
     payment = None
     if before_status != BookingStatus.CANCELED:
         payment = refund_booking_payment(db, req=req, booking=booking)
+    if payment:
+        refund_percent = refund_percent_from_snapshot(
+            payment.refund_policy_snapshot,
+            start_datetime=booking.start_datetime,
+            now=now,
+        )
     booking.status = BookingStatus.CANCELED
     db.add(booking)
     if req:
@@ -253,7 +257,12 @@ def cancel_booking(
         acting_as_user_id=acting_as_user_id,
         context=context,
     )
-    return BookingCancelOut(public_id=booking.public_id, status=booking.status, refund_percent=refund_percent)
+    return BookingCancelOut(
+        public_id=booking.public_id,
+        status=booking.status,
+        refund_percent=refund_percent,
+        refund_amount_cents=payment.refunded_amount_cents if payment else 0,
+    )
 
 
 @router.post("/bookings/{public_id}/check-in", response_model=BookingCheckInOut)
@@ -368,6 +377,11 @@ def refund_booking(
     payment = None
     if before_status != BookingStatus.CANCELED:
         payment = refund_booking_payment(db, req=req, booking=booking)
+    if payment:
+        refund_percent = refund_percent_from_snapshot(
+            payment.refund_policy_snapshot,
+            start_datetime=booking.start_datetime,
+        )
     booking.status = BookingStatus.CANCELED
     db.add(booking)
     if req:
@@ -392,4 +406,9 @@ def refund_booking(
         acting_as_user_id=acting_as_user_id,
         context=context,
     )
-    return BookingCancelOut(public_id=booking.public_id, status=booking.status, refund_percent=refund_percent)
+    return BookingCancelOut(
+        public_id=booking.public_id,
+        status=booking.status,
+        refund_percent=refund_percent,
+        refund_amount_cents=payment.refunded_amount_cents if payment else 0,
+    )

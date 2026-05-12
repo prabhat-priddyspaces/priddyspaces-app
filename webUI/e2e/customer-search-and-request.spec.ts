@@ -2,17 +2,17 @@ import { expect, test } from "@playwright/test";
 
 import { json, meResponse, mockSession } from "./helpers/mock-api";
 
-test("customer can submit a booking request from a space detail page", async ({ page }) => {
+test("customer can reserve and pay from a space detail page", async ({ page }) => {
   const bookingRequest = {
     public_id: "req_1",
     space_public_id: "space_1",
-    booking_id: null,
-    booking_public_id: null,
+    booking_id: 101,
+    booking_public_id: "book_1",
     estimated_amount: 120,
     start_datetime: "2026-04-10T14:00:00.000Z",
     end_datetime: "2026-04-10T16:00:00.000Z",
-    status: "requested",
-    payment_status: "not_charged",
+    status: "approved",
+    payment_status: "succeeded",
     payment_provider: "stripe",
     customer_owner_payment_method_public_id: "pm_owner_1",
     cancellation_deadline_at: "2026-04-09T14:00:00.000Z",
@@ -40,7 +40,9 @@ test("customer can submit a booking request from a space detail page", async ({ 
         granularity_minutes: 60,
         availability_start_time: "09:00",
         availability_end_time: "18:00",
-        hourly_price: null,
+        buffer_before_minutes: 15,
+        buffer_after_minutes: 15,
+        hourly_price: 60,
         daily_price: 120,
         days: [
           {
@@ -63,9 +65,11 @@ test("customer can submit a booking request from a space detail page", async ({ 
           availability_status: "available",
           availability_start_time: "09:00:00",
           availability_end_time: "18:00:00",
+          buffer_before_minutes: 15,
+          buffer_after_minutes: 15,
           price_daily: 120,
           price_monthly: null,
-          hourly_price: null,
+          hourly_price: 60,
           membership_price: null,
           amenities: ["whiteboard", "coffee"],
         },
@@ -119,9 +123,13 @@ test("customer can submit a booking request from a space detail page", async ({ 
       const payload = route.request().postDataJSON() as {
         start_datetime: string;
         end_datetime: string;
+        booking_mode: string;
+        full_day: boolean;
         customer_owner_payment_method_public_id: string;
         payment_authorization_consent: boolean;
       };
+      expect(payload.booking_mode).toBe("hourly");
+      expect(payload.full_day).toBe(false);
       expect(payload.customer_owner_payment_method_public_id).toBe("pm_owner_1");
       expect(payload.payment_authorization_consent).toBe(true);
       bookingRequest.start_datetime = payload.start_datetime;
@@ -141,12 +149,31 @@ test("customer can submit a booking request from a space detail page", async ({ 
     }
 
     if (key === "GET /api/payments") {
-      await json(route, []);
+      await json(route, [
+        {
+          id: 501,
+          public_id: "pay_req_1",
+          amount: 120,
+          status: "succeeded",
+          booking_id: 101,
+          subscription_id: null,
+          created_at: "2026-04-10T16:01:00.000Z",
+        },
+      ]);
       return;
     }
 
     if (key === "GET /api/invoices") {
-      await json(route, []);
+      await json(route, [
+        {
+          public_id: "inv_req_1",
+          amount: 120,
+          status: "paid",
+          booking_id: 101,
+          payment_id: 501,
+          created_at: "2026-04-10T16:02:00.000Z",
+        },
+      ]);
       return;
     }
 
@@ -158,17 +185,18 @@ test("customer can submit a booking request from a space detail page", async ({ 
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
 
   // Auto-populate fills the date and a slot once availability resolves.
-  await expect(page.getByRole("button", { name: "Reserve" })).toBeEnabled();
-  await page.getByLabel("I authorize this owner to charge my card upon approval.").check();
-  await page.getByRole("button", { name: "Reserve" }).click();
+  await expect(page.getByRole("button", { name: "Reserve & Pay" })).toBeEnabled();
+  await page.getByLabel("I authorize this owner to charge my card now for instant bookings or upon approval for request-to-book spaces.").check();
+  await page.getByRole("button", { name: "Reserve & Pay" }).click();
 
   await expect(page).toHaveURL(/\/customer\/requests$/);
   await expect(page.getByText("Status:")).toBeVisible();
-  await expect(page.getByText("requested")).toBeVisible();
+  await expect(page.getByText("approved")).toBeVisible();
 
   await page.getByRole("link", { name: "View details" }).click();
 
   await expect(page).toHaveURL(/\/customer\/requests\/req_1$/);
   await expect(page.getByText("Request details")).toBeVisible();
-  await expect(page.getByText("No payment has been recorded yet.")).toBeVisible();
+  await expect(page.getByText("Payment: pay_req_1")).toBeVisible();
+  await expect(page.getByText("Invoice: inv_req_1")).toBeVisible();
 });

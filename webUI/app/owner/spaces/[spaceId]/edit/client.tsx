@@ -25,6 +25,8 @@ interface Space {
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
+  buffer_before_minutes: number;
+  buffer_after_minutes: number;
   visibility: string;
 }
 
@@ -42,6 +44,8 @@ export function EditSpaceClient() {
     availability_status: "available",
     availability_start_time: "",
     availability_end_time: "",
+    buffer_before_minutes: "0",
+    buffer_after_minutes: "0",
     visibility: "public"
   });
   const [message, setMessage] = useState("");
@@ -63,6 +67,8 @@ export function EditSpaceClient() {
           availability_status: space.availability_status,
           availability_start_time: space.availability_start_time || "",
           availability_end_time: space.availability_end_time || "",
+          buffer_before_minutes: String(space.buffer_before_minutes ?? 0),
+          buffer_after_minutes: String(space.buffer_after_minutes ?? 0),
           visibility: space.visibility || "public"
         });
       })
@@ -87,6 +93,8 @@ export function EditSpaceClient() {
             availability_status: form.availability_status,
             availability_start_time: form.availability_start_time || null,
             availability_end_time: form.availability_end_time || null,
+            buffer_before_minutes: Number(form.buffer_before_minutes || 0),
+            buffer_after_minutes: Number(form.buffer_after_minutes || 0),
             visibility: form.visibility
           })
         },
@@ -230,6 +238,28 @@ export function EditSpaceClient() {
                   type="time"
                   value={form.availability_end_time}
                   onChange={(e) => setForm({ ...form, availability_end_time: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="buffer_before">Buffer before (minutes)</Label>
+                <Input
+                  id="buffer_before"
+                  type="number"
+                  min={0}
+                  value={form.buffer_before_minutes}
+                  onChange={(e) => setForm({ ...form, buffer_before_minutes: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="buffer_after">Buffer after (minutes)</Label>
+                <Input
+                  id="buffer_after"
+                  type="number"
+                  min={0}
+                  value={form.buffer_after_minutes}
+                  onChange={(e) => setForm({ ...form, buffer_after_minutes: e.target.value })}
                 />
               </div>
             </div>

@@ -11,19 +11,21 @@ from app.models.booking import Booking
 from app.models.subscription import Subscription
 from app.models.space import Space
 from app.models.enums import AvailabilityStatus
+from app.models.organization import Organization
 from app.schemas.payment import (
     PaymentIntentCreate,
     PaymentIntentOut,
     SubscriptionPurchase,
     SubscriptionPurchaseOut,
     CustomerPortalOut,
-    PaymentOut
+    PaymentOut,
+    OwnerPayoutSummaryOut,
 )
 from app.models.enums import UserAppRole, UserRole, PaymentStatus, BookingStatus
 from app.models.pricing_rule import PricingRule
 from app.models.tax_config import TaxConfig
 from app.services.auth_user import get_or_create_user
-from app.services.authz import accessible_location_ids, list_org_members
+from app.services.authz import accessible_location_ids, get_org_member, list_org_members, require_owner_or_admin
 from app.services.pricing import estimate_booking_amount
 from app.services.stripe_payments import (
     create_billing_portal_session,
@@ -280,3 +282,49 @@ def get_payment(
     if not _payment_visible_to_member(db, user.id, payment):
         raise HTTPException(status_code=404, detail="Payment not found")
     return payment
+
+
+@router.get("/owner/payout-summary", response_model=OwnerPayoutSummaryOut)
+def owner_payout_summary(
+    organization_public_id: str,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    org = db.query(Organization).filter(Organization.public_id == organization_public_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    member = get_org_member(db, org.id, user.id)
+    require_owner_or_admin(member)
+
+    query = db.query(Payment).filter(Payment.tenant_id == org.id)
+    if from_date:
+        query = query.filter(Payment.created_at >= from_date)
+    if to_date:
+        query = query.filter(Payment.created_at <= to_date)
+    payments = query.all()
+
+    succeeded_statuses = {
+        PaymentStatus.SUCCEEDED,
+        PaymentStatus.PARTIALLY_REFUNDED,
+        PaymentStatus.REFUNDED,
+        PaymentStatus.VOIDED,
+    }
+    succeeded = [p for p in payments if p.status in succeeded_statuses]
+    gross_cents = sum(p.amount_cents if p.amount_cents is not None else p.amount * 100 for p in succeeded)
+    tax_cents = sum(p.tax_cents or 0 for p in succeeded)
+    refunded_cents = sum(p.refunded_amount_cents or 0 for p in succeeded)
+    platform_fee_cents = sum((p.platform_fee_amount or 0) * 100 for p in succeeded)
+    owner_net_cents = sum((p.owner_net_amount or 0) * 100 for p in succeeded) - refunded_cents
+    failed_count = len([p for p in payments if p.status == PaymentStatus.FAILED])
+    return OwnerPayoutSummaryOut(
+        gross_cents=gross_cents,
+        tax_cents=tax_cents,
+        refunded_cents=refunded_cents,
+        platform_fee_cents=platform_fee_cents,
+        owner_net_cents=owner_net_cents,
+        succeeded_count=len(succeeded),
+        failed_count=failed_count,
+    )

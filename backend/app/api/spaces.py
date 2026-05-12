@@ -46,6 +46,8 @@ def _serialize_space(
         availability_status=space.availability_status,
         availability_start_time=space.availability_start_time,
         availability_end_time=space.availability_end_time,
+        buffer_before_minutes=space.buffer_before_minutes or 0,
+        buffer_after_minutes=space.buffer_after_minutes or 0,
         visibility=space.visibility,
         amenities=location_amenities_text or space.amenities,
     )
@@ -88,6 +90,8 @@ def create_space(
         price_hourly=payload.price_hourly,
         availability_start_time=payload.availability_start_time,
         availability_end_time=payload.availability_end_time,
+        buffer_before_minutes=payload.buffer_before_minutes,
+        buffer_after_minutes=payload.buffer_after_minutes,
         visibility=payload.visibility,
         amenities=payload.amenities
     )
@@ -169,6 +173,10 @@ def update_space(
         space.availability_start_time = payload.availability_start_time
     if payload.availability_end_time is not None:
         space.availability_end_time = payload.availability_end_time
+    if payload.buffer_before_minutes is not None:
+        space.buffer_before_minutes = payload.buffer_before_minutes
+    if payload.buffer_after_minutes is not None:
+        space.buffer_after_minutes = payload.buffer_after_minutes
     if payload.visibility is not None:
         space.visibility = payload.visibility
     if payload.amenities is not None:

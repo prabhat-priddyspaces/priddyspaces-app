@@ -14,6 +14,11 @@ class Booking(PublicIdMixin, TimestampMixin, Base):
     tenant_id = Column(Integer, nullable=False)
     start_datetime = Column(DateTime(timezone=True), nullable=False)
     end_datetime = Column(DateTime(timezone=True), nullable=False)
+    inventory_start_datetime = Column(DateTime(timezone=True), nullable=True)
+    inventory_end_datetime = Column(DateTime(timezone=True), nullable=True)
+    booking_series_id = Column(Integer, nullable=True, index=True)
+    booking_request_id = Column(Integer, nullable=True, index=True)
+    recurrence_sequence = Column(Integer, nullable=True)
     status = Column(
         Enum(BookingStatus, values_callable=enum_values),
         default=BookingStatus.PENDING,
