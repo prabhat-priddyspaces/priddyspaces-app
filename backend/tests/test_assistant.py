@@ -1,3 +1,5 @@
+from urllib.parse import parse_qs, urlparse
+
 from app.assistant.redaction import redact_pii
 from app.core.config import settings
 from app.models.assistant import AssistantConversation, AssistantMessage, OwnerPolicyKB
@@ -144,6 +146,22 @@ def test_assistant_rate_limit(db_session, client_factory, monkeypatch):
     response = client.post("/api/assistant/chat?stream=false", json={"message": "find rooms again"})
     assert response.status_code == 429
     assert response.json()["rate_limited"] is True
+
+
+def test_marketplace_space_citation_uses_static_export_href(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, _org, _location, space = _seed_owner_location(db_session)
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post("/api/assistant/chat?stream=false", json={"message": "meeting room in Miami"})
+
+    assert response.status_code == 200
+    citations = response.json()["message"]["citations"]
+    space_citation = next(item for item in citations if item["type"] == "space")
+    parsed = urlparse(space_citation["url"])
+    assert parsed.path == "/spaces/_.html"
+    assert parse_qs(parsed.query)["id"] == [space.public_id]
+    assert parse_qs(parsed.query)["back"] == ["/coworking"]
 
 
 def test_admin_quality_requires_platform_admin(db_session, client_factory, monkeypatch):
