@@ -15,9 +15,12 @@
 
 ## S3 + CloudFront
 - Upload `webUI/out/` to the bucket root.
-- Enable static website hosting.
-- Set index document: `index.html`.
-- For SPA routing, configure CloudFront to serve `index.html` on 404s.
+- Use CloudFront in front of the S3 REST origin with origin access control.
+- Attach a viewer-request rewrite that maps extensionless clean URLs to the static export files:
+  - `/spaces` → `/spaces.html`
+  - `/owners/sign-up` → `/owners/sign-up.html`
+  - `/member/requests` → `/member/requests.html`
+- Keep the 403/404 fallback to `/index.html` only as a last-resort client recovery path. The app root fallback redirects to matching `.html` files where possible, but CloudFront should resolve normal clean URLs before fallback.
 
 ## CORS (FastAPI)
 - Allow your web origin in CORS settings.

@@ -27,13 +27,33 @@ describe("DefaultMarketplaceRedirect", () => {
     });
   });
 
-  it("falls back to spaces for the root route", async () => {
+  it("recovers legacy static-export location detail URLs", async () => {
+    window.history.pushState({}, "", "/locations/location_1");
+
+    render(<DefaultMarketplaceRedirect />);
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/locations/_.html?id=location_1");
+    });
+  });
+
+  it("recovers clean static-export URLs when CloudFront serves the root fallback", async () => {
+    window.history.pushState({}, "", "/owners/sign-up?utm=owner");
+
+    render(<DefaultMarketplaceRedirect />);
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/owners/sign-up.html?utm=owner");
+    });
+  });
+
+  it("falls back to the exported spaces route for the root route", async () => {
     window.history.pushState({}, "", "/");
 
     render(<DefaultMarketplaceRedirect />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/spaces");
+      expect(replaceMock).toHaveBeenCalledWith("/spaces.html");
     });
   });
 });
