@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { Bot, ExternalLink, MessageCircle, Send, X } from "lucide-react";
 
@@ -11,20 +10,34 @@ import { getAccessToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
+function citationHref(citation: AssistantCitation) {
+  if (citation.type !== "space") return citation.url;
+  const match = citation.url.match(/^\/spaces\/([^/?#]+)(?:[?#].*)?$/);
+  const pathId = match?.[1];
+  if (!pathId || pathId === "_" || pathId === "_.html") return citation.url;
+  const params = new URLSearchParams();
+  params.set("id", citation.id || pathId);
+  params.set("back", "/coworking");
+  return `/spaces/_.html?${params.toString()}`;
+}
+
 function CitationChips({ citations }: { citations: AssistantCitation[] }) {
   if (!citations.length) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-2">
-      {citations.map((citation) => (
-        <Link
-          key={`${citation.type}-${citation.id}-${citation.url}`}
-          href={citation.url}
-          className="inline-flex items-center gap-1 rounded-sm border border-border bg-white px-2 py-1 text-xs text-textSecondary hover:bg-surface2"
-        >
-          {citation.title || citation.type}
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      ))}
+      {citations.map((citation) => {
+        const href = citationHref(citation);
+        return (
+          <a
+            key={`${citation.type}-${citation.id}-${citation.url}`}
+            href={href}
+            className="inline-flex items-center gap-1 rounded-sm border border-border bg-white px-2 py-1 text-xs text-textSecondary hover:bg-surface2"
+          >
+            {citation.title || citation.type}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        );
+      })}
     </div>
   );
 }

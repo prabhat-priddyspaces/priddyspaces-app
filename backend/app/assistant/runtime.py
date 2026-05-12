@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -60,6 +61,10 @@ def serialize_message(message: AssistantMessage) -> AssistantMessageOut:
 
 def _citation(type_: str, id_: str, url: str, title: str | None = None) -> dict[str, str | None]:
     return {"type": type_, "id": str(id_), "url": url, "title": title}
+
+
+def public_space_url(space_public_id: str, *, back: str = "/coworking") -> str:
+    return f"/spaces/_.html?{urlencode({'id': str(space_public_id), 'back': back})}"
 
 
 def _make_proposal(
@@ -236,7 +241,7 @@ def _search_marketplace(db: Session, text: str) -> tuple[str, list[dict[str, Any
         label = space.name or space.space_type.replace("_", " ").title()
         price = ", ".join(price_bits) if price_bits else "pricing not configured"
         lines.append(f"- {label} at {location.name} in {location.city or 'this market'}: capacity {space.capacity}, {price}.")
-        citations.append(_citation("space", space.public_id, f"/spaces/{space.public_id}", label))
+        citations.append(_citation("space", space.public_id, public_space_url(space.public_id), label))
     return "\n".join(lines), citations, []
 
 

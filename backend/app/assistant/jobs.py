@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.assistant.runtime import _citation
+from app.assistant.runtime import _citation, public_space_url
 from app.models.assistant import AssistantMessage, SpaceAlert
 from app.models.booking import Booking
 from app.models.enums import BookingStatus, SpaceVisibility
@@ -87,7 +87,7 @@ def match_space_alerts(db: Session, *, now: datetime | None = None) -> list[dict
                 "alert_public_id": alert.public_id,
                 "space_public_id": space.public_id,
                 "location_public_id": location.public_id,
-                "citations": [_citation("space", space.public_id, f"/spaces/{space.public_id}", space.name or "Space")],
+                "citations": [_citation("space", space.public_id, public_space_url(space.public_id), space.name or "Space")],
             }
         )
     db.commit()
