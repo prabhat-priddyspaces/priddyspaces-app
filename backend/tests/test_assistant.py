@@ -1,5 +1,10 @@
+import json
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
+from app.assistant import runtime as assistant_runtime
 from app.assistant.redaction import redact_pii
 from app.core.config import settings
 from app.models.assistant import AssistantConversation, AssistantMessage, OwnerPolicyKB
@@ -97,6 +102,15 @@ def _add_meeting_location(db, org, *, name, city, state, lat, lng, price_hourly)
     db.commit()
     db.refresh(space)
     return location, space
+
+
+def _last_assistant_message(db):
+    return (
+        db.query(AssistantMessage)
+        .filter(AssistantMessage.role == "assistant")
+        .order_by(AssistantMessage.id.desc())
+        .first()
+    )
 
 
 def test_assistant_disabled_response(db_session, client_factory, monkeypatch):
@@ -313,6 +327,145 @@ def test_explicit_new_york_search_still_uses_requested_city(db_session, client_f
     assert "New York Rooms" in message["content"]
     assert "Assistant HQ" not in message["content"]
     assert message["client_actions"] == []
+
+
+def test_explicit_location_overrides_page_context_and_logs_mismatch(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, org, _location, _space = _seed_owner_location(db_session)
+    _add_meeting_location(
+        db_session,
+        org,
+        name="New York Rooms",
+        city="New York",
+        state="NY",
+        lat=40.7128,
+        lng=-74.0060,
+        price_hourly=55,
+    )
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post(
+        "/api/assistant/chat?stream=false",
+        json={
+            "message": "meeting room in new york",
+            "page_context": {"q": "Plantation, FL", "lat": 26.1320, "lng": -80.2624, "radius_miles": 50},
+        },
+    )
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "New York Rooms" in message["content"]
+    assert "Assistant HQ" not in message["content"]
+    event_kinds = [event["kind"] for event in (_last_assistant_message(db_session).event_metadata or {}).get("events", [])]
+    assert "context_mismatch" in event_kinds
+
+
+def test_missing_booking_slots_logs_quality_event_and_clarify_action(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    customer = User(
+        email="customer-assistant@example.com",
+        auth_subject="sub-customer-assistant",
+        role=UserAppRole.CUSTOMER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(customer)
+    db_session.commit()
+    client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+
+    response = client.post("/api/assistant/chat?stream=false", json={"message": "book a meeting room"})
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "space, start time, and end time" in message["content"]
+    assert message["client_actions"][0]["kind"] == "clarify_input"
+    event_kinds = [event["kind"] for event in (_last_assistant_message(db_session).event_metadata or {}).get("events", [])]
+    assert "missing_required_slot" in event_kinds
+
+
+def test_pricing_answer_includes_price_basis_and_citation(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, _org, _location, _space = _seed_owner_location(db_session)
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post("/api/assistant/chat?stream=false", json={"message": "what is the price for meeting room in Miami"})
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "$40/hr" in message["content"]
+    assert message["citations"][0]["type"] == "location"
+    metadata = _last_assistant_message(db_session).event_metadata or {}
+    assert metadata["intent"] == "pricing_quote"
+    assert "price_basis" in metadata["answer_basis"]
+
+
+def test_missing_policy_source_logs_reliability_event(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, _org, location, _space = _seed_owner_location(db_session)
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post(
+        "/api/assistant/chat?stream=false",
+        json={"message": "what is the wifi policy?", "page_context": {"location_public_id": location.public_id}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"]["content"] == "This policy has not been configured yet."
+    events = (_last_assistant_message(db_session).event_metadata or {}).get("events", [])
+    assert {"kind": "missing_policy", "category": "wifi"} in events
+
+
+def test_citation_missing_tool_answer_fails_closed(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, _org, _location, _space = _seed_owner_location(db_session)
+    monkeypatch.setattr(assistant_runtime, "_billing_response", lambda db, ctx: ("Found billing data.", [], []))
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post("/api/assistant/chat?stream=false", json={"message": "show me billing"})
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "could not answer reliably" in message["content"]
+    assert message["citations"][0]["type"] == "assistant"
+    event_kinds = [event["kind"] for event in (_last_assistant_message(db_session).event_metadata or {}).get("events", [])]
+    assert "citation_missing_prevented" in event_kinds
+
+
+@pytest.mark.parametrize(
+    "case",
+    json.loads((Path(__file__).with_name("assistant_evals.json")).read_text()),
+    ids=lambda item: item["name"],
+)
+def test_assistant_golden_evals(case, db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, org, _location, _space = _seed_owner_location(db_session)
+    _add_meeting_location(
+        db_session,
+        org,
+        name="New York Rooms",
+        city="New York",
+        state="NY",
+        lat=40.7128,
+        lng=-74.0060,
+        price_hourly=55,
+    )
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post(
+        "/api/assistant/chat?stream=false",
+        json={"message": case["message"], "page_context": case.get("page_context", {})},
+    )
+
+    assert response.status_code == 200
+    content = response.json()["message"]["content"]
+    for expected in case.get("contains", []):
+        assert expected in content
+    for forbidden in case.get("not_contains", []):
+        assert forbidden not in content
+    events = (_last_assistant_message(db_session).event_metadata or {}).get("events", [])
+    event_kinds = [event.get("kind") for event in events]
+    for expected_event in case.get("event_kinds", []):
+        assert expected_event in event_kinds
 
 
 def test_admin_quality_requires_platform_admin(db_session, client_factory, monkeypatch):

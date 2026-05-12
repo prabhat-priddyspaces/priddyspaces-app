@@ -139,6 +139,8 @@ class AssistantQualityOut(BaseModel):
     metrics: dict[str, Any]
     low_rated_conversations: list[dict[str, Any]]
     missing_policy_categories: list[dict[str, Any]]
+    reliability_events: list[dict[str, Any]] = Field(default_factory=list)
+    recent_reliability_events: list[dict[str, Any]] = Field(default_factory=list)
     tool_failure_rates: list[dict[str, Any]]
     usage_by_persona: list[dict[str, Any]]
     abandoned_booking_drafts: list[dict[str, Any]]
