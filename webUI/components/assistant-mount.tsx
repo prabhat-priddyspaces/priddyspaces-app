@@ -1,14 +1,15 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Bot, ExternalLink, MessageCircle, Send, X } from "lucide-react";
+import { Bot, ExternalLink, MapPin, MessageCircle, Send, X } from "lucide-react";
 
 import { useAssistant } from "@/hooks/useAssistant";
-import type { AssistantCitation, AssistantMessage, AssistantProposal } from "@/lib/assistantTypes";
+import type { AssistantCitation, AssistantClientAction, AssistantMessage, AssistantProposal } from "@/lib/assistantTypes";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { reverseGeocode } from "@/components/use-address-autocomplete";
 
 function citationHref(citation: AssistantCitation) {
   if (citation.type !== "space") return citation.url;
@@ -103,14 +104,46 @@ function ProposalCard({
   );
 }
 
+function ClientActionButtons({
+  actions,
+  onAction,
+}: {
+  actions: AssistantClientAction[];
+  onAction: (action: AssistantClientAction) => void;
+}) {
+  if (!actions.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {actions.map((action) => {
+        if (action.kind !== "request_location") return null;
+        return (
+          <Button
+            key={action.action_id}
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => onAction(action)}
+            className="gap-1"
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            {action.label || "Use my location"}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 function MessageBubble({
   message,
   guestId,
   onProposalHandled,
+  onClientAction,
 }: {
   message: AssistantMessage;
   guestId: string;
   onProposalHandled: (proposalId: string, status: string) => void;
+  onClientAction: (action: AssistantClientAction) => void;
 }) {
   const isUser = message.role === "user";
   return (
@@ -122,6 +155,7 @@ function MessageBubble({
       >
         <div className="whitespace-pre-wrap">{message.content}</div>
         {!isUser ? <CitationChips citations={message.citations} /> : null}
+        {!isUser ? <ClientActionButtons actions={message.client_actions || []} onAction={onClientAction} /> : null}
         {!isUser
           ? message.proposals.map((proposal) => (
               <ProposalCard
@@ -163,6 +197,63 @@ export function AssistantMount() {
     );
   }
 
+  function appendAssistantMessage(content: string) {
+    setMessages((current) => [
+      ...current,
+      {
+        public_id: `local_assistant_${Date.now()}`,
+        role: "assistant",
+        content,
+        citations: [],
+        proposals: [],
+        client_actions: [],
+      },
+    ]);
+  }
+
+  async function handleClientAction(action: AssistantClientAction) {
+    if (action.kind !== "request_location") return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      appendAssistantMessage("Location access is not available in this browser. Tell me your city or ZIP code instead.");
+      return;
+    }
+
+    const originalMessage =
+      typeof action.payload.original_message === "string" && action.payload.original_message.trim()
+        ? action.payload.original_message
+        : "Show me spaces near me";
+    const radiusMiles =
+      typeof action.payload.radius_miles === "number" && action.payload.radius_miles > 0
+        ? action.payload.radius_miles
+        : 50;
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          maximumAge: 300_000,
+          timeout: 10_000,
+        });
+      });
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const reverse = await reverseGeocode(lat, lng).catch(() => null);
+      const locationLabel =
+        reverse?.city && reverse?.state
+          ? `${reverse.city}, ${reverse.state}`
+          : reverse?.formatted || "your location";
+      await send(originalMessage, {
+        lat,
+        lng,
+        location_label: locationLabel,
+        radius_miles: radiusMiles,
+        source: "browser",
+      });
+    } catch {
+      appendAssistantMessage("I could not access your location. Tell me a city or ZIP code and I can search there.");
+    }
+  }
+
   async function escalate() {
     if (!conversationId) {
       await send("Talk to a human");
@@ -183,6 +274,7 @@ export function AssistantMount() {
           content: "A support ticket was created with this conversation transcript.",
           citations: [{ type: "support", id: "ticket", url: "/support", title: "Support ticket" }],
           proposals: [],
+          client_actions: [],
         },
       ]);
     } finally {
@@ -216,6 +308,7 @@ export function AssistantMount() {
                   message={message}
                   guestId={guestId}
                   onProposalHandled={onProposalHandled}
+                  onClientAction={handleClientAction}
                 />
               ))
             ) : (

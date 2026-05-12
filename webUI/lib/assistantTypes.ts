@@ -16,12 +16,24 @@ export interface AssistantProposal {
   status: string;
 }
 
+export interface AssistantClientAction {
+  action_id: string;
+  kind: "request_location" | string;
+  label: string;
+  payload: {
+    original_message?: string;
+    radius_miles?: number;
+    [key: string]: unknown;
+  };
+}
+
 export interface AssistantMessage {
   public_id: string;
   role: string;
   content: string;
   citations: AssistantCitation[];
   proposals: AssistantProposal[];
+  client_actions: AssistantClientAction[];
   created_at?: string | null;
 }
 

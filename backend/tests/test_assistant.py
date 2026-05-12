@@ -44,6 +44,9 @@ def _seed_owner_location(db):
         name="Assistant HQ",
         address="100 AI Way",
         city="Miami",
+        state="FL",
+        lat=25.7617,
+        lng=-80.1918,
         timezone="UTC",
     )
     db.add(location)
@@ -63,6 +66,37 @@ def _seed_owner_location(db):
     db.commit()
     db.refresh(space)
     return owner, org, location, space
+
+
+def _add_meeting_location(db, org, *, name, city, state, lat, lng, price_hourly):
+    location = Location(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name=name,
+        address="200 Market St",
+        city=city,
+        state=state,
+        lat=lat,
+        lng=lng,
+        timezone="UTC",
+    )
+    db.add(location)
+    db.commit()
+    db.refresh(location)
+
+    space = Space(
+        location_id=location.id,
+        tenant_id=org.id,
+        name=f"{name} Boardroom",
+        space_type=SpaceType.CONFERENCE_ROOM,
+        capacity=8,
+        price_hourly=price_hourly,
+        availability_status=AvailabilityStatus.AVAILABLE,
+    )
+    db.add(space)
+    db.commit()
+    db.refresh(space)
+    return location, space
 
 
 def test_assistant_disabled_response(db_session, client_factory, monkeypatch):
@@ -148,20 +182,137 @@ def test_assistant_rate_limit(db_session, client_factory, monkeypatch):
     assert response.json()["rate_limited"] is True
 
 
-def test_marketplace_space_citation_uses_static_export_href(db_session, client_factory, monkeypatch):
+def test_marketplace_location_citation_uses_static_export_href(db_session, client_factory, monkeypatch):
     monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
-    owner, _org, _location, space = _seed_owner_location(db_session)
+    owner, _org, location, _space = _seed_owner_location(db_session)
     client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
 
     response = client.post("/api/assistant/chat?stream=false", json={"message": "meeting room in Miami"})
 
     assert response.status_code == 200
     citations = response.json()["message"]["citations"]
-    space_citation = next(item for item in citations if item["type"] == "space")
-    parsed = urlparse(space_citation["url"])
-    assert parsed.path == "/spaces/_.html"
-    assert parse_qs(parsed.query)["id"] == [space.public_id]
-    assert parse_qs(parsed.query)["back"] == ["/coworking"]
+    location_citation = next(item for item in citations if item["type"] == "location")
+    parsed = urlparse(location_citation["url"])
+    assert parsed.path == "/meeting-rooms/_.html"
+    assert parse_qs(parsed.query)["id"] == [location.public_id]
+
+
+def test_near_me_without_coordinates_requests_location_action(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, _org, _location, _space = _seed_owner_location(db_session)
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post(
+        "/api/assistant/chat?stream=false",
+        json={"message": "show me cheapest location for meeting room near me"},
+    )
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "need your location" in message["content"].lower()
+    assert message["citations"] == []
+    assert message["client_actions"][0]["kind"] == "request_location"
+    assert message["client_actions"][0]["payload"]["radius_miles"] == 50
+
+
+def test_near_me_with_coordinates_searches_meeting_rooms_within_radius(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, org, _location, _space = _seed_owner_location(db_session)
+    _add_meeting_location(
+        db_session,
+        org,
+        name="Fort Lauderdale Rooms",
+        city="Fort Lauderdale",
+        state="FL",
+        lat=26.1224,
+        lng=-80.1373,
+        price_hourly=25,
+    )
+    _add_meeting_location(
+        db_session,
+        org,
+        name="New York Rooms",
+        city="New York",
+        state="NY",
+        lat=40.7128,
+        lng=-74.0060,
+        price_hourly=5,
+    )
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post(
+        "/api/assistant/chat?stream=false",
+        json={
+            "message": "show me cheapest location for meeting room near me",
+            "page_context": {
+                "lat": 26.1320,
+                "lng": -80.2624,
+                "location_label": "Plantation, FL",
+                "radius_miles": 50,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    content = message["content"]
+    assert "within 50 miles of Plantation, FL" in content
+    assert "Fort Lauderdale Rooms" in content
+    assert "New York Rooms" not in content
+    assert "$25/hr" in content
+    assert message["client_actions"] == []
+    assert all(citation["type"] == "location" for citation in message["citations"])
+    first_result = content.splitlines()[1]
+    assert "Fort Lauderdale Rooms" in first_result
+
+
+def test_near_me_no_results_does_not_fallback_to_unrelated_inventory(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, _org, _location, _space = _seed_owner_location(db_session)
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post(
+        "/api/assistant/chat?stream=false",
+        json={
+            "message": "meeting room near me",
+            "page_context": {
+                "lat": 64.2008,
+                "lng": -149.4937,
+                "location_label": "Alaska",
+                "radius_miles": 50,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "could not find meeting rooms within 50 miles of Alaska" in message["content"]
+    assert "Assistant HQ" not in message["content"]
+    assert message["client_actions"] == []
+
+
+def test_explicit_new_york_search_still_uses_requested_city(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
+    owner, org, _location, _space = _seed_owner_location(db_session)
+    _add_meeting_location(
+        db_session,
+        org,
+        name="New York Rooms",
+        city="New York",
+        state="NY",
+        lat=40.7128,
+        lng=-74.0060,
+        price_hourly=55,
+    )
+    client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+
+    response = client.post("/api/assistant/chat?stream=false", json={"message": "meeting room in new york"})
+
+    assert response.status_code == 200
+    message = response.json()["message"]
+    assert "New York Rooms" in message["content"]
+    assert "Assistant HQ" not in message["content"]
+    assert message["client_actions"] == []
 
 
 def test_admin_quality_requires_platform_admin(db_session, client_factory, monkeypatch):
