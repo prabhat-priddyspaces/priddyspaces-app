@@ -1,16 +1,16 @@
 # Product Flows
 
-## 1) Membership flow (customer, optional)
+## 1) Membership flow (member, optional)
 ```mermaid
 sequenceDiagram
-  participant C as Customer
+  participant C as Member
   participant W as Web/Mobile
   participant API as Backend API
   participant S as Stripe
 
   C->>W: Select location + space
-  W->>API: Create Stripe customer
-  API->>S: Create customer
+  W->>API: Create Stripe Customer object
+  API->>S: Create Customer object
   S-->>API: customer_id
   API-->>W: customer_id
   W->>S: Collect card (Stripe UI)
@@ -26,7 +26,7 @@ sequenceDiagram
 ## 2) Booking flow (request-to-book default)
 ```mermaid
 sequenceDiagram
-  participant C as Customer
+  participant C as Member
   participant W as Web/Mobile
   participant API as Backend API
   participant S as Stripe

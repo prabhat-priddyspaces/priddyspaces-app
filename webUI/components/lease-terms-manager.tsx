@@ -242,7 +242,7 @@ export function LeaseTermsManager({ spacePublicId, spaceType, spaceCapacity }: L
         <div>
           <h3 className="text-lg font-semibold">Lease Terms</h3>
           <p className="text-sm text-textSecondary">
-            Configure the term lengths and monthly prices customers can lease this {spaceType === "suite" ? "suite" : "office"} for.
+            Configure the term lengths and monthly prices members can lease this {spaceType === "suite" ? "suite" : "office"} for.
           </p>
         </div>
         {!showForm ? (

@@ -199,11 +199,11 @@ def owner_overview(
     booked_hours = sum(_booking_hours(b) for b in confirmed_current)
     occupancy_pct = round(min(100.0, (booked_hours / (total_spaces * period_hours)) * 100.0), 1) if total_spaces else 0.0
 
-    # Retention: customers in current with bookings in previous window
-    current_customers = {b.user_id for b in current_bookings}
-    prev_customers = {b.user_id for b in prev_bookings}
-    returning = len(current_customers & prev_customers)
-    retention_pct = round((returning / len(current_customers) * 100.0), 1) if current_customers else 0.0
+    # Retention: members in current with bookings in previous window
+    current_members = {b.user_id for b in current_bookings}
+    prev_members = {b.user_id for b in prev_bookings}
+    returning = len(current_members & prev_members)
+    retention_pct = round((returning / len(current_members) * 100.0), 1) if current_members else 0.0
 
     no_show_count = sum(1 for b in confirmed_current if b.end_datetime < datetime.now(timezone.utc) and b.checked_in_at is None)
     no_show_rate = round((no_show_count / len(confirmed_current) * 100.0), 1) if confirmed_current else 0.0
@@ -575,7 +575,7 @@ def owner_retention(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
-    """Monthly cohort retention grid: for customers whose first booking was in cohort month M,
+    """Monthly cohort retention grid: for members whose first booking was in cohort month M,
     how many had any booking in month M+k (k = 0..months-1)."""
     user, tenant_ids, location_ids, space_ids = _require_owner(db, token)
     if not space_ids:
@@ -632,8 +632,8 @@ def owner_retention(
     return {"cohorts": cohorts}
 
 
-@router.get("/analytics/owner/top-customers")
-def owner_top_customers(
+@router.get("/analytics/owner/top-members")
+def owner_top_members(
     start_date: str | None = None,
     end_date: str | None = None,
     limit: int = Query(20, ge=1, le=100),
@@ -697,7 +697,7 @@ def owner_top_customers(
 
     if format == "csv":
         columns = ["email", "name", "bookings", "spend", "last_booking"]
-        return _respond("csv", None, csv_bytes=rows_to_csv(columns, rows), filename="top-customers")
+        return _respond("csv", None, csv_bytes=rows_to_csv(columns, rows), filename="top-members")
 
     return {"rows": rows}
 
@@ -806,9 +806,9 @@ def admin_platform(
         if not u.created_at:
             continue
         key = bucket(u.created_at)
-        sig_series.setdefault(key, {"customers": 0, "owners": 0})
-        if u.role == UserAppRole.CUSTOMER:
-            sig_series[key]["customers"] += 1
+        sig_series.setdefault(key, {"members": 0, "owners": 0})
+        if u.role == UserAppRole.MEMBER:
+            sig_series[key]["members"] += 1
         elif u.role == UserAppRole.OWNER:
             sig_series[key]["owners"] += 1
 
@@ -817,7 +817,7 @@ def admin_platform(
         {
             "bucket": b,
             **series.get(b, {"gmv": 0, "platform_earnings": 0, "owner_net": 0, "failed": 0}),
-            **sig_series.get(b, {"customers": 0, "owners": 0}),
+            **sig_series.get(b, {"members": 0, "owners": 0}),
         }
         for b in all_buckets
     ]
@@ -834,7 +834,7 @@ def admin_platform(
             "platform_earnings": total_fee,
             "take_rate_pct": take_rate_pct,
             "failed_payments": sum(1 for p in payments if p.status == PaymentStatus.FAILED),
-            "new_customers": sum(1 for u in signups if u.role == UserAppRole.CUSTOMER),
+            "new_members": sum(1 for u in signups if u.role == UserAppRole.MEMBER),
             "new_owners": sum(1 for u in signups if u.role == UserAppRole.OWNER),
         },
     }
@@ -1035,7 +1035,7 @@ def admin_reports(
     )
 
 
-# ---------- Customer endpoints ----------
+# ---------- Member endpoints ----------
 
 
 @router.get("/analytics/me/summary")

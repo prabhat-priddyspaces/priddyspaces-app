@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const FALLBACK_PATH = "/coworking";
+const FALLBACK_PATH = "/spaces";
 
 export function BackToSearchLink() {
   const router = useRouter();

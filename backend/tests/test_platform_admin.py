@@ -137,7 +137,7 @@ def test_superadmin_can_invite_platform_team_member_but_admin_cannot(db_session,
     assert forbidden.status_code == 403
 
 
-def test_pending_org_hidden_from_marketplace_and_customer_access(db_session, client_factory):
+def test_pending_org_hidden_from_marketplace_and_member_access(db_session, client_factory):
     _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
     location = Location(
         organization_id=org.id,
@@ -166,13 +166,13 @@ def test_pending_org_hidden_from_marketplace_and_customer_access(db_session, cli
     assert marketplace.status_code == 200
     assert marketplace.json() == []
 
-    customer = _create_user(db_session, email="customer@example.com", role=UserAppRole.CUSTOMER)
-    customer_client = client_factory({
-        "sub": str(customer.public_id),
-        "email": customer.email,
+    member = _create_user(db_session, email="member@example.com", role=UserAppRole.MEMBER)
+    member_client = client_factory({
+        "sub": str(member.public_id),
+        "email": member.email,
         "email_verified": True,
     })
-    hidden = customer_client.get(f"/api/locations/{location.public_id}")
+    hidden = member_client.get(f"/api/locations/{location.public_id}")
     assert hidden.status_code == 404
 
 
@@ -199,11 +199,11 @@ def test_rejected_org_owner_can_resubmit(db_session, client_factory):
 
 def test_impersonation_stop_uses_actor_platform_role(db_session, client_factory):
     admin = _create_platform_member(db_session, email="admin@example.com", role=PlatformTeamRole.ADMIN)
-    customer = _create_user(db_session, email="customer@example.com", role=UserAppRole.CUSTOMER)
+    member = _create_user(db_session, email="member@example.com", role=UserAppRole.MEMBER)
     client = client_factory({
-        "sub": str(customer.public_id),
+        "sub": str(member.public_id),
         "actor_sub": str(admin.public_id),
-        "email": customer.email,
+        "email": member.email,
         "email_verified": True,
         "impersonation_reason": "Support review",
     })

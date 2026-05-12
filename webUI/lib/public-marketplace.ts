@@ -1,4 +1,4 @@
-export type PublicMarketplaceRoute = "coworking" | "private-offices" | "meeting-rooms";
+export type PublicMarketplaceRoute = "spaces" | "private-offices" | "meeting-rooms";
 export type PublicMarketplaceApiCategory = "coworking" | "private_office" | "meeting_room";
 type SearchLike = Pick<URLSearchParams, "get">;
 
@@ -158,8 +158,8 @@ export interface SpaceAvailabilityResponse {
 }
 
 export const PUBLIC_MARKETPLACE_CONFIGS: Record<PublicMarketplaceRoute, PublicMarketplaceConfig> = {
-  "coworking": {
-    routeKey: "coworking",
+  "spaces": {
+    routeKey: "spaces",
     apiCategory: "coworking",
     label: "Coworking & Day Passes",
     title: "Find Your Next Coworking Spot",
@@ -305,12 +305,13 @@ export function buildMarketplaceLocationHref(
   locationPublicId: string,
   search: string,
 ) {
-  // Same pattern as the space href — route through /{routeKey}/_/index.html
+  // Same pattern as the space href — route through /locations/_/index.html
   // since arbitrary {locationId} paths aren't pre-rendered for static export.
   const next = new URLSearchParams(search);
   next.set("id", locationPublicId);
+  next.set("route", routeKey);
   const query = next.toString();
-  return query ? `/${routeKey}/_?${query}` : `/${routeKey}/_`;
+  return query ? `/locations/_?${query}` : "/locations/_";
 }
 
 export function formatSpaceTypeLabel(spaceType: string) {
@@ -381,7 +382,7 @@ export function getLocationPriceChips(
   const chips: Array<{ label: string; value: string }> = [];
 
   const formatCurrency = (value: number, suffix: string) => `$${value}${suffix}`;
-  if (config.routeKey === "coworking") {
+  if (config.routeKey === "spaces") {
     if (location.starting_day_pass_price != null) {
       chips.push({ label: "Day Pass", value: formatCurrency(location.starting_day_pass_price, "/day") });
     }
@@ -409,7 +410,7 @@ export function getSpacePriceChips(
   space: MarketplaceLocationSpace,
 ) {
   const chips: string[] = [];
-  if (config.routeKey === "coworking") {
+  if (config.routeKey === "spaces") {
     if (space.price_daily != null) chips.push(`Day Pass $${space.price_daily}/day`);
     if (space.membership_price != null) chips.push(`Membership $${space.membership_price}/mo`);
   } else if (config.routeKey === "private-offices") {

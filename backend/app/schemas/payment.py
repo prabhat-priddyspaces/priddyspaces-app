@@ -25,7 +25,7 @@ class SubscriptionPurchaseOut(BaseModel):
     client_secret: str | None
 
 
-class CustomerPortalOut(BaseModel):
+class MemberPortalOut(BaseModel):
     url: str
 
 

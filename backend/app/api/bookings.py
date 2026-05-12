@@ -39,7 +39,7 @@ def _booking_for_checkin(db: Session, public_id: str, token: dict) -> tuple[Book
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if booking.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking not found")
     else:
@@ -96,7 +96,7 @@ def list_bookings(
     user = get_or_create_user(db, token)
     query = db.query(Booking)
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         query = query.filter(Booking.user_id == user.id)
     else:
         loc_ids = accessible_location_ids(db, user.id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
@@ -129,9 +129,9 @@ def get_booking(
     booking = db.query(Booking).filter(Booking.public_id == public_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role == UserAppRole.CUSTOMER and booking.user_id != user.id:
+    if user.role == UserAppRole.MEMBER and booking.user_id != user.id:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role != UserAppRole.CUSTOMER:
+    if user.role != UserAppRole.MEMBER:
         space = db.query(Space).filter(Space.id == booking.space_id).first()
         if space:
             location = db.query(Location).filter(Location.id == space.location_id).first()
@@ -162,11 +162,11 @@ def update_booking(
     if payload.status not in (BookingStatus.CONFIRMED, BookingStatus.CANCELED):
         raise HTTPException(status_code=400, detail="Status must be confirmed or canceled")
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if booking.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking not found")
         if payload.status != BookingStatus.CANCELED:
-            raise HTTPException(status_code=403, detail="Customers can only cancel their own booking")
+            raise HTTPException(status_code=403, detail="Members can only cancel their own booking")
     else:
         space = db.query(Space).filter(Space.id == booking.space_id).first()
         if not space:
@@ -202,7 +202,7 @@ def cancel_booking(
     if not location:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if booking.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking not found")
     else:
@@ -221,7 +221,7 @@ def cancel_booking(
     if policy:
         deadline = _as_utc(booking.start_datetime) - timedelta(hours=policy.cancel_window_hours)
     now = datetime.now(timezone.utc)
-    if user.role == UserAppRole.CUSTOMER and now > deadline:
+    if user.role == UserAppRole.MEMBER and now > deadline:
         raise HTTPException(status_code=400, detail="Cancellation deadline has passed")
 
     before_status = booking.status
@@ -238,9 +238,9 @@ def cancel_booking(
         db.add(req)
     db.commit()
     db.refresh(booking)
-    customer = db.query(User).filter(User.id == booking.user_id).first()
-    if customer:
-        send_email(customer.email, "Booking canceled", f"Booking {booking.public_id} has been canceled.")
+    member = db.query(User).filter(User.id == booking.user_id).first()
+    if member:
+        send_email(member.email, "Booking canceled", f"Booking {booking.public_id} has been canceled.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -377,9 +377,9 @@ def refund_booking(
         db.add(req)
     db.commit()
     db.refresh(booking)
-    customer = db.query(User).filter(User.id == booking.user_id).first()
-    if customer:
-        send_email(customer.email, "Booking refunded", f"Booking {booking.public_id} refund initiated.")
+    member = db.query(User).filter(User.id == booking.user_id).first()
+    if member:
+        send_email(member.email, "Booking refunded", f"Booking {booking.public_id} refund initiated.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,

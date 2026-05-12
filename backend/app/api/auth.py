@@ -19,6 +19,7 @@ from app.core.password import hash_password, verify_password
 from app.db.deps import get_db
 from app.models.user import User
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut
+from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.auth_user import get_or_create_user
 from app.services.platform_auth import issue_standard_token, touch_platform_last_login
 
@@ -76,7 +77,8 @@ def _secure_cookie() -> bool:
 def register(payload: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
     if not payload.terms_accepted or not payload.privacy_policy_accepted:
         raise HTTPException(status_code=400, detail="Terms and privacy policy must be accepted")
-    existing = db.query(User).filter(User.email == payload.email).first()
+    email = normalize_email(payload.email)
+    existing = get_user_by_normalized_email(db, email)
     if existing and existing.password_hash:
         raise HTTPException(status_code=400, detail="Email already registered")
     now = datetime.now(timezone.utc)
@@ -93,7 +95,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
         db.add(user)
     else:
         user = User(
-            email=payload.email,
+            email=email,
             password_hash=hash_password(payload.password),
             first_name=payload.first_name,
             last_name=payload.last_name,
@@ -117,7 +119,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
 
 @router.post("/login", response_model=TokenOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = get_user_by_normalized_email(db, payload.email)
     if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not verify_password(payload.password, user.password_hash):

@@ -42,7 +42,7 @@ def owner_calendar(
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         raise HTTPException(status_code=403, detail="Owner role required")
 
     loc_ids = accessible_location_ids(db, user.id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})

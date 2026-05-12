@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminSideNav } from "../components/admin-side-nav";
-import { CustomerSideNav } from "../components/customer-side-nav";
+import { MemberSideNav } from "../components/member-side-nav";
 import { PublicTopbar } from "../components/public-topbar";
 import { SideNav } from "../components/side-nav";
 
@@ -36,15 +36,15 @@ describe("logout flows", () => {
   it("signs out from the public topbar without leaving the current public page", async () => {
     getAccessTokenMock.mockReturnValue("token");
     apiFetchMock.mockResolvedValue({
-      public_id: "customer_1",
-      email: "customer@example.com",
-      first_name: "Customer",
+      public_id: "member_1",
+      email: "member@example.com",
+      first_name: "Member",
       last_name: "User",
-      role: "customer",
-      app_role: "customer",
+      role: "member",
+      app_role: "member",
       platform_role: null,
       has_organization: false,
-      default_route: "/coworking",
+      default_route: "/spaces",
       impersonation: {
         is_impersonating: false,
         actor_public_id: null,
@@ -79,9 +79,9 @@ describe("logout flows", () => {
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     owner.unmount();
 
-    const customer = render(<CustomerSideNav />);
+    const member = render(<MemberSideNav />);
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
-    customer.unmount();
+    member.unmount();
 
     render(<AdminSideNav platformRole="superadmin" />);
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));

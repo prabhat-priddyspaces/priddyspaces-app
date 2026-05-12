@@ -40,13 +40,13 @@ from app.models.marketing import (
     WorkflowRunEvent,
     WorkflowVersion,
 )
-from app.models.org_customer import OrgCustomer
+from app.models.org_member_profile import OrgMemberProfile
 from app.models.organization import Organization
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.services.authz import list_org_members
 from app.services.notifications import send_email
-from app.services.org_customer_stats import MemberStats, compute_member_stats, interacted_user_ids
+from app.services.org_member_stats import MemberStats, compute_member_stats, interacted_user_ids
 from app.utils.uuid import new_public_id
 
 logger = logging.getLogger("marketing")
@@ -55,7 +55,7 @@ OWNER_MARKETING_ROLES = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
 SENDER_LANES = {"shared", "verified_sender"}
 
 ALLOWED_TEMPLATE_FIELDS: dict[str, set[str]] = {
-    "customer": {"first_name", "last_name", "full_name", "email", "phone"},
+    "member": {"first_name", "last_name", "full_name", "email", "phone"},
     "booking": {"number", "start_date", "end_date", "space_name", "location_name", "link"},
     "space": {"name", "type", "capacity", "location_name"},
     "membership": {"name", "status", "renewal_date", "expiry_date"},
@@ -68,7 +68,7 @@ ALLOWED_TEMPLATE_FIELDS: dict[str, set[str]] = {
 @dataclass
 class AudienceMember:
     user: User
-    record: OrgCustomer | None
+    record: OrgMemberProfile | None
     stats: MemberStats
     tags: list[str]
 
@@ -279,7 +279,7 @@ def get_audience_members(db: Session, org: Organization, filters: dict[str, Any]
     interacted = interacted_user_ids(db, org.id)
     records = {
         record.user_id: record
-        for record in db.query(OrgCustomer).filter(OrgCustomer.organization_id == org.id).all()
+        for record in db.query(OrgMemberProfile).filter(OrgMemberProfile.organization_id == org.id).all()
     }
     user_ids = interacted | set(records.keys())
     if not user_ids:
@@ -459,17 +459,17 @@ def member_context(
     record = None
     if user:
         record = (
-            db.query(OrgCustomer)
-            .filter(OrgCustomer.organization_id == org.id, OrgCustomer.user_id == user.id)
+            db.query(OrgMemberProfile)
+            .filter(OrgMemberProfile.organization_id == org.id, OrgMemberProfile.user_id == user.id)
             .first()
         )
-    customer_phone = record.phone if record and record.phone else (user.phone if user else None)
-    customer = {
+    member_phone = record.phone if record and record.phone else (user.phone if user else None)
+    member = {
         "first_name": user.first_name if user else "",
         "last_name": user.last_name if user else "",
         "full_name": (user.full_name or f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email) if user else "",
         "email": user.email if user else "",
-        "phone": customer_phone or "",
+        "phone": member_phone or "",
     }
 
     latest_subscription = None
@@ -499,7 +499,7 @@ def member_context(
         links["view_in_browser"] = f"{settings.BACKEND_URL}/api/marketing/messages/{make_link_token({'message': outbound.public_id})}/view"
 
     context = {
-        "customer": customer,
+        "member": member,
         "booking": {
             "number": "",
             "start_date": "",
@@ -1189,7 +1189,7 @@ def advance_workflow_run(db: Session, run: WorkflowRun) -> bool:
         filters = data.get("filters") or {}
         member = AudienceMember(
             user=user,
-            record=db.query(OrgCustomer).filter(OrgCustomer.organization_id == org.id, OrgCustomer.user_id == user.id).first(),
+            record=db.query(OrgMemberProfile).filter(OrgMemberProfile.organization_id == org.id, OrgMemberProfile.user_id == user.id).first(),
             stats=compute_member_stats(db, org.id, user.id),
             tags=[],
         )
@@ -1209,12 +1209,12 @@ def advance_workflow_run(db: Session, run: WorkflowRun) -> bool:
         tag = str(data.get("tag") or "").strip()
         if tag:
             record = (
-                db.query(OrgCustomer)
-                .filter(OrgCustomer.organization_id == org.id, OrgCustomer.user_id == user.id)
+                db.query(OrgMemberProfile)
+                .filter(OrgMemberProfile.organization_id == org.id, OrgMemberProfile.user_id == user.id)
                 .first()
             )
             if not record:
-                record = OrgCustomer(organization_id=org.id, tenant_id=org.id, user_id=user.id, status="active")
+                record = OrgMemberProfile(organization_id=org.id, tenant_id=org.id, user_id=user.id, status="active")
             tags = set(decode_tags(record.tags))
             tags.add(tag)
             record.tags = encode_tags(tags)

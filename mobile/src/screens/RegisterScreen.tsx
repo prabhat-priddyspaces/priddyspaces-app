@@ -23,7 +23,7 @@ export function RegisterScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create account</Text>
-      <Text style={styles.subtitle}>You'll choose your role in the next step.</Text>
+      <Text style={styles.subtitle}>Create a member account to book spaces and manage memberships.</Text>
       <TextInput
         style={styles.input}
         placeholder="First name"

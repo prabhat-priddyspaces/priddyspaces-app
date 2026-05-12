@@ -106,7 +106,7 @@ def list_subscriptions(
     user = get_or_create_user(db, token)
     query = db.query(Subscription)
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         query = query.filter(Subscription.user_id == user.id)
     else:
         location_ids = accessible_location_ids(db, user.id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
@@ -137,7 +137,7 @@ def get_subscription(
     subscription = db.query(Subscription).filter(Subscription.public_id == public_id).first()
     if not subscription:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if subscription.user_id != user.id:
             raise HTTPException(status_code=404, detail="Subscription not found")
         return _to_out(db, subscription)
@@ -173,9 +173,9 @@ def get_meeting_room_balance(
     )
     if not subscription:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    if user.role == UserAppRole.CUSTOMER and subscription.user_id != user.id:
+    if user.role == UserAppRole.MEMBER and subscription.user_id != user.id:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    if user.role != UserAppRole.CUSTOMER:
+    if user.role != UserAppRole.MEMBER:
         space = db.query(Space).filter(Space.id == subscription.space_id).first()
         location = (
             db.query(Location).filter(Location.id == space.location_id).first()
@@ -224,7 +224,7 @@ def cancel_subscription(
     if not subscription:
         raise HTTPException(status_code=404, detail="Subscription not found")
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if subscription.user_id != user.id:
             raise HTTPException(status_code=404, detail="Subscription not found")
     else:

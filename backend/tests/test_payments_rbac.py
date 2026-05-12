@@ -63,13 +63,13 @@ def _seed_tenant(db, owner: User, name: str):
 def test_payments_rbac_list_and_get(db_session, client_factory):
     owner_one = _create_user(db_session, "owner1@example.com", "sub-owner-1", UserAppRole.OWNER)
     owner_two = _create_user(db_session, "owner2@example.com", "sub-owner-2", UserAppRole.OWNER)
-    customer = _create_user(db_session, "cust@example.com", "sub-cust-1", UserAppRole.CUSTOMER)
+    member = _create_user(db_session, "member@example.com", "sub-member-1", UserAppRole.MEMBER)
 
     org_one, _loc_one, space_one = _seed_tenant(db_session, owner_one, "OrgOne")
     org_two, _loc_two, space_two = _seed_tenant(db_session, owner_two, "OrgTwo")
 
     booking_one = Booking(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space_one.id,
         tenant_id=org_one.id,
         start_datetime=datetime(2026, 2, 1, 10, 0, tzinfo=timezone.utc),
@@ -81,7 +81,7 @@ def test_payments_rbac_list_and_get(db_session, client_factory):
     db_session.refresh(booking_one)
 
     payment_one = Payment(
-        user_id=customer.id,
+        user_id=member.id,
         booking_id=booking_one.id,
         tenant_id=org_one.id,
         amount=2000,
@@ -122,12 +122,12 @@ def test_payments_rbac_list_and_get(db_session, client_factory):
     resp = other_owner_client.get(f"/api/payments/{payment_one.public_id}")
     assert resp.status_code == 404
 
-    customer_client = client_factory({
-        "sub": "sub-cust-1",
-        "email": "cust@example.com",
+    member_client = client_factory({
+        "sub": "sub-member-1",
+        "email": "member@example.com",
         "email_verified": True
     })
-    resp = customer_client.get("/api/payments")
+    resp = member_client.get("/api/payments")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1

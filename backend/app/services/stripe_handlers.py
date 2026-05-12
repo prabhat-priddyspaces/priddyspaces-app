@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingStatus, PaymentStatus
 from app.models.invoice import Invoice
 from app.models.organization import Organization
@@ -166,7 +166,7 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
     invoice_payload = {
         "invoice_number": f"INV-{payment.public_id}",
         "issued_at": booking.start_datetime.date().isoformat(),
-        "customer_email": customer_email,
+        "member_email": customer_email,
         "booking_public_id": booking.public_id,
         "description": "Workspace booking payment",
         "amount": payment.amount or 0,
@@ -220,7 +220,7 @@ def _handle_subscription_invoice_event(db: Session, event_type: str, data: dict[
     invoice_payload = {
         "invoice_number": data.get("number") or f"INV-{payment.public_id}",
         "issued_at": issued_at,
-        "customer_email": customer_email,
+        "member_email": customer_email,
         "subscription_public_id": subscription.public_id,
         "description": "Workspace membership charge",
         "amount": payment.amount or 0,
@@ -329,8 +329,8 @@ def handle_event(db: Session, event: dict[str, Any]) -> dict[str, Any]:
         provider_pm_id = data.get("id")
         if provider_pm_id:
             method = (
-                db.query(CustomerOwnerPaymentMethod)
-                .filter(CustomerOwnerPaymentMethod.provider_payment_method_id == provider_pm_id)
+                db.query(MemberOwnerPaymentMethod)
+                .filter(MemberOwnerPaymentMethod.provider_payment_method_id == provider_pm_id)
                 .first()
             )
             if method:
@@ -342,8 +342,8 @@ def handle_event(db: Session, event: dict[str, Any]) -> dict[str, Any]:
         provider_pm_id = data.get("id")
         if provider_pm_id:
             method = (
-                db.query(CustomerOwnerPaymentMethod)
-                .filter(CustomerOwnerPaymentMethod.provider_payment_method_id == provider_pm_id)
+                db.query(MemberOwnerPaymentMethod)
+                .filter(MemberOwnerPaymentMethod.provider_payment_method_id == provider_pm_id)
                 .first()
             )
             if method:

@@ -63,11 +63,11 @@ def _seed_tenant(db, owner: User, name: str):
 
 def test_subscription_list_and_cancel(db_session, client_factory, monkeypatch):
     owner = _create_user(db_session, "owner@example.com", "sub-owner", UserAppRole.OWNER)
-    customer = _create_user(db_session, "customer@example.com", "sub-customer", UserAppRole.CUSTOMER)
+    member = _create_user(db_session, "member@example.com", "sub-member", UserAppRole.MEMBER)
     org, _location, space = _seed_tenant(db_session, owner, "OrgOne")
 
     subscription = Subscription(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=org.id,
         status="active",
@@ -90,8 +90,8 @@ def test_subscription_list_and_cancel(db_session, client_factory, monkeypatch):
     assert owner_data[0]["space_public_id"] == space.public_id
     assert owner_data[0]["location_name"] == "OrgOne HQ"
 
-    customer_client = client_factory(
-        {"sub": customer.auth_subject, "email": customer.email, "email_verified": True}
+    member_client = client_factory(
+        {"sub": member.auth_subject, "email": member.email, "email_verified": True}
     )
 
     canceled_ids: list[str] = []
@@ -102,7 +102,7 @@ def test_subscription_list_and_cancel(db_session, client_factory, monkeypatch):
 
     monkeypatch.setattr(subscriptions_api, "cancel_stripe_subscription", fake_cancel)
 
-    resp = customer_client.post(f"/api/subscriptions/{subscription.public_id}/cancel")
+    resp = member_client.post(f"/api/subscriptions/{subscription.public_id}/cancel")
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["status"] == "canceling"
@@ -112,8 +112,8 @@ def test_subscription_list_and_cancel(db_session, client_factory, monkeypatch):
     assert subscription.status == "canceling"
 
 
-def test_customer_portal_session_created(db_session, client_factory, monkeypatch):
-    customer = _create_user(db_session, "customer@example.com", "sub-customer", UserAppRole.CUSTOMER)
+def test_member_portal_session_created(db_session, client_factory, monkeypatch):
+    member = _create_user(db_session, "member@example.com", "sub-member", UserAppRole.MEMBER)
 
     created_customers: list[str] = []
     created_portal_sessions: list[tuple[str, str]] = []
@@ -130,16 +130,16 @@ def test_customer_portal_session_created(db_session, client_factory, monkeypatch
     monkeypatch.setattr(payments_api, "create_billing_portal_session", fake_create_portal)
 
     client = client_factory(
-        {"sub": customer.auth_subject, "email": customer.email, "email_verified": True}
+        {"sub": member.auth_subject, "email": member.email, "email_verified": True}
     )
-    resp = client.post("/api/payments/customer-portal")
+    resp = client.post("/api/payments/member-portal")
 
     assert resp.status_code == 200
     assert resp.json()["url"] == "https://billing.example.test/session"
-    assert created_customers == [customer.email]
+    assert created_customers == [member.email]
     assert created_portal_sessions
     assert created_portal_sessions[0][0] == "cus_test_123"
-    assert created_portal_sessions[0][1].endswith("/customer/subscriptions")
+    assert created_portal_sessions[0][1].endswith("/member/subscriptions")
 
-    db_session.refresh(customer)
-    assert customer.stripe_customer_id == "cus_test_123"
+    db_session.refresh(member)
+    assert member.stripe_customer_id == "cus_test_123"

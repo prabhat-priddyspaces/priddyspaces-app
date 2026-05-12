@@ -68,7 +68,7 @@ class PaymentMethodSetupSessionOut(BaseModel):
     tokenizer_url: str | None = None
 
 
-class CustomerOwnerPaymentMethodCreate(BaseModel):
+class MemberOwnerPaymentMethodCreate(BaseModel):
     space_public_id: str
     owner_payment_setting_public_id: str | None = None
     provider_customer_id: str | None = None
@@ -83,7 +83,7 @@ class CustomerOwnerPaymentMethodCreate(BaseModel):
     billing_zip: str | None = None
 
 
-class CustomerOwnerPaymentMethodOut(BaseModel):
+class MemberOwnerPaymentMethodOut(BaseModel):
     public_id: str
     organization_public_id: str | None = None
     provider: str

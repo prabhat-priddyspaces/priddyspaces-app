@@ -192,7 +192,7 @@ def list_spaces(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
     user = get_or_create_user(db, token)
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         organization = db.query(Organization).filter(Organization.id == location.organization_id).first()
         if location.status != LocationStatus.ACTIVE or not organization_is_publicly_visible(organization):
             raise HTTPException(status_code=404, detail="Location not found")

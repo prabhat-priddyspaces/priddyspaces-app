@@ -35,8 +35,8 @@ export function getDefaultRoute(me: MeResponse): string {
     return me.has_organization ? "/owner" : "/onboarding/organization";
   }
 
-  // Customer
-  if (me.app_role === "customer") return "/coworking";
+  // Member
+  if (me.app_role === "member") return "/spaces";
 
   // Server-provided default or fallback
   return me.default_route || "/onboarding/personal";
@@ -45,6 +45,6 @@ export function getDefaultRoute(me: MeResponse): string {
 export function getDashboardHref(me: MeResponse): string {
   if (me.platform_role) return "/admin";
   if (me.app_role === "owner") return "/owner";
-  if (me.app_role === "customer") return "/customer/requests";
+  if (me.app_role === "member") return "/member/requests";
   return "/onboarding/personal";
 }

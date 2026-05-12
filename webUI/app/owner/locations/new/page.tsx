@@ -449,7 +449,7 @@ export default function NewLocation() {
                     emptyMessage="This organization does not have any amenities yet. Add them from Settings."
                   />
                   <div className="text-xs text-textMuted">
-                    Choose the amenities this location should expose to customers.
+                    Choose the amenities this location should expose to members.
                   </div>
                 </>
               ) : (

@@ -20,7 +20,7 @@ from app.models.enums import (
 from app.models.location import Location
 from datetime import datetime, time, timezone
 
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.membership_plan import MembershipPlan
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
@@ -195,10 +195,10 @@ def _to_out(
         )
         estimated = estimate.total_cents // 100 if estimate else None
     payment_method_public_id = None
-    if db and req.customer_owner_payment_method_id:
+    if db and req.member_owner_payment_method_id:
         payment_method = (
-            db.query(CustomerOwnerPaymentMethod)
-            .filter(CustomerOwnerPaymentMethod.id == req.customer_owner_payment_method_id)
+            db.query(MemberOwnerPaymentMethod)
+            .filter(MemberOwnerPaymentMethod.id == req.member_owner_payment_method_id)
             .first()
         )
         payment_method_public_id = payment_method.public_id if payment_method else None
@@ -234,7 +234,7 @@ def _to_out(
         status=req.status,
         payment_status=req.payment_status,
         payment_provider=req.payment_provider,
-        customer_owner_payment_method_public_id=payment_method_public_id,
+        member_owner_payment_method_public_id=payment_method_public_id,
         approved_at=req.approved_at,
         cancelled_at=req.cancelled_at,
         cancellation_deadline_at=req.cancellation_deadline_at,
@@ -281,15 +281,15 @@ def _approve_membership_request(
         else None
     )
     method = (
-        db.query(CustomerOwnerPaymentMethod)
-        .filter(CustomerOwnerPaymentMethod.id == req.customer_owner_payment_method_id)
+        db.query(MemberOwnerPaymentMethod)
+        .filter(MemberOwnerPaymentMethod.id == req.member_owner_payment_method_id)
         .first()
-        if req.customer_owner_payment_method_id
+        if req.member_owner_payment_method_id
         else None
     )
     if not setting or not method or method.status != "active":
         raise HTTPException(
-            status_code=400, detail="Customer payment method is no longer valid"
+            status_code=400, detail="Member payment method is no longer valid"
         )
 
     try:
@@ -408,7 +408,7 @@ def _create_membership_purchase_request(
             db,
             user,
             space,
-            payload.customer_owner_payment_method_public_id,
+            payload.member_owner_payment_method_public_id,
             payload.payment_authorization_consent,
         )
 
@@ -438,7 +438,7 @@ def _create_membership_purchase_request(
         status=BookingRequestStatus.REQUESTED,
         owner_payment_setting_id=owner_payment_setting.id if owner_payment_setting else None,
         payment_provider=owner_payment_setting.provider if owner_payment_setting else None,
-        customer_owner_payment_method_id=payment_method.id if payment_method else None,
+        member_owner_payment_method_id=payment_method.id if payment_method else None,
         payment_status="not_charged" if owner_payment_setting else None,
         payment_authorization_consent_at=consent_at,
         request_kind=_kind_for_booking_mode(plan.booking_mode).value,
@@ -635,7 +635,7 @@ def create_booking_request(
             db,
             user,
             space,
-            payload.customer_owner_payment_method_public_id,
+            payload.member_owner_payment_method_public_id,
             payload.payment_authorization_consent,
         )
 
@@ -655,7 +655,7 @@ def create_booking_request(
         status=BookingRequestStatus.APPROVED if instant and not settings.PAYMENT_CHARGE_ON_APPROVAL else BookingRequestStatus.REQUESTED,
         owner_payment_setting_id=owner_payment_setting.id if owner_payment_setting else None,
         payment_provider=owner_payment_setting.provider if owner_payment_setting else None,
-        customer_owner_payment_method_id=payment_method.id if payment_method else None,
+        member_owner_payment_method_id=payment_method.id if payment_method else None,
         payment_status="not_charged" if owner_payment_setting else None,
         payment_authorization_consent_at=consent_at,
         request_kind=chosen_kind,
@@ -705,7 +705,7 @@ def list_booking_requests(
     user = get_or_create_user(db, token)
     query = db.query(BookingRequest)
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         query = query.filter(BookingRequest.user_id == user.id)
     else:
         location_ids = accessible_location_ids(db, user.id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
@@ -742,7 +742,7 @@ def get_booking_request(
     req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Booking request not found")
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if req.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking request not found")
         space = db.query(Space).filter(Space.id == req.space_id).first()
@@ -848,9 +848,9 @@ def approve_booking_request(
                 space=space,
             )
         else:
-            customer = db.query(User).filter(User.id == req.user_id).first()
-            if customer:
-                send_email(customer.email, "Booking request approved", f"Request {req.public_id} approved.")
+            member = db.query(User).filter(User.id == req.user_id).first()
+            if member:
+                send_email(member.email, "Booking request approved", f"Request {req.public_id} approved.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -928,9 +928,9 @@ def reject_booking_request(
             space=space,
         )
     else:
-        customer = db.query(User).filter(User.id == req.user_id).first()
-        if customer:
-            send_email(customer.email, "Booking request rejected", f"Request {req.public_id} rejected.")
+        member = db.query(User).filter(User.id == req.user_id).first()
+        if member:
+            send_email(member.email, "Booking request rejected", f"Request {req.public_id} rejected.")
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -966,8 +966,8 @@ def cancel_booking_request(
     if not location:
         raise HTTPException(status_code=404, detail="Booking request not found")
 
-    is_customer = user.role == UserAppRole.CUSTOMER
-    if is_customer:
+    is_member = user.role == UserAppRole.MEMBER
+    if is_member:
         if req.user_id is None or req.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking request not found")
     else:
@@ -978,7 +978,7 @@ def cancel_booking_request(
 
     now = datetime.now(timezone.utc)
     booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
-    if is_customer and booking and req.cancellation_deadline_at and now > _as_utc(req.cancellation_deadline_at):
+    if is_member and booking and req.cancellation_deadline_at and now > _as_utc(req.cancellation_deadline_at):
         raise HTTPException(status_code=400, detail="Cancellation deadline has passed")
 
     if booking:
@@ -999,7 +999,7 @@ def cancel_booking_request(
     if req.is_guest_checkout and req.guest_email:
         send_email(req.guest_email, "Booking canceled", f"Your booking request {req.public_id} has been canceled.")
     else:
-        customer = db.query(User).filter(User.id == req.user_id).first()
-        if customer:
-            send_email(customer.email, "Booking canceled", f"Request {req.public_id} has been canceled.")
+        member = db.query(User).filter(User.id == req.user_id).first()
+        if member:
+            send_email(member.email, "Booking canceled", f"Request {req.public_id} has been canceled.")
     return _to_out(req, space, booking, db)

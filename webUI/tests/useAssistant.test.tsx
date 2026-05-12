@@ -5,7 +5,7 @@ import { useAssistant } from "../hooks/useAssistant";
 
 const assistantStreamMock = vi.hoisted(() => vi.fn());
 const apiFetchMock = vi.hoisted(() => vi.fn());
-const usePathnameMock = vi.hoisted(() => vi.fn(() => "/coworking"));
+const usePathnameMock = vi.hoisted(() => vi.fn(() => "/spaces"));
 
 vi.mock("../lib/assistantStream", () => ({
   assistantStream: assistantStreamMock,
@@ -29,7 +29,7 @@ vi.mock("next/navigation", () => ({
 
 describe("useAssistant", () => {
   beforeEach(() => {
-    window.history.pushState({}, "", "/coworking?q=Plantation%2C+FL&lat=26.1320&lng=-80.2624&radius_miles=50");
+    window.history.pushState({}, "", "/spaces?q=Plantation%2C+FL&lat=26.1320&lng=-80.2624&radius_miles=50");
     const storage = new Map<string, string>();
     Object.defineProperty(window, "localStorage", {
       value: {
@@ -71,7 +71,7 @@ describe("useAssistant", () => {
     expect(assistantStreamMock).toHaveBeenCalledWith(
       expect.objectContaining({
         page_context: expect.objectContaining({
-          pathname: "/coworking",
+          pathname: "/spaces",
           q: "Plantation, FL",
           location_label: "Plantation, FL",
           lat: 26.132,

@@ -20,7 +20,7 @@ const ownerItems: MenuItem[] = [
   { label: "Profile", screen: "Profile", target: "tab" }
 ];
 
-const customerItems: MenuItem[] = [
+const memberItems: MenuItem[] = [
   { label: "Marketplace", screen: "Marketplace", target: "tab" },
   { label: "Bookings", screen: "Bookings", target: "tab" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
@@ -30,7 +30,7 @@ const customerItems: MenuItem[] = [
 export function MenuScreen() {
   const navigation = useNavigation<any>();
   const { me, signOut } = useAuth();
-  const items = me?.role === "owner" ? ownerItems : customerItems;
+  const items = me?.role === "owner" ? ownerItems : memberItems;
 
   function goTo(item: MenuItem) {
     if (item.target === "stack") {

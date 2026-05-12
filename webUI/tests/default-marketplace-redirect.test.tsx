@@ -22,18 +22,18 @@ describe("DefaultMarketplaceRedirect", () => {
 
     await waitFor(() => {
       expect(replaceMock).toHaveBeenCalledWith(
-        "/spaces/_.html?id=space_1&back=%2Fcoworking&date=2026-05-12",
+        "/spaces/_.html?id=space_1&back=%2Fspaces&date=2026-05-12",
       );
     });
   });
 
-  it("falls back to coworking for the root route", async () => {
+  it("falls back to spaces for the root route", async () => {
     window.history.pushState({}, "", "/");
 
     render(<DefaultMarketplaceRedirect />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/coworking");
+      expect(replaceMock).toHaveBeenCalledWith("/spaces");
     });
   });
 });

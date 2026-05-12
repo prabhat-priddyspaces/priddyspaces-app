@@ -2,13 +2,13 @@ from datetime import datetime, timedelta, timezone
 
 from app.models.enums import UserAppRole, UserRole
 from app.models.marketing import MarketingVerifiedSender, OutboundMessage, WorkflowRun
-from app.models.org_customer import OrgCustomer
+from app.models.org_member_profile import OrgMemberProfile
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
 
 
-def _user(db, email: str, sub: str, role: UserAppRole = UserAppRole.CUSTOMER) -> User:
+def _user(db, email: str, sub: str, role: UserAppRole = UserAppRole.MEMBER) -> User:
     user = User(email=email, auth_subject=sub, role=role, email_verified=True, is_active=True)
     db.add(user)
     db.commit()
@@ -41,7 +41,7 @@ def _client(client_factory, user: User):
 def _member(db, org: Organization, email: str, sub: str, *, status: str = "active", tags: str | None = None) -> User:
     member = _user(db, email, sub)
     db.add(
-        OrgCustomer(
+        OrgMemberProfile(
             organization_id=org.id,
             tenant_id=org.id,
             user_id=member.id,
@@ -59,9 +59,9 @@ def _template(client, org: Organization):
         json={
             "organization_public_id": org.public_id,
             "name": "Welcome",
-            "subject": "Hi {{ customer.first_name }}",
+            "subject": "Hi {{ member.first_name }}",
             "html_body": "<p>{{ business.name }}</p><a href=\"{{ links.unsubscribe }}\">Unsubscribe</a>",
-            "text_body": "Hi {{ customer.full_name }}",
+            "text_body": "Hi {{ member.full_name }}",
         },
     )
     assert response.status_code == 200, response.text
@@ -78,13 +78,13 @@ def test_template_validation_rejects_unknown_variables(db_session, client_factor
         json={
             "organization_public_id": org.public_id,
             "name": "Bad",
-            "subject": "Hi {{ customer.password }}",
+            "subject": "Hi {{ member.password }}",
             "text_body": "Body",
         },
     )
 
     assert response.status_code == 400
-    assert "customer.password" in response.text
+    assert "member.password" in response.text
 
 
 def test_segment_preview_uses_only_org_crm_members(db_session, client_factory):

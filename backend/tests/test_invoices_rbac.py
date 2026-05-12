@@ -34,14 +34,14 @@ def _seed_org(db, owner: User, name: str) -> Organization:
 def test_invoices_rbac(db_session, client_factory):
     owner_one = _create_user(db_session, "owner1@example.com", "sub-owner-1", UserAppRole.OWNER)
     owner_two = _create_user(db_session, "owner2@example.com", "sub-owner-2", UserAppRole.OWNER)
-    customer = _create_user(db_session, "cust@example.com", "sub-cust-1", UserAppRole.CUSTOMER)
+    member = _create_user(db_session, "member@example.com", "sub-member-1", UserAppRole.MEMBER)
 
     org_one = _seed_org(db_session, owner_one, "OrgOne")
     org_two = _seed_org(db_session, owner_two, "OrgTwo")
 
     inv_one = Invoice(
         tenant_id=org_one.id,
-        user_id=customer.id,
+        user_id=member.id,
         amount=120,
         status="issued"
     )
@@ -67,11 +67,11 @@ def test_invoices_rbac(db_session, client_factory):
     assert len(data) == 1
     assert data[0]["public_id"] == inv_one.public_id
 
-    customer_client = client_factory({
-        "sub": "sub-cust-1",
-        "email": "cust@example.com",
+    member_client = client_factory({
+        "sub": "sub-member-1",
+        "email": "member@example.com",
         "email_verified": True
     })
-    resp = customer_client.get("/api/invoices")
+    resp = member_client.get("/api/invoices")
     assert resp.status_code == 200
     assert len(resp.json()) == 1

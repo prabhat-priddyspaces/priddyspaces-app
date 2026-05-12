@@ -21,7 +21,7 @@ def generate_invoice_pdf(payload: dict) -> bytes:
     lines = [
         f"Invoice: {payload.get('invoice_number', '')}",
         f"Date: {payload.get('issued_at', datetime.utcnow().date().isoformat())}",
-        f"Customer: {payload.get('customer_email', '')}",
+        f"Member: {payload.get('member_email', '')}",
     ]
 
     if payload.get("booking_public_id"):

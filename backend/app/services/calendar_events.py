@@ -70,7 +70,7 @@ def build_calendar_events(
     omitted, all statuses pass through.
     `include` may contain any of {'bookings', 'requests', 'subscriptions'}.
     `user_id_filter` (when set) restricts to events tied to that user — used by the
-    customer-side `/api/me/calendar`.
+    member-side `/api/me/calendar`.
     """
     location_id_list = list(location_ids)
     if not location_id_list:

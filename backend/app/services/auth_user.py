@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import UserAppRole
 from app.models.user import User
+from app.services.email_identity import get_user_by_normalized_email, normalize_email
 
 
 def get_or_create_user(db: Session, payload: dict) -> User:
@@ -32,7 +33,8 @@ def get_or_create_user(db: Session, payload: dict) -> User:
 
     email = payload.get("email")
     if email:
-        user = db.query(User).filter(User.email == email).first()
+        normalized_email = normalize_email(email)
+        user = get_user_by_normalized_email(db, normalized_email)
         if user:
             if not user.auth_subject:
                 user.auth_subject = sub
@@ -40,7 +42,7 @@ def get_or_create_user(db: Session, payload: dict) -> User:
                 user.full_name = payload.get("name")
             user.email_verified = user.email_verified or payload.get("email_verified", False)
             if user.role is None:
-                user.role = UserAppRole.CUSTOMER
+                user.role = UserAppRole.MEMBER
             db.add(user)
             db.commit()
             db.refresh(user)
@@ -50,10 +52,10 @@ def get_or_create_user(db: Session, payload: dict) -> User:
         # (legacy flow). Clerk users get their row from the webhook handler.
         user = User(
             auth_subject=sub,
-            email=email,
+            email=normalized_email,
             full_name=payload.get("name"),
             email_verified=payload.get("email_verified", False),
-            role=UserAppRole.CUSTOMER,
+            role=UserAppRole.MEMBER,
         )
         db.add(user)
         db.commit()

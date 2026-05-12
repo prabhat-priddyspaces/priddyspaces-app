@@ -19,8 +19,8 @@ import { OwnerLocationsScreen } from "../screens/owner/OwnerLocationsScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerSettingsScreen } from "../screens/owner/OwnerSettingsScreen";
 import { OwnerTeamScreen } from "../screens/owner/OwnerTeamScreen";
-import { LocationSpacesScreen } from "../screens/customer/LocationSpacesScreen";
-import { SpaceDetailScreen } from "../screens/customer/SpaceDetailScreen";
+import { LocationSpacesScreen } from "../screens/member/LocationSpacesScreen";
+import { SpaceDetailScreen } from "../screens/member/SpaceDetailScreen";
 import { BookingDetailScreen } from "../screens/BookingDetailScreen";
 import { PaymentSuccessScreen } from "../screens/PaymentSuccessScreen";
 import { MenuScreen } from "../screens/MenuScreen";
@@ -29,7 +29,7 @@ import { PaymentsScreen } from "../screens/PaymentsScreen";
 import { AssistantScreen } from "../screens/AssistantScreen";
 
 const Stack = createNativeStackNavigator();
-const CustomerStack = createNativeStackNavigator();
+const MemberStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
 function openAssistant(navigation: any) {
@@ -74,7 +74,7 @@ function AssistantHeaderButton({ navigation }: { navigation: any }) {
 
 function MarketplaceStack() {
   return (
-    <CustomerStack.Navigator
+    <MemberStack.Navigator
       screenOptions={({ navigation }) => ({
         headerLeft: () => (
           <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
@@ -84,14 +84,14 @@ function MarketplaceStack() {
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
-      <CustomerStack.Screen name="MarketplaceHome" component={HomeScreen} options={{ title: "Marketplace" }} />
-      <CustomerStack.Screen name="LocationSpaces" component={LocationSpacesScreen} options={{ title: "Spaces" }} />
-      <CustomerStack.Screen name="SpaceDetail" component={SpaceDetailScreen} options={{ title: "Space" }} />
-    </CustomerStack.Navigator>
+      <MemberStack.Screen name="MarketplaceHome" component={HomeScreen} options={{ title: "Marketplace" }} />
+      <MemberStack.Screen name="LocationSpaces" component={LocationSpacesScreen} options={{ title: "Spaces" }} />
+      <MemberStack.Screen name="SpaceDetail" component={SpaceDetailScreen} options={{ title: "Space" }} />
+    </MemberStack.Navigator>
   );
 }
 
-function CustomerTabs() {
+function MemberTabs() {
   return (
     <Tabs.Navigator
       screenOptions={({ navigation }) => ({
@@ -155,7 +155,7 @@ function MainApp() {
     <Stack.Navigator screenOptions={{ headerShown: true }}>
       <Stack.Screen
         name="App"
-        component={me.role === "owner" ? OwnerTabs : CustomerTabs}
+        component={me.role === "owner" ? OwnerTabs : MemberTabs}
         options={{ headerShown: false }}
       />
       <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: "Booking" }} />

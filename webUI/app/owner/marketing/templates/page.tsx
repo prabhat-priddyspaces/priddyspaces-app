@@ -21,8 +21,8 @@ export default function MarketingTemplatesPage() {
     name: "",
     subject: "",
     category: "general",
-    html_body: "<p>Hi {{ customer.first_name }},</p><p></p><p><a href=\"{{ links.unsubscribe }}\">Unsubscribe</a></p>",
-    text_body: "Hi {{ customer.first_name }},\n\nUnsubscribe: {{ links.unsubscribe }}",
+    html_body: "<p>Hi {{ member.first_name }},</p><p></p><p><a href=\"{{ links.unsubscribe }}\">Unsubscribe</a></p>",
+    text_body: "Hi {{ member.first_name }},\n\nUnsubscribe: {{ links.unsubscribe }}",
   });
   const [testEmail, setTestEmail] = useState("");
 

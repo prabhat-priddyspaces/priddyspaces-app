@@ -378,7 +378,7 @@ class TestOnboardingProfile:
         """No Authorization header → 401 Missing auth."""
         resp = anon_client.post(
             "/api/onboarding/profile",
-            json={"role": "customer", "terms_accepted": True},
+            json={"role": "member", "terms_accepted": True},
         )
         assert resp.status_code == 401
 
@@ -391,7 +391,7 @@ class TestOnboardingProfile:
             resp = client_factory({"sub": "user_prof"}).post(
                 "/api/onboarding/profile",
                 json={
-                    "role": "customer",
+                    "role": "member",
                     "full_name": "Jane Doe",
                     "terms_accepted": True,
                     "privacy_policy_accepted": True,
@@ -400,7 +400,7 @@ class TestOnboardingProfile:
 
         assert resp.status_code == 200
         db_session.refresh(user)
-        assert user.role == UserAppRole.CUSTOMER
+        assert user.role == UserAppRole.MEMBER
         assert user.first_name == "Jane"
         assert user.last_name == "Doe"
         assert user.terms_accepted_at is not None
@@ -427,7 +427,7 @@ class TestOnboardingProfile:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory({"sub": "user_blank"}).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "full_name": "   "},
+                json={"role": "member", "full_name": "   "},
             )
 
         assert resp.status_code == 422
@@ -441,6 +441,19 @@ class TestOnboardingProfile:
             resp = client_factory({"sub": "user_badrole"}).post(
                 "/api/onboarding/profile",
                 json={"role": "supervillain"},
+            )
+
+        assert resp.status_code == 422
+
+    def test_legacy_customer_role_returns_422(self, client_factory, db_session):
+        user = User(email="legacyrole@example.com", auth_subject="user_legacyrole")
+        db_session.add(user)
+        db_session.commit()
+
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory({"sub": "user_legacyrole"}).post(
+                "/api/onboarding/profile",
+                json={"role": "customer"},
             )
 
         assert resp.status_code == 422
@@ -462,7 +475,7 @@ class TestOnboardingOrganization:
         assert resp.status_code == 401
 
     def test_non_owner_returns_403(self, client_factory, db_session):
-        user = User(email="cust@example.com", auth_subject="user_cust", role=UserAppRole.CUSTOMER)
+        user = User(email="member@example.com", auth_subject="user_cust", role=UserAppRole.MEMBER)
         db_session.add(user)
         db_session.commit()
 
@@ -584,7 +597,7 @@ class TestJwksBackoff:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestRoleReassignmentGuard:
-    def test_owner_with_org_cannot_switch_to_customer(self, client_factory, db_session):
+    def test_owner_with_org_cannot_switch_to_member(self, client_factory, db_session):
         user = User(email="switch@example.com", auth_subject="user_switch", role=UserAppRole.OWNER)
         db_session.add(user)
         db_session.commit()
@@ -601,13 +614,13 @@ class TestRoleReassignmentGuard:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory({"sub": "user_switch"}).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "terms_accepted": True},
+                json={"role": "member", "terms_accepted": True},
             )
 
         assert resp.status_code == 409
         assert "organization" in resp.json()["detail"].lower()
 
-    def test_owner_without_org_can_switch_to_customer(self, client_factory, db_session):
+    def test_owner_without_org_can_switch_to_member(self, client_factory, db_session):
         user = User(email="noorg@example.com", auth_subject="user_noorg", role=UserAppRole.OWNER)
         db_session.add(user)
         db_session.commit()
@@ -615,17 +628,17 @@ class TestRoleReassignmentGuard:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory({"sub": "user_noorg"}).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "terms_accepted": True},
+                json={"role": "member", "terms_accepted": True},
             )
 
         assert resp.status_code == 200
         db_session.refresh(user)
-        assert user.role == UserAppRole.CUSTOMER
+        assert user.role == UserAppRole.MEMBER
 
     def test_same_role_resubmit_is_allowed(self, client_factory, db_session):
         """Re-submitting the same role (e.g., to update name) must succeed."""
         user = User(
-            email="resubmit@example.com", auth_subject="user_resubmit", role=UserAppRole.CUSTOMER
+            email="resubmit@example.com", auth_subject="user_resubmit", role=UserAppRole.MEMBER
         )
         db_session.add(user)
         db_session.commit()
@@ -633,7 +646,7 @@ class TestRoleReassignmentGuard:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory({"sub": "user_resubmit"}).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "full_name": "Updated Name"},
+                json={"role": "member", "full_name": "Updated Name"},
             )
 
         assert resp.status_code == 200
@@ -655,7 +668,7 @@ class TestProfileValidation:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory(token).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "country": "GB"},
+                json={"role": "member", "country": "GB"},
             )
         assert resp.status_code == 200
 
@@ -664,7 +677,7 @@ class TestProfileValidation:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory(token).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "country": "us"},
+                json={"role": "member", "country": "us"},
             )
         assert resp.status_code == 200
 
@@ -673,7 +686,7 @@ class TestProfileValidation:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory(token).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "country": "USA"},  # 3 letters — invalid
+                json={"role": "member", "country": "USA"},  # 3 letters — invalid
             )
         assert resp.status_code == 422
 
@@ -682,7 +695,7 @@ class TestProfileValidation:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory(token).post(
                 "/api/onboarding/profile",
-                json={"role": "customer", "country": "12"},
+                json={"role": "member", "country": "12"},
             )
         assert resp.status_code == 422
 

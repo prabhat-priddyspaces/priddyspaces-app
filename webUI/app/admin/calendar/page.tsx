@@ -156,7 +156,7 @@ export default function AdminCalendarPage() {
           setFilters={setFilters}
           filterLocations={filterLocations}
           viewer="admin"
-          memberHref={(id) => `/admin/customers/${id}`}
+          memberHref={(id) => `/admin/members/${id}`}
           onChanged={load}
         />
       </div>

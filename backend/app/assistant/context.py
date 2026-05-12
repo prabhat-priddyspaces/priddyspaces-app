@@ -86,9 +86,9 @@ def resolve_assistant_context(
             accessible_location_ids=loc_ids,
         )
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         return AssistantContext(
-            audience="customer",
+            audience="member",
             user=user,
             guest_id=guest_id,
             identifier=f"user:{user.id}",

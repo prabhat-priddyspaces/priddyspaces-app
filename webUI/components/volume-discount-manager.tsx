@@ -93,7 +93,7 @@ export function VolumeDiscountManager({ spacePublicId }: VolumeDiscountManagerPr
         <div>
           <h3 className="text-lg font-semibold">Volume discounts</h3>
           <p className="text-xs text-textMuted">
-            Reward longer hourly bookings. Customers booking ≥ Min hours get the discount applied
+            Reward longer hourly bookings. Members booking ≥ Min hours get the discount applied
             automatically. Discounts only apply to hourly bookings — Full day bookings use the day rate.
           </p>
         </div>

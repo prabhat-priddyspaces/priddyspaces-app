@@ -362,16 +362,16 @@ def test_explicit_location_overrides_page_context_and_logs_mismatch(db_session, 
 
 def test_missing_booking_slots_logs_quality_event_and_clarify_action(db_session, client_factory, monkeypatch):
     monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
-    customer = User(
-        email="customer-assistant@example.com",
-        auth_subject="sub-customer-assistant",
-        role=UserAppRole.CUSTOMER,
+    member = User(
+        email="member-assistant@example.com",
+        auth_subject="sub-member-assistant",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+    client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
 
     response = client.post("/api/assistant/chat?stream=false", json={"message": "book a meeting room"})
 

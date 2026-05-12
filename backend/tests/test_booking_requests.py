@@ -8,7 +8,7 @@ from app.models.location import Location
 from app.models.space import Space
 from app.models.booking import Booking
 from app.models.owner_payment_setting import OwnerPaymentSetting
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.services.payment_providers import ChargeResult
 
 
@@ -65,7 +65,7 @@ def _seed_owner_space(db):
     return owner, space
 
 
-def _seed_payment_method(db, customer: User, space: Space) -> CustomerOwnerPaymentMethod:
+def _seed_payment_method(db, member: User, space: Space) -> MemberOwnerPaymentMethod:
     setting = OwnerPaymentSetting(
         organization_id=space.tenant_id,
         tenant_id=space.tenant_id,
@@ -77,8 +77,8 @@ def _seed_payment_method(db, customer: User, space: Space) -> CustomerOwnerPayme
     db.add(setting)
     db.commit()
     db.refresh(setting)
-    method = CustomerOwnerPaymentMethod(
-        user_id=customer.id,
+    method = MemberOwnerPaymentMethod(
+        user_id=member.id,
         organization_id=space.tenant_id,
         tenant_id=space.tenant_id,
         provider="stripe",
@@ -103,7 +103,7 @@ class FakeProvider:
         return ChargeResult(status="succeeded", provider_payment_id="pi_owner_test", raw_response={"ok": True})
 
 
-def _request_payload(space: Space, method: CustomerOwnerPaymentMethod | None, day: int = 10):
+def _request_payload(space: Space, method: MemberOwnerPaymentMethod | None, day: int = 10):
     payload = {
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 3, day, 10, 0, tzinfo=timezone.utc).isoformat(),
@@ -111,27 +111,27 @@ def _request_payload(space: Space, method: CustomerOwnerPaymentMethod | None, da
         "payment_authorization_consent": True,
     }
     if method:
-        payload["customer_owner_payment_method_public_id"] = method.public_id
+        payload["member_owner_payment_method_public_id"] = method.public_id
     return payload
 
 
 def test_booking_request_create_and_list(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
-    customer = User(
-        email="cust@example.com",
-        auth_subject="sub-cust",
-        role=UserAppRole.CUSTOMER,
+    member = User(
+        email="member@example.com",
+        auth_subject="sub-member",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
 
-    customer_client = client_factory({
-        "sub": "sub-cust",
-        "email": "cust@example.com",
+    member_client = client_factory({
+        "sub": "sub-member",
+        "email": "member@example.com",
         "email_verified": True
     })
 
@@ -139,16 +139,16 @@ def test_booking_request_create_and_list(db_session, client_factory):
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 2, 1, 10, 0, tzinfo=timezone.utc).isoformat(),
         "end_datetime": datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc).isoformat(),
-        "customer_owner_payment_method_public_id": method.public_id,
+        "member_owner_payment_method_public_id": method.public_id,
         "payment_authorization_consent": True,
     }
-    create = customer_client.post("/api/booking-requests", json=payload)
+    create = member_client.post("/api/booking-requests", json=payload)
     assert create.status_code == 200
     data = create.json()
     assert data["status"] == BookingRequestStatus.REQUESTED.value
     assert data["estimated_amount"] is not None
 
-    listing = customer_client.get("/api/booking-requests")
+    listing = member_client.get("/api/booking-requests")
     assert listing.status_code == 200
     assert len(listing.json()) == 1
 
@@ -165,21 +165,21 @@ def test_booking_request_create_and_list(db_session, client_factory):
 def test_booking_request_approve_creates_booking(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust2@example.com",
-        auth_subject="sub-cust-2",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-2",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
 
-    customer_client = client_factory({
-        "sub": "sub-cust-2",
-        "email": customer.email,
+    member_client = client_factory({
+        "sub": "sub-member-2",
+        "email": member.email,
         "email_verified": True
     })
 
@@ -187,10 +187,10 @@ def test_booking_request_approve_creates_booking(db_session, client_factory, mon
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 2, 2, 10, 0, tzinfo=timezone.utc).isoformat(),
         "end_datetime": datetime(2026, 2, 2, 12, 0, tzinfo=timezone.utc).isoformat(),
-        "customer_owner_payment_method_public_id": method.public_id,
+        "member_owner_payment_method_public_id": method.public_id,
         "payment_authorization_consent": True,
     }
-    create = customer_client.post("/api/booking-requests", json=payload)
+    create = member_client.post("/api/booking-requests", json=payload)
     req_id = create.json()["public_id"]
 
     owner_client = client_factory({
@@ -212,21 +212,21 @@ def test_booking_request_approve_creates_booking(db_session, client_factory, mon
 
 def test_booking_request_reject(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust3@example.com",
-        auth_subject="sub-cust-3",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-3",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
 
-    customer_client = client_factory({
-        "sub": "sub-cust-3",
-        "email": customer.email,
+    member_client = client_factory({
+        "sub": "sub-member-3",
+        "email": member.email,
         "email_verified": True
     })
 
@@ -234,10 +234,10 @@ def test_booking_request_reject(db_session, client_factory):
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 2, 3, 10, 0, tzinfo=timezone.utc).isoformat(),
         "end_datetime": datetime(2026, 2, 3, 12, 0, tzinfo=timezone.utc).isoformat(),
-        "customer_owner_payment_method_public_id": method.public_id,
+        "member_owner_payment_method_public_id": method.public_id,
         "payment_authorization_consent": True,
     }
-    create = customer_client.post("/api/booking-requests", json=payload)
+    create = member_client.post("/api/booking-requests", json=payload)
     req_id = create.json()["public_id"]
 
     owner_client = client_factory({
@@ -253,17 +253,17 @@ def test_booking_request_reject(db_session, client_factory):
 def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust4@example.com",
-        auth_subject="sub-cust-4",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-4",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
 
     owner_client = client_factory({
         "sub": "sub-owner",
@@ -281,19 +281,19 @@ def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypa
     )
     assert flag.status_code == 200
 
-    customer_client = client_factory({
-        "sub": "sub-cust-4",
-        "email": customer.email,
+    member_client = client_factory({
+        "sub": "sub-member-4",
+        "email": member.email,
         "email_verified": True
     })
     payload = {
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 2, 4, 10, 0, tzinfo=timezone.utc).isoformat(),
         "end_datetime": datetime(2026, 2, 4, 12, 0, tzinfo=timezone.utc).isoformat(),
-        "customer_owner_payment_method_public_id": method.public_id,
+        "member_owner_payment_method_public_id": method.public_id,
         "payment_authorization_consent": True,
     }
-    create = customer_client.post("/api/booking-requests", json=payload)
+    create = member_client.post("/api/booking-requests", json=payload)
     assert create.status_code == 200
     data = create.json()
     assert data["status"] == BookingRequestStatus.APPROVED.value
@@ -302,16 +302,16 @@ def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypa
 
 def test_booking_request_requires_payment_method(db_session, client_factory):
     _owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust5@example.com",
-        auth_subject="sub-cust-5",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-5",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
+    db_session.refresh(member)
     db_session.add(OwnerPaymentSetting(
         organization_id=space.tenant_id,
         tenant_id=space.tenant_id,
@@ -322,12 +322,12 @@ def test_booking_request_requires_payment_method(db_session, client_factory):
     ))
     db_session.commit()
 
-    customer_client = client_factory({
-        "sub": "sub-cust-5",
-        "email": customer.email,
+    member_client = client_factory({
+        "sub": "sub-member-5",
+        "email": member.email,
         "email_verified": True,
     })
-    create = customer_client.post("/api/booking-requests", json=_request_payload(space, None, 5))
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, None, 5))
     assert create.status_code == 400
     assert "Payment method is required" in create.text
 
@@ -339,23 +339,23 @@ def test_payment_failure_marks_request_payment_failed(db_session, client_factory
 
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FailingProvider())
     owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust6@example.com",
-        auth_subject="sub-cust-6",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-6",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
-    customer_client = client_factory({
-        "sub": "sub-cust-6",
-        "email": customer.email,
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": "sub-member-6",
+        "email": member.email,
         "email_verified": True,
     })
-    create = customer_client.post("/api/booking-requests", json=_request_payload(space, method, 6))
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, 6))
     req_id = create.json()["public_id"]
     owner_client = client_factory({
         "sub": "sub-owner",
@@ -386,23 +386,23 @@ def test_provider_switch_does_not_break_frozen_request(db_session, client_factor
         lambda setting: RecordingProvider(setting.provider),
     )
     owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust7@example.com",
-        auth_subject="sub-cust-7",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-7",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
-    customer_client = client_factory({
-        "sub": "sub-cust-7",
-        "email": customer.email,
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": "sub-member-7",
+        "email": member.email,
         "email_verified": True,
     })
-    create = customer_client.post("/api/booking-requests", json=_request_payload(space, method, 7))
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, 7))
     req_id = create.json()["public_id"]
 
     org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
@@ -438,23 +438,23 @@ def test_double_approval_charges_once(db_session, client_factory, monkeypatch):
 
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: CountingProvider())
     owner, space = _seed_owner_space(db_session)
-    customer = User(
+    member = User(
         email="cust8@example.com",
-        auth_subject="sub-cust-8",
-        role=UserAppRole.CUSTOMER,
+        auth_subject="sub-member-8",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
-    customer_client = client_factory({
-        "sub": "sub-cust-8",
-        "email": customer.email,
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": "sub-member-8",
+        "email": member.email,
         "email_verified": True,
     })
-    create = customer_client.post("/api/booking-requests", json=_request_payload(space, method, 8))
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, 8))
     req_id = create.json()["public_id"]
     owner_client = client_factory({
         "sub": "sub-owner",

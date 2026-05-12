@@ -390,13 +390,13 @@ export function PublicSpaceDetailView({
           method: "POST",
           body: JSON.stringify({
             ...payload,
-            customer_owner_payment_method_public_id: paymentMethodPublicId,
+            member_owner_payment_method_public_id: paymentMethodPublicId,
             payment_authorization_consent: true,
           }),
         },
         token,
       );
-      router.push("/customer/requests");
+      router.push("/member/requests");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reservation failed");
     } finally {
@@ -1016,7 +1016,7 @@ export function PublicSpaceDetailView({
           onClose={() => setSubscriptionOpen(false)}
           onDone={() => {
             setSubscriptionOpen(false);
-            router.push("/customer/subscriptions");
+            router.push("/member/subscriptions");
           }}
         />
       ) : null}

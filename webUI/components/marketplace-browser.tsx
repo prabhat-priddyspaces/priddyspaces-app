@@ -32,7 +32,7 @@ interface MarketplaceBrowserProps {
   detailHrefBase: string;
   title?: string;
   subtitle?: string;
-  showCustomerActions?: boolean;
+  showMemberActions?: boolean;
   showAuthActions?: boolean;
 }
 
@@ -40,7 +40,7 @@ export function MarketplaceBrowser({
   detailHrefBase,
   title = "Find a space",
   subtitle = "Search locations by city and browse available spaces.",
-  showCustomerActions = false,
+  showMemberActions = false,
   showAuthActions = false,
 }: MarketplaceBrowserProps) {
   const [city, setCity] = useState("");
@@ -89,15 +89,15 @@ export function MarketplaceBrowser({
             <h1 className="text-2xl font-semibold text-textPrimary">{title}</h1>
             <p className="mt-1 text-textSecondary">{subtitle}</p>
           </div>
-          {showCustomerActions ? (
+          {showMemberActions ? (
             <div className="flex items-center gap-2">
-              <Link href="/customer/subscriptions">
+              <Link href="/member/subscriptions">
                 <Button variant="secondary">Memberships</Button>
               </Link>
-              <Link href="/customer/payments">
+              <Link href="/member/payments">
                 <Button variant="secondary">Payments</Button>
               </Link>
-              <Link href="/customer/requests">
+              <Link href="/member/requests">
                 <Button variant="secondary">My requests</Button>
               </Link>
             </div>

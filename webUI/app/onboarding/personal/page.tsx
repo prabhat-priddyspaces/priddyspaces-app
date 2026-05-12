@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 const TIMEZONES = Intl.supportedValuesOf
   ? Intl.supportedValuesOf("timeZone")
   : [];
+const SIGNUP_ROLE_KEY = "priddyspaces_signup_role";
 
 export default function OnboardingPersonalPage() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function OnboardingPersonalPage() {
   const { getToken } = useAuth();
 
   const [form, setForm] = useState({
-    role: "customer" as "owner" | "customer",
+    role: "member" as "owner" | "member",
     full_name: "",
     phone: "",
     country: "",
@@ -37,8 +38,21 @@ export default function OnboardingPersonalPage() {
   useEffect(() => {
     if (!isLoaded) return;
     const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const params =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : new URLSearchParams();
+    const requestedRole =
+      params.get("role") === "owner" ||
+      (typeof window !== "undefined" && window.sessionStorage.getItem(SIGNUP_ROLE_KEY) === "owner")
+        ? "owner"
+        : "member";
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(SIGNUP_ROLE_KEY);
+    }
     setForm((prev) => ({
       ...prev,
+      role: requestedRole,
       full_name: user?.fullName ?? prev.full_name,
       timezone: detected,
     }));
@@ -103,38 +117,13 @@ export default function OnboardingPersonalPage() {
             Complete your profile
           </h1>
           <p className="mt-1 text-sm text-textSecondary">
-            Tell us how you&apos;ll use Priddyspaces.
+            {form.role === "owner"
+              ? "Set up your owner profile before creating your organization."
+              : "Set up your member profile to book spaces and manage memberships."}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Role */}
-          <div className="space-y-2">
-            <Label>I am a</Label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="role"
-                  checked={form.role === "owner"}
-                  onChange={() => setForm({ ...form, role: "owner" })}
-                  className="rounded border-border"
-                />
-                Space Owner
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="role"
-                  checked={form.role === "customer"}
-                  onChange={() => setForm({ ...form, role: "customer" })}
-                  className="rounded border-border"
-                />
-                Customer
-              </label>
-            </div>
-          </div>
-
           {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="full_name">Full name</Label>

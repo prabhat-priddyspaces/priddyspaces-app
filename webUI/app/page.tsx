@@ -6,5 +6,5 @@ export default function Home() {
   if (process.env.NEXT_OUTPUT_MODE === "export") {
     return <DefaultMarketplaceRedirect />;
   }
-  redirect("/coworking");
+  redirect("/spaces");
 }

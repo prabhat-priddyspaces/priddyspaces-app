@@ -19,7 +19,7 @@
 - `sub` (user public_id)
 - `email`
 - `email_verified`
-- `role` (owner/admin/customer)
+- `role` (owner/admin/member)
 
 ## Backend responsibilities
 - Token issuance, verification, and rotation

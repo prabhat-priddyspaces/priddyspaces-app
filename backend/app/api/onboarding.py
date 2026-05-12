@@ -40,7 +40,7 @@ _ORG_SIZES = {"1-10", "11-50", "51-200", "200+"}
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class ProfileIn(BaseModel):
-    role: UserAppRole
+    role: UserAppRole = UserAppRole.MEMBER
     full_name: str | None = None
     phone: str | None = None
     country: str | None = None

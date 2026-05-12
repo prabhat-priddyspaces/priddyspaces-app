@@ -106,7 +106,7 @@ describe("AssistantMount", () => {
     expect(screen.getByText("Space")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Space/ })).toHaveAttribute(
       "href",
-      "/spaces/_.html?id=space_1&back=%2Fcoworking",
+      "/spaces/_.html?id=space_1&back=%2Fspaces",
     );
     expect(screen.getByText("Talk to a human")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();

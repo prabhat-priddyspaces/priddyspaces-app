@@ -9,15 +9,15 @@ from app.core.auth import get_current_user
 from app.core.crypto import encrypt_secret
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingRequestStatus, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.space import Space
 from app.schemas.owner_payment import (
-    CustomerOwnerPaymentMethodCreate,
-    CustomerOwnerPaymentMethodOut,
+    MemberOwnerPaymentMethodCreate,
+    MemberOwnerPaymentMethodOut,
     OwnerPaymentSettingOut,
     OwnerPaymentSettingUpsert,
     PaymentMethodResolveOut,
@@ -69,11 +69,11 @@ def _serialize_setting(setting: OwnerPaymentSetting, org: Organization | None = 
 
 
 def _serialize_method(
-    method: CustomerOwnerPaymentMethod,
+    method: MemberOwnerPaymentMethod,
     organization: Organization | None = None,
     setting: OwnerPaymentSetting | None = None,
-) -> CustomerOwnerPaymentMethodOut:
-    return CustomerOwnerPaymentMethodOut(
+) -> MemberOwnerPaymentMethodOut:
+    return MemberOwnerPaymentMethodOut(
         public_id=method.public_id,
         organization_public_id=organization.public_id if organization else None,
         provider=method.provider,
@@ -275,14 +275,14 @@ def update_location_payment_provider(
 
 
 @router.get("/payment-methods/resolve", response_model=PaymentMethodResolveOut)
-def resolve_customer_payment_method(
+def resolve_member_payment_method(
     space_public_id: str,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
-    if user.role != UserAppRole.CUSTOMER:
-        raise HTTPException(status_code=403, detail="Customer only")
+    if user.role != UserAppRole.MEMBER:
+        raise HTTPException(status_code=403, detail="Member only")
     space = db.query(Space).filter(Space.public_id == space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
@@ -349,15 +349,15 @@ def create_payment_method_setup_session(
     )
 
 
-@router.post("/payment-methods", response_model=CustomerOwnerPaymentMethodOut)
-def save_customer_payment_method(
-    payload: CustomerOwnerPaymentMethodCreate,
+@router.post("/payment-methods", response_model=MemberOwnerPaymentMethodOut)
+def save_member_payment_method(
+    payload: MemberOwnerPaymentMethodCreate,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
-    if user.role != UserAppRole.CUSTOMER:
-        raise HTTPException(status_code=403, detail="Customer only")
+    if user.role != UserAppRole.MEMBER:
+        raise HTTPException(status_code=403, detail="Member only")
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
@@ -372,7 +372,7 @@ def save_customer_payment_method(
     except PaymentProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    method = CustomerOwnerPaymentMethod(
+    method = MemberOwnerPaymentMethod(
         user_id=user.id,
         organization_id=org.id,
         tenant_id=org.id,
@@ -397,8 +397,8 @@ def save_customer_payment_method(
     return _serialize_method(method, org, setting)
 
 
-@router.get("/payment-methods", response_model=list[CustomerOwnerPaymentMethodOut])
-def list_customer_payment_methods(
+@router.get("/payment-methods", response_model=list[MemberOwnerPaymentMethodOut])
+def list_member_payment_methods(
     organization_public_id: str | None = None,
     space_public_id: str | None = None,
     include_inactive: bool = False,
@@ -406,21 +406,21 @@ def list_customer_payment_methods(
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
-    query = db.query(CustomerOwnerPaymentMethod).filter(CustomerOwnerPaymentMethod.user_id == user.id)
+    query = db.query(MemberOwnerPaymentMethod).filter(MemberOwnerPaymentMethod.user_id == user.id)
     if not include_inactive:
-        query = query.filter(CustomerOwnerPaymentMethod.status == "active")
+        query = query.filter(MemberOwnerPaymentMethod.status == "active")
     org: Organization | None = None
     if space_public_id:
         space = db.query(Space).filter(Space.public_id == space_public_id).first()
         if not space:
             raise HTTPException(status_code=404, detail="Space not found")
         _provider, org, _location = resolve_payment_provider(db, space)
-        query = query.filter(CustomerOwnerPaymentMethod.organization_id == org.id)
+        query = query.filter(MemberOwnerPaymentMethod.organization_id == org.id)
     elif organization_public_id:
         org = _org_by_public_id(db, organization_public_id)
-        query = query.filter(CustomerOwnerPaymentMethod.organization_id == org.id)
+        query = query.filter(MemberOwnerPaymentMethod.organization_id == org.id)
 
-    methods = query.order_by(CustomerOwnerPaymentMethod.created_at.desc()).all()
+    methods = query.order_by(MemberOwnerPaymentMethod.created_at.desc()).all()
     setting_ids = {method.owner_payment_setting_id for method in methods}
     settings_by_id = {
         setting.id: setting
@@ -437,16 +437,16 @@ def list_customer_payment_methods(
     ]
 
 
-@router.delete("/payment-methods/{public_id}", response_model=CustomerOwnerPaymentMethodOut)
-def delete_customer_payment_method(
+@router.delete("/payment-methods/{public_id}", response_model=MemberOwnerPaymentMethodOut)
+def delete_member_payment_method(
     public_id: str,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
     method = (
-        db.query(CustomerOwnerPaymentMethod)
-        .filter(CustomerOwnerPaymentMethod.public_id == public_id, CustomerOwnerPaymentMethod.user_id == user.id)
+        db.query(MemberOwnerPaymentMethod)
+        .filter(MemberOwnerPaymentMethod.public_id == public_id, MemberOwnerPaymentMethod.user_id == user.id)
         .first()
     )
     if not method:
@@ -454,7 +454,7 @@ def delete_customer_payment_method(
     active_request = (
         db.query(BookingRequest)
         .filter(
-            BookingRequest.customer_owner_payment_method_id == method.id,
+            BookingRequest.member_owner_payment_method_id == method.id,
             BookingRequest.status.in_([BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED]),
         )
         .first()
@@ -470,19 +470,19 @@ def delete_customer_payment_method(
     return _serialize_method(method, org, setting)
 
 
-@router.post("/payment-methods/{public_id}/default", response_model=CustomerOwnerPaymentMethodOut)
-def make_customer_payment_method_default(
+@router.post("/payment-methods/{public_id}/default", response_model=MemberOwnerPaymentMethodOut)
+def make_member_payment_method_default(
     public_id: str,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
     method = (
-        db.query(CustomerOwnerPaymentMethod)
+        db.query(MemberOwnerPaymentMethod)
         .filter(
-            CustomerOwnerPaymentMethod.public_id == public_id,
-            CustomerOwnerPaymentMethod.user_id == user.id,
-            CustomerOwnerPaymentMethod.status == "active",
+            MemberOwnerPaymentMethod.public_id == public_id,
+            MemberOwnerPaymentMethod.user_id == user.id,
+            MemberOwnerPaymentMethod.status == "active",
         )
         .first()
     )

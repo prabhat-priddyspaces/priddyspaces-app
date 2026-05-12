@@ -114,7 +114,7 @@ def estimate_booking_price(
             base_cents = price_daily
             units = 1.0
             rate_basis = "capped_to_daily"
-            # Once capped to the day rate, the customer is effectively on the day rate;
+            # Once capped to the day rate, the member is effectively on the day rate;
             # don't compound by also applying a volume discount.
         else:
             base_cents = hourly_total

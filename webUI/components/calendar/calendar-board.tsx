@@ -66,7 +66,7 @@ interface CalendarBoardProps {
   setFilters?: (f: CalendarFilters) => void;
   filterLocations?: { public_id: string; name: string }[];
   showFilters?: boolean;
-  viewer: "owner" | "admin" | "customer";
+  viewer: "owner" | "admin" | "member";
   memberHref?: (id: string) => string;
   onChanged: () => void;
   headerExtra?: ReactNode;

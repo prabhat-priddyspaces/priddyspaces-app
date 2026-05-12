@@ -64,7 +64,7 @@ def list_invoices(
 ):
     user = get_or_create_user(db, token)
     query = db.query(Invoice)
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         query = query.filter(Invoice.user_id == user.id)
         invoices = query.order_by(Invoice.created_at.desc()).all()
     else:
@@ -87,7 +87,7 @@ def get_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     user = get_or_create_user(db, token)
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if invoice.user_id != user.id:
             raise HTTPException(status_code=404, detail="Invoice not found")
         return invoice

@@ -18,7 +18,7 @@ function citationHref(citation: AssistantCitation) {
   if (!pathId || pathId === "_" || pathId === "_.html") return citation.url;
   const params = new URLSearchParams();
   params.set("id", citation.id || pathId);
-  params.set("back", "/coworking");
+  params.set("back", "/spaces");
   return `/spaces/_.html?${params.toString()}`;
 }
 
