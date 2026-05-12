@@ -31,7 +31,7 @@ vi.mock("../lib/api", () => ({
       metrics: {
         tenants: 1,
         users: 2,
-        customers: 1,
+        members: 1,
         owner_companies: 1,
         live_listings: 4,
         bookings: 3,

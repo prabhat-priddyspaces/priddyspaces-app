@@ -43,13 +43,13 @@ describe("getDefaultRoute", () => {
     ).toBe("/owner");
   });
 
-  it("routes customer to coworking marketplace", () => {
-    expect(getDefaultRoute(makeMe({ app_role: "customer" }))).toBe("/coworking");
+  it("routes member to spaces marketplace", () => {
+    expect(getDefaultRoute(makeMe({ app_role: "member" }))).toBe("/spaces");
   });
 
   it("routes platform admin (superadmin) to /admin regardless of app_role", () => {
     expect(
-      getDefaultRoute(makeMe({ platform_role: "superadmin", app_role: "customer" }))
+      getDefaultRoute(makeMe({ platform_role: "superadmin", app_role: "member" }))
     ).toBe("/admin");
   });
 

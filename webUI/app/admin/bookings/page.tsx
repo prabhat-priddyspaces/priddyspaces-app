@@ -10,7 +10,7 @@ import { getAccessToken } from "@/lib/auth";
 interface ActivityRecord {
   public_id: string;
   status: string;
-  customer_email: string | null;
+  member_email: string | null;
   created_at: string | null;
 }
 
@@ -46,7 +46,7 @@ export default function AdminBookingsPage() {
                 data.bookings.map((booking) => (
                   <div key={booking.public_id} className="rounded-md border border-border p-3 text-sm">
                     <div className="font-medium text-textPrimary">{booking.public_id}</div>
-                    <div className="text-textMuted">{booking.customer_email}</div>
+                    <div className="text-textMuted">{booking.member_email}</div>
                     <div className="text-textMuted">{booking.status}</div>
                   </div>
                 ))
@@ -62,7 +62,7 @@ export default function AdminBookingsPage() {
                 data.booking_requests.map((request) => (
                   <div key={request.public_id} className="rounded-md border border-border p-3 text-sm">
                     <div className="font-medium text-textPrimary">{request.public_id}</div>
-                    <div className="text-textMuted">{request.customer_email}</div>
+                    <div className="text-textMuted">{request.member_email}</div>
                     <div className="text-textMuted">
                       {request.status}
                       {request.operator_notes ? ` • ${request.operator_notes}` : ""}

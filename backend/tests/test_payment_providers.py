@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.services.payment_providers import (
     CardPointePaymentProvider,
@@ -72,7 +72,7 @@ def test_factory_rejects_unknown_provider():
 
 def test_stripe_charge_requires_pm_and_customer():
     provider = StripePaymentProvider(_stripe_setting())
-    incomplete = CustomerOwnerPaymentMethod(
+    incomplete = MemberOwnerPaymentMethod(
         user_id=1,
         organization_id=1,
         tenant_id=1,
@@ -93,7 +93,7 @@ def test_stripe_charge_requires_pm_and_customer():
 
 def test_cardpointe_charge_approved_response():
     provider = CardPointePaymentProvider(_cardpointe_setting())
-    method = CustomerOwnerPaymentMethod(
+    method = MemberOwnerPaymentMethod(
         user_id=1,
         organization_id=1,
         tenant_id=1,
@@ -122,7 +122,7 @@ def test_cardpointe_charge_approved_response():
 
 def test_cardpointe_charge_declined_response_maps_respcode():
     provider = CardPointePaymentProvider(_cardpointe_setting())
-    method = CustomerOwnerPaymentMethod(
+    method = MemberOwnerPaymentMethod(
         user_id=1,
         organization_id=1,
         tenant_id=1,

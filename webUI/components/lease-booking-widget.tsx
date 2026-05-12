@@ -111,13 +111,13 @@ export function LeaseBookingWidget({
             membership_plan_public_id: selectedPlan.public_id,
             desired_start_date: moveInDate,
             seats_requested: 1,
-            customer_owner_payment_method_public_id: paymentMethodPublicId,
+            member_owner_payment_method_public_id: paymentMethodPublicId,
             payment_authorization_consent: true,
           }),
         },
         getAccessToken() ?? undefined,
       );
-      router.push("/customer/requests");
+      router.push("/member/requests");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Lease request failed");
     } finally {

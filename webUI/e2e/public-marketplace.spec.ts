@@ -61,7 +61,7 @@ const meetingRoomResults = {
   results: [coworkingResults.results[1]],
 };
 
-test("public marketplace redirects to /coworking and supports route-driven location search", async ({ page }) => {
+test("public marketplace redirects to /spaces and supports route-driven location search", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const key = `${route.request().method()} ${url.pathname}`;
@@ -278,7 +278,7 @@ test("public marketplace redirects to /coworking and supports route-driven locat
 
   await page.goto("/");
 
-  await expect(page).toHaveURL(/\/coworking$/);
+  await expect(page).toHaveURL(/\/spaces$/);
   await expect(page.getByRole("heading", { name: "Find Your Next Coworking Spot" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Harbor Rooms" })).toBeVisible();
@@ -286,7 +286,7 @@ test("public marketplace redirects to /coworking and supports route-driven locat
   await page.locator('input[placeholder="Neighborhood, city, state, or ZIP"]').fill("Miami");
   await page.getByRole("button", { name: "Search" }).click();
 
-  await expect(page).toHaveURL(/\/coworking\?q=Miami$/);
+  await expect(page).toHaveURL(/\/spaces\?q=Miami$/);
   await expect(page.getByText("Results stay in the URL")).toBeVisible();
 
   await page.locator('[data-selected="false"]').filter({ hasText: "Harbor Rooms" }).hover();
@@ -319,14 +319,15 @@ test("public marketplace redirects to /coworking and supports route-driven locat
   await expect(page).toHaveURL(/date=2026-04-15/);
 
   await page.getByRole("link", { name: "Coworking & Day Passes" }).click();
-  await expect(page).toHaveURL(/\/coworking\?/);
+  await expect(page).toHaveURL(/\/spaces\?/);
   await expect(page).toHaveURL(/q=Miami/);
   await expect(page).toHaveURL(/date=2026-04-15/);
   await expect(page).toHaveURL(/start_time=10%3A00/);
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
   await page.getByRole("link", { name: "View location" }).first().click();
-  await expect(page).toHaveURL(/\/coworking\/_\?.*id=loc_public_1/);
+  await expect(page).toHaveURL(/\/locations\/_\?.*id=loc_public_1/);
+  await expect(page).toHaveURL(/route=spaces/);
   await expect(page).toHaveURL(/q=Miami/);
   await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
   await page.getByRole("link", { name: "View space" }).first().click();
@@ -335,7 +336,7 @@ test("public marketplace redirects to /coworking and supports route-driven locat
   await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to search" }).click();
-  await expect(page).toHaveURL(/\/coworking\?/);
+  await expect(page).toHaveURL(/\/spaces\?/);
   await expect(page).toHaveURL(/q=Miami/);
   await expect(page).toHaveURL(/date=2026-04-15/);
 });

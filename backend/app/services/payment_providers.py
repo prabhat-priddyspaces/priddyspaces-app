@@ -7,7 +7,7 @@ import httpx
 import stripe
 
 from app.core.crypto import decrypt_secret
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.user import User
 
@@ -61,7 +61,7 @@ class PaymentProvider(Protocol):
     def charge_saved_method(
         self,
         *,
-        payment_method: CustomerOwnerPaymentMethod,
+        payment_method: MemberOwnerPaymentMethod,
         amount_cents: int,
         currency: str,
         idempotency_key: str,
@@ -144,7 +144,7 @@ class StripePaymentProvider:
     def charge_saved_method(
         self,
         *,
-        payment_method: CustomerOwnerPaymentMethod,
+        payment_method: MemberOwnerPaymentMethod,
         amount_cents: int,
         currency: str,
         idempotency_key: str,
@@ -282,7 +282,7 @@ class CardPointePaymentProvider:
     def charge_saved_method(
         self,
         *,
-        payment_method: CustomerOwnerPaymentMethod,
+        payment_method: MemberOwnerPaymentMethod,
         amount_cents: int,
         currency: str,
         idempotency_key: str,

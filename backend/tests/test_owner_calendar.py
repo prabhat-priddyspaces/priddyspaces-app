@@ -72,14 +72,14 @@ def _seed_owner_with_space(db, *, space_type: SpaceType = SpaceType.CONFERENCE_R
     return owner, org, location, space
 
 
-def _seed_customer(db, email: str = "cal-cust@example.com", sub: str = "sub-cal-cust") -> User:
+def _seed_member(db, email: str = "cal-member@example.com", sub: str = "sub-cal-member") -> User:
     user = User(
         email=email,
         auth_subject=sub,
-        role=UserAppRole.CUSTOMER,
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
-        full_name="Cal Customer",
+        full_name="Cal Member",
     )
     db.add(user)
     db.commit()
@@ -106,9 +106,9 @@ def _qs(start: datetime, end: datetime, **extra: str) -> str:
 
 def test_calendar_returns_booking_event(db_session, client_factory):
     owner, _org, _loc, space = _seed_owner_with_space(db_session)
-    customer = _seed_customer(db_session)
+    member = _seed_member(db_session)
     booking = Booking(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=space.tenant_id,
         start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
@@ -132,15 +132,15 @@ def test_calendar_returns_booking_event(db_session, client_factory):
     assert ev["kind"] == "booking"
     assert ev["status"] == "booking.confirmed"
     assert ev["space_public_id"] == space.public_id
-    assert ev["member"]["public_id"] == customer.public_id
-    assert ev["member"]["name"] == "Cal Customer"
+    assert ev["member"]["public_id"] == member.public_id
+    assert ev["member"]["name"] == "Cal Member"
 
 
 def test_calendar_excludes_approved_request_to_avoid_double_render(db_session, client_factory):
     owner, _org, _loc, space = _seed_owner_with_space(db_session)
-    customer = _seed_customer(db_session)
+    member = _seed_member(db_session)
     booking = Booking(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=space.tenant_id,
         start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
@@ -153,7 +153,7 @@ def test_calendar_excludes_approved_request_to_avoid_double_render(db_session, c
 
     approved = BookingRequest(
         tenant_id=space.tenant_id,
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         booking_id=booking.id,
         start_datetime=booking.start_datetime,
@@ -162,7 +162,7 @@ def test_calendar_excludes_approved_request_to_avoid_double_render(db_session, c
     )
     pending = BookingRequest(
         tenant_id=space.tenant_id,
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         start_datetime=datetime(2026, 5, 6, 10, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc),
@@ -187,9 +187,9 @@ def test_subscription_emits_block_for_private_office_only(db_session, client_fac
     owner, _org, _loc, office = _seed_owner_with_space(
         db_session, space_type=SpaceType.PRIVATE_OFFICE
     )
-    customer = _seed_customer(db_session)
+    member = _seed_member(db_session)
     sub = Subscription(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=office.id,
         tenant_id=office.tenant_id,
         status="active",
@@ -211,9 +211,9 @@ def test_subscription_emits_block_for_private_office_only(db_session, client_fac
 
 def test_subscription_does_not_emit_block_for_meeting_room(db_session, client_factory):
     owner, _org, _loc, room = _seed_owner_with_space(db_session, space_type=SpaceType.CONFERENCE_ROOM)
-    customer = _seed_customer(db_session)
+    member = _seed_member(db_session)
     sub = Subscription(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=room.id,
         tenant_id=room.tenant_id,
         status="active",
@@ -277,10 +277,10 @@ def test_calendar_authz_blocks_other_org(db_session, client_factory):
 
 def test_calendar_clamps_window_to_max(db_session, client_factory):
     owner, _org, _loc, space = _seed_owner_with_space(db_session)
-    customer = _seed_customer(db_session)
+    member = _seed_member(db_session)
     # Booking 40 days from window start — outside the clamped 35-day window.
     booking = Booking(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=space.tenant_id,
         start_datetime=datetime(2026, 6, 13, 10, 0, tzinfo=timezone.utc),
@@ -300,9 +300,9 @@ def test_calendar_clamps_window_to_max(db_session, client_factory):
     assert data["events"] == []
 
 
-def test_customer_role_forbidden(db_session, client_factory):
-    customer = _seed_customer(db_session)
-    client = client_factory(_owner_token(customer))
+def test_member_role_forbidden(db_session, client_factory):
+    member = _seed_member(db_session)
+    client = client_factory(_owner_token(member))
     start, end = _window()
     resp = client.get(f"/api/owner/calendar?{_qs(start, end)}")
     assert resp.status_code == 403

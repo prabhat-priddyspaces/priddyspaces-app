@@ -21,7 +21,7 @@ interface PaymentsResponse {
     commission_rate_pct: number | null;
     platform_fee_amount: number | null;
     owner_net_amount: number | null;
-    customer_email: string | null;
+    member_email: string | null;
     organization_name: string | null;
     created_at: string | null;
   }>;
@@ -66,7 +66,7 @@ export default function AdminPaymentsPage() {
             <Card key={payment.public_id} className="p-4">
               <div className="font-semibold text-textPrimary">{payment.public_id}</div>
               <div className="text-sm text-textMuted">
-                {payment.organization_name || "No org"} • {payment.customer_email}
+                {payment.organization_name || "No org"} • {payment.member_email}
               </div>
               <div className="text-sm text-textMuted">
                 {payment.status} • Amount {payment.amount} • Fee {payment.platform_fee_amount ?? 0} • Net {payment.owner_net_amount ?? 0}

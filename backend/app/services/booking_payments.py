@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingRequestStatus, BookingStatus, PaymentStatus
 from app.models.invoice import Invoice
 from app.models.location import Location
@@ -201,8 +201,8 @@ def charge_booking_request(
         .first()
     )
     method = (
-        db.query(CustomerOwnerPaymentMethod)
-        .filter(CustomerOwnerPaymentMethod.id == req.customer_owner_payment_method_id)
+        db.query(MemberOwnerPaymentMethod)
+        .filter(MemberOwnerPaymentMethod.id == req.member_owner_payment_method_id)
         .first()
     )
     if not setting or not method or method.status != "active":
@@ -320,9 +320,9 @@ def charge_booking_request(
         db.refresh(req)
         db.refresh(booking)
         db.refresh(payment)
-        customer = db.query(User).filter(User.id == req.user_id).first()
-        if customer:
-            send_email(customer.email, "Booking approved and charged", f"Request {req.public_id} was approved and charged.")
+        member = db.query(User).filter(User.id == req.user_id).first()
+        if member:
+            send_email(member.email, "Booking approved and charged", f"Request {req.public_id} was approved and charged.")
         return req, booking, payment
 
     failure_reason = result.failure_reason if result else failure_reason
@@ -350,9 +350,9 @@ def charge_booking_request(
     db.commit()
     db.refresh(req)
     db.refresh(payment)
-    customer = db.query(User).filter(User.id == req.user_id).first()
-    if customer:
-        send_email(customer.email, "Booking payment failed", f"Request {req.public_id} could not be charged.")
+    member = db.query(User).filter(User.id == req.user_id).first()
+    if member:
+        send_email(member.email, "Booking payment failed", f"Request {req.public_id} could not be charged.")
     return req, None, payment
 
 

@@ -12,6 +12,7 @@ from app.models.organization import Organization
 from app.models.platform_setting import PlatformSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.user import User
+from app.services.email_identity import get_user_by_normalized_email, normalize_email
 
 
 def get_user_for_token_subject(db: Session, subject: str | None) -> User | None:
@@ -130,15 +131,15 @@ def build_default_route(
     has_organization: bool = True,
 ) -> str:
     if impersonating:
-        if app_role == UserAppRole.CUSTOMER:
-            return "/customer"
+        if app_role == UserAppRole.MEMBER:
+            return "/member"
         if app_role == UserAppRole.OWNER:
             return "/owner"
         return "/onboarding/personal"
     if platform_role is not None:
         return "/admin"
-    if app_role == UserAppRole.CUSTOMER:
-        return "/customer"
+    if app_role == UserAppRole.MEMBER:
+        return "/spaces"
     if app_role == UserAppRole.OWNER:
         return "/owner" if has_organization else "/onboarding/organization"
     # No role yet → onboarding
@@ -197,7 +198,7 @@ def bootstrap_first_superadmin(
     force: bool = False,
     password: str | None = None,
 ) -> tuple[User, PlatformTeamMember, bool]:
-    normalized_email = email.strip().lower()
+    normalized_email = normalize_email(email)
     existing_superadmins = (
         db.query(PlatformTeamMember, User)
         .join(User, User.id == PlatformTeamMember.user_id)
@@ -213,7 +214,7 @@ def bootstrap_first_superadmin(
                 return user, member, False
         raise RuntimeError("A superadmin already exists; rerun with --force to override")
 
-    user = db.query(User).filter(User.email == normalized_email).first()
+    user = get_user_by_normalized_email(db, normalized_email)
     if not user:
         user = User(
             email=normalized_email,

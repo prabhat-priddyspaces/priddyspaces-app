@@ -15,7 +15,7 @@ import {
 } from "@/lib/calendar";
 import { cn } from "@/lib/utils";
 
-type Viewer = "owner" | "admin" | "customer";
+type Viewer = "owner" | "admin" | "member";
 
 interface EventQuickActionPopoverProps {
   event: CalendarEvent;
@@ -123,7 +123,7 @@ export function EventQuickActionPopover({
         {state.message ? <div className="mt-3 text-sm text-success">{state.message}</div> : null}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {viewer !== "customer" && kind === "request" && event.status === "request.requested" ? (
+          {viewer !== "member" && kind === "request" && event.status === "request.requested" ? (
             <>
               <Button
                 size="sm"
@@ -152,7 +152,7 @@ export function EventQuickActionPopover({
               </Button>
             </>
           ) : null}
-          {viewer !== "customer" && kind === "request" && event.status === "request.payment_failed" ? (
+          {viewer !== "member" && kind === "request" && event.status === "request.payment_failed" ? (
             <Button
               size="sm"
               onClick={() =>
@@ -168,7 +168,7 @@ export function EventQuickActionPopover({
           ) : null}
           {kind === "booking" && event.status === "booking.confirmed" ? (
             <>
-              {viewer !== "customer" ? (
+              {viewer !== "member" ? (
                 !event.checked_in ? (
                   <Button
                     size="sm"

@@ -41,7 +41,7 @@ export function PublicTopbar({ subtitle = "Public Marketplace" }: { subtitle?: s
   return (
     <div className="border-b border-slate-200/70 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-5">
-        <Link href="/coworking" className="block">
+        <Link href="/spaces" className="block">
           <div className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">Priddyspaces</div>
           <div className="mt-1 text-lg font-semibold text-slate-900">{subtitle}</div>
         </Link>

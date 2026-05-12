@@ -10,7 +10,7 @@ class RegisterIn(BaseModel):
     password: str
     first_name: str
     last_name: str
-    role: UserAppRole
+    role: UserAppRole = UserAppRole.MEMBER
     terms_accepted: bool
     privacy_policy_accepted: bool
 

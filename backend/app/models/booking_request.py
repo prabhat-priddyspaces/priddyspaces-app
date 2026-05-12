@@ -16,7 +16,7 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     booking_series_id = Column(Integer, nullable=True, index=True)
     owner_payment_setting_id = Column(Integer, nullable=True)
     payment_provider = Column(String(32), nullable=True)
-    customer_owner_payment_method_id = Column(Integer, nullable=True)
+    member_owner_payment_method_id = Column(Integer, nullable=True)
     start_datetime = Column(DateTime(timezone=True), nullable=False)
     end_datetime = Column(DateTime(timezone=True), nullable=False)
     status = Column(

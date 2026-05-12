@@ -9,13 +9,13 @@ from app.db.deps import get_db
 from app.models.enums import PlatformTeamRole, SpaceType
 from app.models.location import Location
 from app.models.organization import Organization
-from app.models.org_customer import OrgCustomer
+from app.models.org_member_profile import OrgMemberProfile
 from app.models.space import Space
 from app.models.user import User
 from app.schemas.calendar import CalendarResponse
-from app.schemas.org_customer import OrgCustomerListItem
+from app.schemas.org_member_profile import OrgMemberProfileListItem
 from app.services.calendar_events import build_calendar_events
-from app.services.org_customer_stats import (
+from app.services.org_member_stats import (
     compute_member_stats,
     interacted_user_ids,
 )
@@ -105,22 +105,22 @@ def admin_calendar(
     )
 
 
-@router.get("/admin/customers/{user_public_id}/orgs", response_model=list[OrgCustomerListItem])
-def admin_customer_orgs(
+@router.get("/admin/members/{user_public_id}/orgs", response_model=list[OrgMemberProfileListItem])
+def admin_member_orgs(
     user_public_id: str,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
-    """Return per-org activity for a customer across every org they've interacted with."""
+    """Return per-org activity for a member across every org they've interacted with."""
     require_platform_roles(db, token, READ_ROLES)
 
     target = db.query(User).filter(User.public_id == user_public_id).first()
     if not target:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        raise HTTPException(status_code=404, detail="Member not found")
 
     org_records = {
         record.organization_id: record
-        for record in db.query(OrgCustomer).filter(OrgCustomer.user_id == target.id).all()
+        for record in db.query(OrgMemberProfile).filter(OrgMemberProfile.user_id == target.id).all()
     }
 
     candidate_org_ids: set[int] = set(org_records.keys())
@@ -136,7 +136,7 @@ def admin_customer_orgs(
         for org in db.query(Organization).filter(Organization.id.in_(candidate_org_ids)).all()
     }
 
-    items: list[OrgCustomerListItem] = []
+    items: list[OrgMemberProfileListItem] = []
     for org_id in candidate_org_ids:
         org = orgs_by_id.get(org_id)
         if not org:
@@ -144,7 +144,7 @@ def admin_customer_orgs(
         record = org_records.get(org_id)
         stats = compute_member_stats(db, org_id, target.id)
         items.append(
-            OrgCustomerListItem(
+            OrgMemberProfileListItem(
                 user_public_id=target.public_id,
                 organization_public_id=org.public_id,
                 name=org.name,
@@ -158,7 +158,7 @@ def admin_customer_orgs(
                 stats=_stats_passthrough(stats),
             )
         )
-    def _sort_key(item: OrgCustomerListItem) -> tuple[float, str]:
+    def _sort_key(item: OrgMemberProfileListItem) -> tuple[float, str]:
         ts = item.stats.last_booking_at or item.stats.first_booking_at
         return (ts.timestamp() if ts else 0.0, item.name)
 
@@ -167,9 +167,9 @@ def admin_customer_orgs(
 
 
 def _stats_passthrough(stats):
-    from app.schemas.org_customer import OrgCustomerStats
+    from app.schemas.org_member_profile import OrgMemberProfileStats
 
-    return OrgCustomerStats(
+    return OrgMemberProfileStats(
         total_bookings=stats.total_bookings,
         confirmed_bookings=stats.confirmed_bookings,
         canceled_bookings=stats.canceled_bookings,

@@ -27,22 +27,28 @@ interface PublicLocationDetailProps {
 
 export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDetailProps) {
   const searchParams = useSearchParams();
-  // The static export only ships /{routeKey}/_/index.html, so production URLs
+  const requestedRoute = searchParams.get("route");
+  const initialRoute =
+    requestedRoute && requestedRoute in PUBLIC_MARKETPLACE_CONFIGS
+      ? (requestedRoute as PublicMarketplaceRoute)
+      : routeKey;
+  // The static export only ships /locations/_/index.html, so production URLs
   // route through the placeholder with the real id in ?id=. Path param wins
-  // for dev mode and any legacy /{routeKey}/{id} links.
+  // for dev mode.
   const effectiveLocationId =
     !locationId || locationId === "_" ? searchParams.get("id") || "" : locationId;
   const filterQueryString = useMemo(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("id");
+    params.delete("route");
     return params.toString();
   }, [searchParams]);
 
   // Show all categories at this location, defaulting to the route the user came from.
-  const [activeRoute, setActiveRoute] = useState<PublicMarketplaceRoute>(routeKey);
+  const [activeRoute, setActiveRoute] = useState<PublicMarketplaceRoute>(initialRoute);
   useEffect(() => {
-    setActiveRoute(routeKey);
-  }, [routeKey]);
+    setActiveRoute(initialRoute);
+  }, [initialRoute]);
   const activeConfig = PUBLIC_MARKETPLACE_CONFIGS[activeRoute];
 
   const [location, setLocation] = useState<MarketplaceLocationDetail | null>(null);
@@ -72,8 +78,8 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
 
   // Back link returns to the original search route, not whichever tab the user opened here.
   const backHref = useMemo(
-    () => buildBackHref(routeKey, filterQueryString),
-    [routeKey, filterQueryString],
+    () => buildBackHref(initialRoute, filterQueryString),
+    [initialRoute, filterQueryString],
   );
 
   if (loading) {

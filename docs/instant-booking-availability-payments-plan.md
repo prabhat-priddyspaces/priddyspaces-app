@@ -16,8 +16,8 @@ Priddyspaces should support instant booking for low-risk, transactional inventor
 
 ### Must Have
 
-- Customers can reserve eligible meeting rooms and day passes without owner approval when they have a saved payment method.
-- Customers can still request private offices and suites without immediate approval.
+- Members can reserve eligible meeting rooms and day passes without owner approval when they have a saved payment method.
+- Members can still request private offices and suites without immediate approval.
 - Owners can configure buffer time before and after a booking.
 - Owners can configure tiered cancellation refund policies by space type.
 - Owners can see payment ledger totals: gross, tax, refunds, platform fees, owner net, successful payment count, and failed payment count.
@@ -32,7 +32,7 @@ Priddyspaces should support instant booking for low-risk, transactional inventor
 - Recurrence controls remain simple in v1: one-time, weekly, monthly, count capped at 52.
 - Public detail pages show `Reserve & Pay` for instant-eligible inventory and `Request to Book` for high-value spaces.
 - Mobile booking uses picker-style date/time selection instead of raw datetime text input.
-- Receipts and invoices are generated for successful booking charges and visible to customers/owners.
+- Receipts and invoices are generated for successful booking charges and visible to members/owners.
 
 ### Later
 
@@ -87,7 +87,7 @@ Priddyspaces should support instant booking for low-risk, transactional inventor
 
 ### Booking Flow
 
-1. Customer submits a booking request payload.
+1. Member submits a booking request payload.
 2. API resolves the space and location.
 3. API expands recurrence, validates open hours, buffers, conflicts, and granularity.
 4. API resolves required payment method after availability validation so unavailable slots return a 409 instead of a payment-method error.
@@ -155,7 +155,7 @@ Priddyspaces should support instant booking for low-risk, transactional inventor
 - Owner payments:
   - payout ledger summary panel.
 - E2E:
-  - customer Reserve & Pay path covers saved payment method, booking payload, paid request detail, and invoice display.
+  - member Reserve & Pay path covers saved payment method, booking payload, paid request detail, and invoice display.
 
 ## Mobile Implementation
 
@@ -187,7 +187,7 @@ Priddyspaces should support instant booking for low-risk, transactional inventor
 - Vitest component/unit suite.
 - Next production build.
 - Full Playwright suite.
-- Customer Reserve & Pay e2e path.
+- Member Reserve & Pay e2e path.
 
 ### Mobile
 

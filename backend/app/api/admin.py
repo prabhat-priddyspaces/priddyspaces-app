@@ -37,6 +37,7 @@ from app.schemas.admin import (
     PlatformTeamUpdateIn,
 )
 from app.services.audit import write_audit_log
+from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.notifications import send_email
 from app.services.platform_auth import (
     build_default_route,
@@ -67,7 +68,7 @@ def _user_label(user: User) -> str:
 def _build_metrics(db: Session) -> dict[str, int | float]:
     tenant_count = db.query(Organization).count()
     user_count = db.query(User).count()
-    customer_count = db.query(User).filter(User.role == UserAppRole.CUSTOMER).count()
+    member_count = db.query(User).filter(User.role == UserAppRole.MEMBER).count()
     owner_company_count = db.query(Organization).count()
     approved_owner_company_count = (
         db.query(Organization)
@@ -103,7 +104,7 @@ def _build_metrics(db: Session) -> dict[str, int | float]:
     return {
         "tenants": tenant_count,
         "users": user_count,
-        "customers": customer_count,
+        "members": member_count,
         "owner_companies": owner_company_count,
         "approved_owner_companies": approved_owner_company_count,
         "pending_owner_companies": pending_owner_company_count,
@@ -174,8 +175,8 @@ def get_admin_dashboard(
     }
 
 
-@router.get("/admin/customers")
-def list_customers(
+@router.get("/admin/members")
+def list_members(
     q: str | None = None,
     signup_from: str | None = None,
     signup_to: str | None = None,
@@ -185,7 +186,7 @@ def list_customers(
     token: dict = Depends(get_current_user),
 ):
     require_platform_roles(db, token, READ_ROLES)
-    query = db.query(User).filter(User.role == UserAppRole.CUSTOMER)
+    query = db.query(User).filter(User.role == UserAppRole.MEMBER)
     if q:
         term = f"%{q.strip().lower()}%"
         query = query.filter(
@@ -204,7 +205,7 @@ def list_customers(
             query = query.filter(User.created_at <= datetime.fromisoformat(signup_to))
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid signup_to")
-    customers = query.order_by(User.created_at.desc()).all()
+    members = query.order_by(User.created_at.desc()).all()
 
     if has_subscription is not None:
         active_ids = {
@@ -213,7 +214,7 @@ def list_customers(
             .filter(Subscription.status.in_(["active", "trialing", "past_due", "canceling"]))
             .all()
         }
-        customers = [c for c in customers if (c.id in active_ids) == has_subscription]
+        members = [c for c in members if (c.id in active_ids) == has_subscription]
     if has_failed_payments is not None:
         failed_ids = {
             uid
@@ -221,11 +222,11 @@ def list_customers(
             .filter(Payment.status == PaymentStatus.FAILED)
             .all()
         }
-        customers = [c for c in customers if (c.id in failed_ids) == has_failed_payments]
-    if not customers:
+        members = [c for c in members if (c.id in failed_ids) == has_failed_payments]
+    if not members:
         return []
 
-    user_ids = [customer.id for customer in customers]
+    user_ids = [member.id for member in members]
     booking_counts = {
         user_id: count
         for user_id, count in (
@@ -255,48 +256,48 @@ def list_customers(
     }
     return [
         {
-            "public_id": customer.public_id,
-            "email": customer.email,
-            "name": _user_label(customer),
-            "is_active": customer.is_active,
-            "email_verified": customer.email_verified,
-            "bookings": booking_counts.get(customer.id, 0),
-            "payments": payment_counts.get(customer.id, 0),
-            "subscriptions": subscription_counts.get(customer.id, 0),
-            "created_at": customer.created_at.isoformat() if customer.created_at else None,
+            "public_id": member.public_id,
+            "email": member.email,
+            "name": _user_label(member),
+            "is_active": member.is_active,
+            "email_verified": member.email_verified,
+            "bookings": booking_counts.get(member.id, 0),
+            "payments": payment_counts.get(member.id, 0),
+            "subscriptions": subscription_counts.get(member.id, 0),
+            "created_at": member.created_at.isoformat() if member.created_at else None,
         }
-        for customer in customers
+        for member in members
     ]
 
 
-@router.get("/admin/customers/{public_id}")
-def get_customer_detail(
+@router.get("/admin/members/{public_id}")
+def get_member_detail(
     public_id: str,
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
     require_platform_roles(db, token, READ_ROLES)
-    customer = db.query(User).filter(User.public_id == public_id, User.role == UserAppRole.CUSTOMER).first()
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+    member = db.query(User).filter(User.public_id == public_id, User.role == UserAppRole.MEMBER).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
 
     bookings = (
         db.query(Booking)
-        .filter(Booking.user_id == customer.id)
+        .filter(Booking.user_id == member.id)
         .order_by(Booking.created_at.desc())
         .limit(100)
         .all()
     )
     payments = (
         db.query(Payment)
-        .filter(Payment.user_id == customer.id)
+        .filter(Payment.user_id == member.id)
         .order_by(Payment.created_at.desc())
         .limit(100)
         .all()
     )
     subscriptions = (
         db.query(Subscription)
-        .filter(Subscription.user_id == customer.id)
+        .filter(Subscription.user_id == member.id)
         .order_by(Subscription.created_at.desc())
         .all()
     )
@@ -304,9 +305,9 @@ def get_customer_detail(
         db.query(AuditLog)
         .filter(
             or_(
-                AuditLog.actor_id == customer.id,
-                AuditLog.acting_as_user_id == customer.id,
-                AuditLog.entity_public_id == customer.public_id,
+                AuditLog.actor_id == member.id,
+                AuditLog.acting_as_user_id == member.id,
+                AuditLog.entity_public_id == member.public_id,
             )
         )
         .order_by(AuditLog.created_at.desc())
@@ -316,15 +317,15 @@ def get_customer_detail(
 
     return {
         "profile": {
-            "public_id": customer.public_id,
-            "email": customer.email,
-            "name": _user_label(customer),
-            "role": customer.role.value if customer.role else None,
-            "is_active": customer.is_active,
-            "email_verified": customer.email_verified,
-            "stripe_customer_id": customer.stripe_customer_id,
-            "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            "updated_at": customer.updated_at.isoformat() if customer.updated_at else None,
+            "public_id": member.public_id,
+            "email": member.email,
+            "name": _user_label(member),
+            "role": member.role.value if member.role else None,
+            "is_active": member.is_active,
+            "email_verified": member.email_verified,
+            "stripe_customer_id": member.stripe_customer_id,
+            "created_at": member.created_at.isoformat() if member.created_at else None,
+            "updated_at": member.updated_at.isoformat() if member.updated_at else None,
         },
         "bookings": [
             {
@@ -699,7 +700,7 @@ def list_admin_booking_activity(
             {
                 "public_id": booking.public_id,
                 "status": booking.status.value,
-                "customer_email": booking_users.get(booking.user_id).email if booking_users.get(booking.user_id) else None,
+                "member_email": booking_users.get(booking.user_id).email if booking_users.get(booking.user_id) else None,
                 "created_at": booking.created_at.isoformat() if booking.created_at else None,
             }
             for booking in bookings
@@ -708,7 +709,7 @@ def list_admin_booking_activity(
             {
                 "public_id": request.public_id,
                 "status": request.status.value,
-                "customer_email": request_users.get(request.user_id).email if request_users.get(request.user_id) else None,
+                "member_email": request_users.get(request.user_id).email if request_users.get(request.user_id) else None,
                 "operator_notes": request.operator_notes,
                 "created_at": request.created_at.isoformat() if request.created_at else None,
             }
@@ -758,7 +759,7 @@ def list_admin_payments(
                 "commission_rate_pct": payment.commission_rate_pct,
                 "platform_fee_amount": payment.platform_fee_amount,
                 "owner_net_amount": payment.owner_net_amount,
-                "customer_email": users.get(payment.user_id).email if users.get(payment.user_id) else None,
+                "member_email": users.get(payment.user_id).email if users.get(payment.user_id) else None,
                 "organization_name": organizations.get(payment.tenant_id).name if organizations.get(payment.tenant_id) else None,
                 "created_at": payment.created_at.isoformat() if payment.created_at else None,
             }
@@ -800,10 +801,11 @@ def invite_platform_team_member(
     token: dict = Depends(get_current_user),
 ):
     actor, _member = require_superadmin(db, token)
-    user = db.query(User).filter(User.email == payload.email).first()
+    email = normalize_email(payload.email)
+    user = get_user_by_normalized_email(db, email)
     if not user:
         user = User(
-            email=payload.email,
+            email=email,
             email_verified=False,
             is_active=True,
         )
@@ -950,8 +952,8 @@ def start_impersonation(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     ensure_not_platform_target(db, target)
-    if target.role not in {UserAppRole.CUSTOMER, UserAppRole.OWNER}:
-        raise HTTPException(status_code=400, detail="Only customer and owner-side users can be impersonated")
+    if target.role not in {UserAppRole.MEMBER, UserAppRole.OWNER}:
+        raise HTTPException(status_code=400, detail="Only member and owner-side users can be impersonated")
 
     impersonation_token = issue_impersonation_token(
         actor=actor,

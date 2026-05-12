@@ -36,7 +36,7 @@ def _space_with_access(
     token_payload: dict[str, Any] | None,
     space_public_id: str,
     *,
-    allow_customer_read: bool = False,
+    allow_member_read: bool = False,
 ) -> tuple[Space, Location]:
     space = db.query(Space).filter(Space.public_id == space_public_id).first()
     if not space:
@@ -46,7 +46,7 @@ def _space_with_access(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    if allow_customer_read and _space_publicly_visible(space, location):
+    if allow_member_read and _space_publicly_visible(space, location):
         return space, location
 
     if token_payload is None:
@@ -204,7 +204,7 @@ def list_space_media(
     db: Session = Depends(get_db),
     token: dict | None = Depends(get_optional_user),
 ):
-    space, _location = _space_with_access(db, token, space_public_id, allow_customer_read=True)
+    space, _location = _space_with_access(db, token, space_public_id, allow_member_read=True)
     return (
         db.query(SpaceImage)
         .filter(SpaceImage.space_id == space.id)

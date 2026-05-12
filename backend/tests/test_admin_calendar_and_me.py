@@ -85,11 +85,11 @@ def _seed_platform_admin(db, *, email: str = "platform@example.com", sub: str = 
     return user
 
 
-def _seed_customer(db, *, email: str = "c@example.com", sub: str = "sub-c", name: str = "Cust") -> User:
+def _seed_member(db, *, email: str = "c@example.com", sub: str = "sub-c", name: str = "Member") -> User:
     user = User(
         email=email,
         auth_subject=sub,
-        role=UserAppRole.CUSTOMER,
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
         full_name=name,
@@ -114,17 +114,17 @@ def _token(user: User) -> dict:
 def test_admin_calendar_spans_all_orgs_when_unscoped(db_session, client_factory):
     _o1, org1, _l1, space1 = _seed_org_with_space(db_session, owner_email="o1@example.com", owner_sub="sub-o1", name="OrgA")
     _o2, org2, _l2, space2 = _seed_org_with_space(db_session, owner_email="o2@example.com", owner_sub="sub-o2", name="OrgB")
-    cust = _seed_customer(db_session)
+    member = _seed_member(db_session)
 
     db_session.add_all([
         Booking(
-            user_id=cust.id, space_id=space1.id, tenant_id=org1.id,
+            user_id=member.id, space_id=space1.id, tenant_id=org1.id,
             start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
             end_datetime=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
             status=BookingStatus.CONFIRMED,
         ),
         Booking(
-            user_id=cust.id, space_id=space2.id, tenant_id=org2.id,
+            user_id=member.id, space_id=space2.id, tenant_id=org2.id,
             start_datetime=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc),
             end_datetime=datetime(2026, 5, 5, 13, 0, tzinfo=timezone.utc),
             status=BookingStatus.CONFIRMED,
@@ -158,19 +158,19 @@ def test_admin_calendar_requires_platform_admin(db_session, client_factory):
     assert resp.status_code == 403
 
 
-def test_admin_customer_orgs_returns_per_org_stats(db_session, client_factory):
+def test_admin_member_orgs_returns_per_org_stats(db_session, client_factory):
     _o1, org1, _l1, space1 = _seed_org_with_space(db_session, owner_email="ox@example.com", owner_sub="sub-ox", name="X")
     _o2, org2, _l2, space2 = _seed_org_with_space(db_session, owner_email="oy@example.com", owner_sub="sub-oy", name="Y")
-    cust = _seed_customer(db_session)
+    member = _seed_member(db_session)
     db_session.add_all([
         Booking(
-            user_id=cust.id, space_id=space1.id, tenant_id=org1.id,
+            user_id=member.id, space_id=space1.id, tenant_id=org1.id,
             start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
             end_datetime=datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc),
             status=BookingStatus.CONFIRMED,
         ),
         Subscription(
-            user_id=cust.id, space_id=space2.id, tenant_id=org2.id,
+            user_id=member.id, space_id=space2.id, tenant_id=org2.id,
             status="active", start_date=date(2026, 5, 1),
         ),
     ])
@@ -178,7 +178,7 @@ def test_admin_customer_orgs_returns_per_org_stats(db_session, client_factory):
 
     admin = _seed_platform_admin(db_session)
     client = client_factory(_token(admin))
-    resp = client.get(f"/api/admin/customers/{cust.public_id}/orgs")
+    resp = client.get(f"/api/admin/members/{member.public_id}/orgs")
     assert resp.status_code == 200
     items = resp.json()
     org_ids = {item["organization_public_id"] for item in items}
@@ -192,8 +192,8 @@ def test_admin_customer_orgs_returns_per_org_stats(db_session, client_factory):
 
 def test_me_calendar_shows_only_own_bookings(db_session, client_factory):
     _owner, org, _loc, space = _seed_org_with_space(db_session, owner_email="ow@example.com", owner_sub="sub-ow")
-    me = _seed_customer(db_session, email="me@example.com", sub="sub-me", name="Me")
-    other = _seed_customer(db_session, email="other@example.com", sub="sub-other", name="Other")
+    me = _seed_member(db_session, email="me@example.com", sub="sub-me", name="Me")
+    other = _seed_member(db_session, email="other@example.com", sub="sub-other", name="Other")
     db_session.add_all([
         Booking(
             user_id=me.id, space_id=space.id, tenant_id=org.id,
@@ -221,7 +221,7 @@ def test_me_calendar_shows_only_own_bookings(db_session, client_factory):
 
 
 def test_me_calendar_empty_when_no_bookings(db_session, client_factory):
-    me = _seed_customer(db_session, email="me2@example.com", sub="sub-me2")
+    me = _seed_member(db_session, email="me2@example.com", sub="sub-me2")
     client = client_factory(_token(me))
     start = datetime(2026, 5, 4, 0, 0, tzinfo=timezone.utc)
     end = start + timedelta(days=7)
@@ -231,7 +231,7 @@ def test_me_calendar_empty_when_no_bookings(db_session, client_factory):
 
 
 def test_me_patch_updates_phone_and_company(db_session, client_factory):
-    me = _seed_customer(db_session, email="patch-me@example.com", sub="sub-patch-me")
+    me = _seed_member(db_session, email="patch-me@example.com", sub="sub-patch-me")
     client = client_factory(_token(me))
     resp = client.patch("/api/me", json={"phone": "+1-555-0100", "company_name": "Acme Corp"})
     assert resp.status_code == 200

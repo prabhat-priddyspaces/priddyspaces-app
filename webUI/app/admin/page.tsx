@@ -44,7 +44,7 @@ export default function AdminDashboardPage() {
           <div className="grid gap-4 md:grid-cols-4">
             {[
               ["Users", metrics.users],
-              ["Customers", metrics.customers],
+              ["Members", metrics.members],
               ["Owner Companies", metrics.owner_companies],
               ["Live Listings", metrics.live_listings],
               ["Bookings", metrics.bookings],

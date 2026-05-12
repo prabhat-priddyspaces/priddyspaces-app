@@ -21,4 +21,3 @@ class PaymentRefund(PublicIdMixin, TimestampMixin, Base):
     idempotency_key = Column(String(255), nullable=False, unique=True, index=True)
     failure_reason = Column(String(1024), nullable=True)
     raw_response = Column(JSON, nullable=True)
-

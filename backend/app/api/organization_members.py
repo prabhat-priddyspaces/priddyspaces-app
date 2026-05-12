@@ -13,6 +13,7 @@ from app.schemas.organization_member import (
     OrganizationMemberDetailOut,
     OrganizationMemberOut,
 )
+from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.auth_user import get_or_create_user
 from app.services.authz import get_org_member, require_owner_or_admin
 from app.services.lookups import get_org_by_public_id
@@ -28,12 +29,13 @@ def _resolve_member_user(db: Session, payload: OrganizationMemberCreate) -> User
             raise HTTPException(status_code=404, detail="User not found")
         return user
 
-    user = db.query(User).filter(User.email == payload.email).first()
+    normalized_email = normalize_email(str(payload.email))
+    user = get_user_by_normalized_email(db, normalized_email)
     if user:
         return user
 
     # Admin and staff use the owner-side shell in the current app.
-    user = User(email=str(payload.email), role=UserAppRole.OWNER, email_verified=False, is_active=True)
+    user = User(email=normalized_email, role=UserAppRole.OWNER, email_verified=False, is_active=True)
     db.add(user)
     db.commit()
     db.refresh(user)

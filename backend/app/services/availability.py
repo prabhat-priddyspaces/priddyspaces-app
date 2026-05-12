@@ -50,8 +50,8 @@ def subscription_overlaps(db: Session, space_id: int, start: date, end: date | N
     """True iff there's an *exclusive* subscription on this space covering the window.
 
     Office/suite leases block other bookings (the space is reserved for that
-    customer). Coworking memberships, day passes, and virtual memberships do
-    not — multiple customers can share the same space concurrently.
+    member). Coworking memberships, day passes, and virtual memberships do
+    not — multiple members can share the same space concurrently.
 
     Legacy subscriptions (no booking_mode) keep the pre-membership-flow behavior
     of blocking, so existing tests/data don't change semantics.

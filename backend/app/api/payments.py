@@ -17,7 +17,7 @@ from app.schemas.payment import (
     PaymentIntentOut,
     SubscriptionPurchase,
     SubscriptionPurchaseOut,
-    CustomerPortalOut,
+    MemberPortalOut,
     PaymentOut,
     OwnerPayoutSummaryOut,
 )
@@ -218,8 +218,8 @@ def create_subscription_purchase(
     )
 
 
-@router.post("/payments/customer-portal", response_model=CustomerPortalOut)
-def create_customer_portal(
+@router.post("/payments/member-portal", response_model=MemberPortalOut)
+def create_member_portal(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user)
 ):
@@ -234,9 +234,9 @@ def create_customer_portal(
 
     session = create_billing_portal_session(
         user.stripe_customer_id,
-        f"{settings.FRONTEND_URL}/customer/subscriptions",
+        f"{settings.FRONTEND_URL}/member/subscriptions",
     )
-    return CustomerPortalOut(url=session.url)
+    return MemberPortalOut(url=session.url)
 
 
 @router.get("/payments", response_model=list[PaymentOut])
@@ -248,7 +248,7 @@ def list_payments(
     user = get_or_create_user(db, token)
     query = db.query(Payment).order_by(Payment.created_at.desc())
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         query = query.filter(Payment.user_id == user.id)
         payments = query.all()
     else:
@@ -274,7 +274,7 @@ def get_payment(
     payment = db.query(Payment).filter(Payment.public_id == public_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if payment.user_id != user.id:
             raise HTTPException(status_code=404, detail="Payment not found")
         return payment

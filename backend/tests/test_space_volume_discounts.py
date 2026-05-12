@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import (
     AvailabilityStatus,
     BookingRequestStatus,
@@ -72,7 +72,7 @@ def _token(user: User) -> dict:
     return {"sub": user.auth_subject, "email": user.email, "email_verified": True}
 
 
-def _seed_payment_method(db, customer: User, space: Space) -> CustomerOwnerPaymentMethod:
+def _seed_payment_method(db, member: User, space: Space) -> MemberOwnerPaymentMethod:
     setting = OwnerPaymentSetting(
         organization_id=space.tenant_id,
         tenant_id=space.tenant_id,
@@ -84,8 +84,8 @@ def _seed_payment_method(db, customer: User, space: Space) -> CustomerOwnerPayme
     db.add(setting)
     db.commit()
     db.refresh(setting)
-    method = CustomerOwnerPaymentMethod(
-        user_id=customer.id,
+    method = MemberOwnerPaymentMethod(
+        user_id=member.id,
         organization_id=space.tenant_id,
         tenant_id=space.tenant_id,
         provider="stripe",
@@ -157,7 +157,7 @@ def test_duplicate_min_hours_rejected(db_session, client_factory):
 
 
 def test_volume_discount_applied_in_booking_estimate(db_session, client_factory):
-    """End-to-end: owner sets a 4-hour/10% tier, customer books 4 hours, sees discount."""
+    """End-to-end: owner sets a 4-hour/10% tier, member books 4 hours, sees discount."""
     owner, space = _seed(db_session)
     owner_client = client_factory(_token(owner))
     owner_client.put(
@@ -165,28 +165,28 @@ def test_volume_discount_applied_in_booking_estimate(db_session, client_factory)
         json={"tiers": [{"min_hours": 4, "discount_percent": 10}]},
     )
 
-    customer = User(
-        email="vd-cust@example.com",
-        auth_subject="sub-vd-cust",
-        role=UserAppRole.CUSTOMER,
+    member = User(
+        email="vd-member@example.com",
+        auth_subject="sub-vd-member",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
+    db_session.refresh(member)
 
-    method = _seed_payment_method(db_session, customer, space)
-    cust_client = client_factory(_token(customer))
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory(_token(member))
     payload = {
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc).isoformat(),
         "end_datetime": datetime(2026, 6, 1, 13, 0, tzinfo=timezone.utc).isoformat(),
-        "customer_owner_payment_method_public_id": method.public_id,
+        "member_owner_payment_method_public_id": method.public_id,
         "payment_authorization_consent": True,
         "booking_mode": "hourly",
     }
-    resp = cust_client.post("/api/booking-requests", json=payload)
+    resp = member_client.post("/api/booking-requests", json=payload)
     assert resp.status_code == 200
     body = resp.json()
     # 4 hrs x $30 = $120 base, 10% off = $108. estimated_amount is dollars (cents // 100).
@@ -203,27 +203,27 @@ def test_full_day_booking_ignores_volume_discount(db_session, client_factory):
         f"/api/spaces/{space.public_id}/volume-discounts",
         json={"tiers": [{"min_hours": 1, "discount_percent": 50}]},
     )
-    customer = User(
+    member = User(
         email="vd-cust2@example.com",
         auth_subject="sub-vd-cust2",
-        role=UserAppRole.CUSTOMER,
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db_session.add(customer)
+    db_session.add(member)
     db_session.commit()
-    db_session.refresh(customer)
-    method = _seed_payment_method(db_session, customer, space)
-    cust_client = client_factory(_token(customer))
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory(_token(member))
     payload = {
         "space_public_id": space.public_id,
         "start_datetime": datetime(2026, 6, 2, 9, 0, tzinfo=timezone.utc).isoformat(),
         "end_datetime": datetime(2026, 6, 2, 11, 0, tzinfo=timezone.utc).isoformat(),
-        "customer_owner_payment_method_public_id": method.public_id,
+        "member_owner_payment_method_public_id": method.public_id,
         "payment_authorization_consent": True,
         "full_day": True,
     }
-    resp = cust_client.post("/api/booking-requests", json=payload)
+    resp = member_client.post("/api/booking-requests", json=payload)
     assert resp.status_code == 200
     body = resp.json()
     assert body["rate_basis"] == "daily"

@@ -221,7 +221,7 @@ export default function OwnerDashboard() {
             className="rounded-md border border-border bg-surface p-4 text-textPrimary transition hover:border-accent/40"
           >
             <div className="text-sm font-semibold">Members</div>
-            <div className="text-xs text-textMuted">Customers who interact with your spaces.</div>
+            <div className="text-xs text-textMuted">Members who interact with your spaces.</div>
           </Link>
         </div>
 

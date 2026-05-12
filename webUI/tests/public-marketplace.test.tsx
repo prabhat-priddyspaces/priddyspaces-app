@@ -11,7 +11,7 @@ const { pushMock, apiFetchMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/coworking",
+  usePathname: () => "/spaces",
   useRouter: () => ({
     replace: vi.fn(),
     push: pushMock,
@@ -73,12 +73,12 @@ describe("public marketplace flows", () => {
       ],
     });
 
-    render(<PublicMarketplaceBrowser routeKey="coworking" />);
+    render(<PublicMarketplaceBrowser routeKey="spaces" />);
 
     expect(await screen.findByRole("heading", { name: "Fallback Place" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Open Fallback Place" }));
-    expect(pushMock).toHaveBeenCalledWith("/coworking/_?q=Miami&id=loc_1");
+    expect(pushMock).toHaveBeenCalledWith("/locations/_?q=Miami&id=loc_1&route=spaces");
   });
 
   it("hides empty optional sections on the public detail page", async () => {
@@ -141,7 +141,7 @@ describe("public marketplace flows", () => {
       return Promise.resolve([]);
     });
 
-    render(<PublicSpaceDetailView spaceId="space_1" backHref="/coworking" />);
+    render(<PublicSpaceDetailView spaceId="space_1" backHref="/spaces" />);
 
     expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Parking" })).not.toBeInTheDocument();

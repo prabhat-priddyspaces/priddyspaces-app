@@ -13,7 +13,7 @@ interface AppSignOutOptions {
   onSignedOut?: () => void;
 }
 
-const DEFAULT_SIGN_OUT_REDIRECT = "/coworking";
+const DEFAULT_SIGN_OUT_REDIRECT = "/spaces";
 
 function getRedirectTarget(redirectTo: AppSignOutOptions["redirectTo"]) {
   return typeof redirectTo === "undefined" ? DEFAULT_SIGN_OUT_REDIRECT : redirectTo;

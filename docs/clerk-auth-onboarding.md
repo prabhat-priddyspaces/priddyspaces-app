@@ -26,7 +26,7 @@ Clerk is the identity provider (IdP) for all three surfaces — Next.js web, Exp
 | Identity, sessions, passwords, OAuth | Clerk |
 | Email verification, MFA | Clerk |
 | Org membership sync | Clerk → Postgres (via webhook) |
-| Role (`owner` / `customer`) | Clerk `publicMetadata.role` (written by backend after onboarding) |
+| Role (`owner` / `member`) | Clerk `publicMetadata.role` (written by backend after onboarding) |
 | Platform role (`superadmin` / `admin` / `support`) | Clerk `publicMetadata.platform_role` (set manually) |
 | All business data (spaces, bookings, payments, invoices) | Postgres |
 
@@ -46,7 +46,7 @@ Every protected API request carries a Clerk-issued RS256 JWT as `Authorization: 
 
 Relevant claims:
 - `sub` — Clerk user ID (`user_xxx`) stored in `users.auth_subject`
-- `metadata.role` — `owner` or `customer` (set by onboarding)
+- `metadata.role` — `owner` or `member` (set by onboarding)
 - `metadata.platform_role` — `superadmin`, `admin`, or `support`
 
 ### Webhook Sync (FastAPI ← Clerk)
@@ -77,13 +77,13 @@ Two endpoints under `/api/onboarding/` (all require a valid Clerk JWT):
 
 **`POST /api/onboarding/profile`**
 - Called once after sign-up (web redirect to `/onboarding/personal`, mobile `OnboardingScreen`)
-- Body: `role` (owner/customer), `full_name`, `phone`, `country`, `timezone`, `terms_accepted`, `privacy_policy_accepted`
+- Body: `role` (`member` for normal sign-up, `owner` only from `/owners/sign-up`), `full_name`, `phone`, `country`, `timezone`, `terms_accepted`, `privacy_policy_accepted`
 - Writes to `users` table
 - Calls `PATCH https://api.clerk.com/v1/users/{clerk_id}` to sync `publicMetadata.role` → Clerk JWT claims update on next token
 - Returns `MeOut` (includes `has_organization`, `default_route`)
 
 **`POST /api/onboarding/organization`**
-- Owner-only (returns 403 for customers)
+- Owner-only (returns 403 for members)
 - Body: `name` (required), `industry`, `size` (1-10 / 11-50 / 51-200 / 200+), `website`
 - Creates `Organization`, an owner `OrganizationMember`, and seeds default amenities
 - Idempotent: if owner already has an org, updates it in place
@@ -102,25 +102,28 @@ Two endpoints under `/api/onboarding/` (all require a valid Clerk JWT):
 | No `app_role` | `/onboarding/personal` |
 | `app_role == "owner"` and no org | `/onboarding/organization` |
 | `app_role == "owner"` and has org | `/owner` |
-| `app_role == "customer"` | `/coworking` |
+| `app_role == "member"` | `/spaces` |
 
 ---
 
 ## User Flows
 
 ### New email/password sign-up (web)
-1. User visits `/sign-up` → Clerk `<SignUp />` handles account creation + email verification
+1. Member visits `/sign-up` → Clerk `<SignUp />` handles account creation + email verification
 2. Clerk redirects to `/onboarding/personal` (env var `NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL`)
-3. User selects role (owner/customer), fills name/phone/country, accepts T&C
-4. `POST /api/onboarding/profile` → sets `users.role`, syncs `publicMetadata.role` to Clerk
-5. Response includes `default_route`:
-   - Customer → `/coworking`
-   - Owner → `/onboarding/organization`
-6. Owner fills org name/industry/size/website → `POST /api/onboarding/organization`
-7. Redirected to `/owner`
+3. User fills name/phone/country, accepts T&C; no role selector is shown
+4. `POST /api/onboarding/profile` sends `role: "member"` → sets `users.role`, syncs `publicMetadata.role` to Clerk
+5. Response includes `default_route: "/spaces"`
+
+### Hidden owner sign-up (web)
+1. Owner visits `/owners/sign-up` directly; this URL is not linked from public navigation
+2. Clerk `<SignUp />` handles account creation + email verification
+3. Clerk redirects to `/onboarding/personal`, which sends `role: "owner"` for this flow
+4. Owner fills org name/industry/size/website → `POST /api/onboarding/organization`
+5. Redirected to `/owner`
 
 ### Social OAuth sign-up (web)
-Same flow — Clerk handles OAuth callback natively; user lands on `/onboarding/personal`.
+Same role behavior — `/sign-up` creates members, `/owners/sign-up` creates owners. Clerk handles OAuth callback natively; user lands on `/onboarding/personal`.
 
 ### Email/password or OAuth sign-in (web)
 1. User visits `/sign-in` → Clerk `<SignIn />` with account linking by verified email
@@ -187,7 +190,7 @@ Local dev: copy `webUI/.env.local.example` to `webUI/.env.local` and fill in the
 
 ---
 
-## Database Schema Changes (migration 0032)
+## Database Schema Changes
 
 `backend/migrations/versions/0032_clerk_onboarding_fields.py`
 
@@ -202,6 +205,13 @@ Local dev: copy `webUI/.env.local.example` to `webUI/.env.local` and fill in the
 - `clerk_membership_id VARCHAR(255) UNIQUE` — Clerk membership ID for idempotent upserts
 
 **No changes to `users`** — `auth_subject` column (already present) is repurposed to store the Clerk user ID (`user_xxx`).
+
+`backend/migrations/versions/0035_member_role_rename.py`
+
+- Updates `users.role` and `organization_members.role` from `customer` to `member`
+- Normalizes existing `users.email` values to lowercase/trimmed form
+- Adds a unique lower-email index so one logical email can create only one `users` row
+- Renames owner-scoped member payment and CRM tables/columns from customer naming to member naming
 
 ---
 
@@ -234,7 +244,7 @@ Local dev: copy `webUI/.env.local.example` to `webUI/.env.local` and fill in the
 | `TestOrgUpsert` | Insert, name update, delete, unknown delete noop |
 | `TestMembershipUpsert` | Insert, idempotency, delete, unknown delete noop, skipped when org unknown |
 | `TestWebhookEndpoint` | Invalid signature → 401, user.created → row inserted, duplicate → 200 no dup, org.created, unknown event → 200 ignored |
-| `TestOnboardingProfile` | No token → 401, valid role/name/terms, owner role, blank name → 422, invalid role → 422 |
+| `TestOnboardingProfile` | No token → 401, valid role/name/terms, owner role, blank name → 422, invalid role/customer role → 422 |
 | `TestOnboardingOrganization` | No token → 401, non-owner → 403, blank name → 422, invalid size → 422, valid creation, idempotent update, `has_organization` true in response |
 
 Run inside Docker: `docker compose exec backend pytest tests/test_clerk_webhooks.py -v`
@@ -247,7 +257,7 @@ Run inside Docker: `docker compose exec backend pytest tests/test_clerk_webhooks
 | No `app_role` | `/onboarding/personal` |
 | Owner, no org | `/onboarding/organization` |
 | Owner, has org | `/owner` |
-| Customer | `/coworking` |
+| Member | `/spaces` |
 | `platform_role = "superadmin"` | `/admin` |
 | `platform_role = "support"` | `/admin` |
 | Unknown future role (with `default_route`) | server-provided route |
@@ -280,11 +290,12 @@ Run: `cd webUI && npx vitest run tests/me-default-route.test.ts`
 | `webUI/middleware.ts` | **New** — `clerkMiddleware` with public route matcher |
 | `webUI/app/sign-in/[[...sign-in]]/page.tsx` | **New** — Clerk `<SignIn />` |
 | `webUI/app/sign-up/[[...sign-up]]/page.tsx` | **New** — Clerk `<SignUp />` |
-| `webUI/app/onboarding/personal/page.tsx` | **New** — role + profile form |
+| `webUI/app/onboarding/personal/page.tsx` | Member-only profile form; owner role comes only from hidden owner sign-up |
 | `webUI/app/onboarding/organization/page.tsx` | **New** — org creation form |
 | `webUI/app/dashboard/page.tsx` | **New** — redirect hub after sign-in |
 | `webUI/app/owner/layout.tsx` | Clerk `useAuth()` role guard |
-| `webUI/app/customer/layout.tsx` | Clerk `useAuth()` role guard |
+| `webUI/app/member/layout.tsx` | Clerk `useAuth()` role guard |
+| `webUI/app/owners/sign-up/[[...sign-up]]/page.tsx` | Hidden owner registration URL |
 | `webUI/app/admin/layout.tsx` | Clerk `useAuth()` platform_role guard |
 | `webUI/lib/me.ts` | `has_organization`; updated `getDefaultRoute` |
 | `webUI/.env.local.example` | **New** — local dev Clerk vars |
@@ -293,6 +304,6 @@ Run: `cd webUI && npx vitest run tests/me-default-route.test.ts`
 | `mobile/src/context/AuthContext.tsx` | Rewritten with Clerk hooks (same interface) |
 | `mobile/src/navigation/AppNavigator.tsx` | Onboarding gates using `me.role` + `me.has_organization` |
 | `mobile/src/screens/LoginScreen.tsx` | Google / Apple / Microsoft OAuth buttons |
-| `mobile/src/screens/OnboardingScreen.tsx` | **New** — role + profile screen |
+| `mobile/src/screens/OnboardingScreen.tsx` | Member-only profile screen |
 | `mobile/src/screens/OrgOnboardingScreen.tsx` | **New** — org creation screen |
 | `mobile/.env.example` | **New** |

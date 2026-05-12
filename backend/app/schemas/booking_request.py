@@ -62,7 +62,7 @@ class BookingRequestCreate(BaseModel):
     desired_start_date: date | None = None
     seats_requested: int = Field(default=1, ge=1)
 
-    customer_owner_payment_method_public_id: str | None = None
+    member_owner_payment_method_public_id: str | None = None
     payment_authorization_consent: bool = False
 
     # Explicit pricing-mode signals from the booking widget. Optional for backwards
@@ -114,7 +114,7 @@ class BookingRequestOut(BaseModel):
     status: BookingRequestStatus
     payment_status: str | None = None
     payment_provider: str | None = None
-    customer_owner_payment_method_public_id: str | None = None
+    member_owner_payment_method_public_id: str | None = None
     approved_at: datetime | None = None
     cancelled_at: datetime | None = None
     cancellation_deadline_at: datetime | None = None

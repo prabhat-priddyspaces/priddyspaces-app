@@ -10,13 +10,13 @@ class UserRole(str, enum.Enum):
     OWNER = "owner"
     ADMIN = "admin"
     STAFF = "staff"
-    CUSTOMER = "customer"
+    MEMBER = "member"
 
 
 class UserAppRole(str, enum.Enum):
-    """User-level role: owner (manages locations) or customer (books spaces)."""
+    """User-level role: owner (manages locations) or member (books spaces)."""
     OWNER = "owner"
-    CUSTOMER = "customer"
+    MEMBER = "member"
 
 
 class PlatformTeamRole(str, enum.Enum):

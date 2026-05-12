@@ -9,7 +9,7 @@ const baseNav = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/calendar", label: "Calendar" },
   { href: "/admin/analytics", label: "Analytics" },
-  { href: "/admin/customers", label: "Customers" },
+  { href: "/admin/members", label: "Members" },
   { href: "/admin/owner-companies", label: "Owner Companies" },
   { href: "/admin/owner-users", label: "Owner Users" },
   { href: "/admin/listings", label: "Listings" },

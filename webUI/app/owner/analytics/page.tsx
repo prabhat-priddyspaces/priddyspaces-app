@@ -18,7 +18,7 @@ import { Card } from "@/components/ui/card";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
-type Tab = "overview" | "occupancy" | "revenue" | "customers" | "heatmap";
+type Tab = "overview" | "occupancy" | "revenue" | "members" | "heatmap";
 
 interface Overview {
   range: { start: string; end: string };
@@ -73,7 +73,7 @@ interface RetentionResp {
   }>;
 }
 
-interface TopCustomersResp {
+interface TopMembersResp {
   rows: Array<{
     user_public_id: string | null;
     email: string | null;
@@ -106,7 +106,7 @@ export default function OwnerAnalyticsPage() {
   const [occupancy, setOccupancy] = useState<OccupancyResp | null>(null);
   const [peak, setPeak] = useState<PeakResp | null>(null);
   const [retention, setRetention] = useState<RetentionResp | null>(null);
-  const [topCustomers, setTopCustomers] = useState<TopCustomersResp | null>(null);
+  const [topMembers, setTopMembers] = useState<TopMembersResp | null>(null);
 
   const range = useMemo(
     () => `start_date=${startDate}&end_date=${endDate}`,
@@ -136,8 +136,8 @@ export default function OwnerAnalyticsPage() {
         ),
         apiFetch<PeakResp>(`/api/analytics/owner/peak-hours?${range}`, { method: "GET" }, token),
         apiFetch<RetentionResp>(`/api/analytics/owner/retention?months=6`, { method: "GET" }, token),
-        apiFetch<TopCustomersResp>(
-          `/api/analytics/owner/top-customers?${range}&limit=20`,
+        apiFetch<TopMembersResp>(
+          `/api/analytics/owner/top-members?${range}&limit=20`,
           { method: "GET" },
           token
         ),
@@ -148,7 +148,7 @@ export default function OwnerAnalyticsPage() {
       setOccupancy(occ);
       setPeak(pk);
       setRetention(ret);
-      setTopCustomers(tc);
+      setTopMembers(tc);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics");
     }
@@ -193,7 +193,7 @@ export default function OwnerAnalyticsPage() {
         </div>
 
         <div className="flex flex-wrap gap-2 border-b border-border">
-          {(["overview", "occupancy", "revenue", "customers", "heatmap"] as Tab[]).map((t) => (
+          {(["overview", "occupancy", "revenue", "members", "heatmap"] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -390,7 +390,7 @@ export default function OwnerAnalyticsPage() {
           </div>
         ) : null}
 
-        {tab === "customers" && retention && topCustomers ? (
+        {tab === "members" && retention && topMembers ? (
           <div className="space-y-4">
             <Card className="p-4">
               <div className="mb-3 text-sm font-semibold text-textPrimary">Monthly cohort retention</div>
@@ -398,13 +398,13 @@ export default function OwnerAnalyticsPage() {
             </Card>
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold text-textPrimary">Top customers</div>
+                <div className="text-sm font-semibold text-textPrimary">Top members</div>
                 <button
                   type="button"
                   onClick={() =>
                     downloadExport(
-                      `/api/analytics/owner/top-customers?${range}&limit=100&format=csv`,
-                      "top-customers.csv"
+                      `/api/analytics/owner/top-members?${range}&limit=100&format=csv`,
+                      "top-members.csv"
                     )
                   }
                   className="rounded-sm border border-border px-2 py-1 text-xs text-textSecondary hover:bg-surface2"
@@ -424,7 +424,7 @@ export default function OwnerAnalyticsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {topCustomers.rows.map((r) => (
+                    {topMembers.rows.map((r) => (
                       <tr key={r.user_public_id ?? r.email ?? Math.random()} className="border-t border-border">
                         <td className="p-2 text-textPrimary">{r.name || "—"}</td>
                         <td className="p-2 text-textSecondary">{r.email || "—"}</td>
@@ -433,10 +433,10 @@ export default function OwnerAnalyticsPage() {
                         <td className="p-2 text-textSecondary">{r.last_booking?.slice(0, 10) || "—"}</td>
                       </tr>
                     ))}
-                    {topCustomers.rows.length === 0 ? (
+                    {topMembers.rows.length === 0 ? (
                       <tr>
                         <td className="p-2 text-textMuted" colSpan={5}>
-                          No customer activity in this window.
+                          No member activity in this window.
                         </td>
                       </tr>
                     ) : null}

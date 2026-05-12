@@ -13,8 +13,8 @@
 - Search: Postgres full-text + geo (PostGIS or Haversine)
 
 ## Services
-- `webUI` -> customer + owner/admin UI
-- `mobile` -> customer/member app
+- `webUI` -> member + owner/admin UI
+- `mobile` -> member app
 - `backend` -> API, auth, payments, webhooks
 - `db` -> Postgres (Docker)
 

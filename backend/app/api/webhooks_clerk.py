@@ -20,6 +20,7 @@ from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.user import User
+from app.services.email_identity import get_user_by_normalized_email, normalize_email
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -53,11 +54,11 @@ def _primary_email(data: dict) -> tuple[str, bool]:
     for ea in data.get("email_addresses", []):
         if ea.get("id") == primary_id:
             verified = ea.get("verification", {}).get("status") == "verified"
-            return ea["email_address"].lower(), verified
+            return normalize_email(ea["email_address"]), verified
     # Fallback: first email address
     if data.get("email_addresses"):
         ea = data["email_addresses"][0]
-        return ea["email_address"].lower(), False
+        return normalize_email(ea["email_address"]), False
     return "", False
 
 
@@ -65,7 +66,7 @@ def _map_clerk_role_to_user_role(clerk_role: str) -> UserRole:
     """Map Clerk org role slug (org:admin, org:member, admin, member) to UserRole."""
     if "admin" in clerk_role:
         return UserRole.ADMIN
-    return UserRole.CUSTOMER
+    return UserRole.MEMBER
 
 
 def _write_audit(db: Session, action: str, entity_type: str, entity_id: str, meta: dict | None = None) -> None:
@@ -107,7 +108,7 @@ def _handle_user_upsert(db: Session, data: dict) -> None:
     # Find existing user by Clerk ID or email
     user = db.query(User).filter(User.auth_subject == clerk_id).first()
     if not user:
-        user = db.query(User).filter(User.email == email).first()
+        user = get_user_by_normalized_email(db, email)
 
     now = datetime.now(timezone.utc)
 

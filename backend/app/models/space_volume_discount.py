@@ -10,7 +10,7 @@ class SpaceVolumeDiscount(PublicIdMixin, TimestampMixin, Base):
     A space can have multiple tiers (e.g. 4 hrs = 10% off, 8 hrs = 20% off).
     The pricing engine picks the best applicable tier (highest discount_percent)
     when computing an hourly booking. Discounts apply only to the hourly path —
-    not when a customer selects "Full day" — because the day rate is already a
+    not when a member selects "Full day" — because the day rate is already a
     separate price the owner sets.
     """
     __tablename__ = "space_volume_discounts"

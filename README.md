@@ -41,6 +41,11 @@ Visit **http://localhost:3000**.
 
 `npm run dev` uses webpack-based dev mode by default to avoid Turbopack instability on this project. If you want to try Turbopack explicitly, use `npm run dev:turbo`.
 
+Registration URLs:
+- Member sign-up: `http://localhost:3000/sign-up`
+- Hidden owner sign-up: `http://localhost:3000/owners/sign-up`
+- Sign-in: `http://localhost:3000/sign-in`
+
 ### Web UI
 
 ```bash
@@ -50,7 +55,7 @@ npm run build
 npm start
 ```
 
-`npm start` runs the Next.js production server. This is the supported mode for authenticated owner/customer flows and dynamic detail pages.
+`npm start` runs the Next.js production server. This is the supported mode for authenticated owner/member flows and dynamic detail pages.
 
 ### Mobile
 

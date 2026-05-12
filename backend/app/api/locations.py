@@ -113,10 +113,10 @@ def get_location(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
     org = db.query(Organization).filter(Organization.id == location.organization_id).first()
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         if location.status != LocationStatus.ACTIVE or not organization_is_publicly_visible(org):
             raise HTTPException(status_code=404, detail="Location not found")
-    if user.role != UserAppRole.CUSTOMER:
+    if user.role != UserAppRole.MEMBER:
         require_location_roles(
             db,
             user.id,
@@ -208,7 +208,7 @@ def list_locations(
     user = get_or_create_user(db, token)
     query = db.query(Location)
 
-    if user.role == UserAppRole.CUSTOMER:
+    if user.role == UserAppRole.MEMBER:
         query = query.join(Organization, Organization.id == Location.organization_id).filter(
             Location.status == LocationStatus.ACTIVE,
             Organization.review_status == OrganizationReviewStatus.APPROVED,

@@ -58,19 +58,19 @@ def _seed_booking(db):
     db.commit()
     db.refresh(space)
 
-    customer = User(
-        email="cust@example.com",
-        auth_subject="sub-cust",
-        role=UserAppRole.CUSTOMER,
+    member = User(
+        email="member@example.com",
+        auth_subject="sub-member",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True
     )
-    db.add(customer)
+    db.add(member)
     db.commit()
-    db.refresh(customer)
+    db.refresh(member)
 
     booking = Booking(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=org.id,
         start_datetime=datetime(2099, 2, 5, 10, 0, tzinfo=timezone.utc),
@@ -80,11 +80,11 @@ def _seed_booking(db):
     db.add(booking)
     db.commit()
     db.refresh(booking)
-    return owner, customer, org, space, booking
+    return owner, member, org, space, booking
 
 
 def test_cancellation_policy_and_cancel(db_session, client_factory):
-    owner, customer, org, space, booking = _seed_booking(db_session)
+    owner, member, org, space, booking = _seed_booking(db_session)
     owner_client = client_factory({
         "sub": "sub-owner",
         "email": owner.email,
@@ -96,11 +96,11 @@ def test_cancellation_policy_and_cancel(db_session, client_factory):
     )
     assert policy.status_code == 200
 
-    customer_client = client_factory({
-        "sub": "sub-cust",
-        "email": customer.email,
+    member_client = client_factory({
+        "sub": "sub-member",
+        "email": member.email,
         "email_verified": True
     })
-    cancel = customer_client.post(f"/api/bookings/{booking.public_id}/cancel")
+    cancel = member_client.post(f"/api/bookings/{booking.public_id}/cancel")
     assert cancel.status_code == 200
     assert cancel.json()["refund_percent"] == 50

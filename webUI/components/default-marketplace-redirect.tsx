@@ -16,7 +16,7 @@ function legacyStaticDetailHref(pathname: string, search: string) {
   const current = new URLSearchParams(search);
   const next = new URLSearchParams();
   next.set("id", decodeURIComponent(spaceId));
-  next.set("back", current.get("back") || "/coworking");
+  next.set("back", current.get("back") || "/spaces");
   for (const key of DETAIL_QUERY_KEYS) {
     const value = current.get(key);
     if (value) next.set(key, value);
@@ -28,7 +28,7 @@ export function DefaultMarketplaceRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(legacyStaticDetailHref(window.location.pathname, window.location.search) || "/coworking");
+    router.replace(legacyStaticDetailHref(window.location.pathname, window.location.search) || "/spaces");
   }, [router]);
 
   return (
@@ -36,13 +36,13 @@ export function DefaultMarketplaceRedirect() {
       <div className="rounded-3xl border border-border bg-white px-8 py-10 text-center shadow-sm">
         <h1 className="text-2xl font-semibold text-textPrimary">Opening Priddyspaces Search</h1>
         <p className="mt-2 max-w-md text-sm text-textSecondary">
-          If you are not redirected automatically, continue to the public coworking marketplace.
+          If you are not redirected automatically, continue to the public spaces marketplace.
         </p>
         <Link
-          href="/coworking"
+          href="/spaces"
           className="mt-6 inline-flex rounded-full border border-slate-900 px-5 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-900 hover:text-white"
         >
-          Continue to Coworking
+          Continue to Spaces
         </Link>
       </div>
     </main>

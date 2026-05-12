@@ -11,7 +11,7 @@
 
 ## Notes
 - Static export is opt-in through `NEXT_OUTPUT_MODE=export`.
-- Authenticated dynamic routes such as customer booking/request detail pages are not a good fit for static export and should run with the normal Next server build.
+- Authenticated dynamic routes such as member booking/request detail pages are not a good fit for static export and should run with the normal Next server build.
 
 ## S3 + CloudFront
 - Upload `webUI/out/` to the bucket root.

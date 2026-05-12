@@ -31,7 +31,7 @@ export default function RootLayout({
     <ClerkProvider
       // Both flows funnel through /dashboard, which reads /api/me and routes
       // by role: no role → /onboarding/personal; owner-no-org →
-      // /onboarding/organization; owner → /owner; customer → /coworking;
+      // /onboarding/organization; owner → /owner; member → /spaces;
       // platform → /admin.
       signInForceRedirectUrl="/dashboard"
       signUpForceRedirectUrl="/dashboard"

@@ -1,4 +1,4 @@
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import AvailabilityStatus, SpaceType, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
@@ -53,9 +53,9 @@ def _owner_space(db):
     return owner, org, space
 
 
-def test_owner_payment_settings_and_customer_method_scope(db_session, client_factory):
+def test_owner_payment_settings_and_member_method_scope(db_session, client_factory):
     owner, org, space = _owner_space(db_session)
-    customer = _user(db_session, "pay-cust@example.com", "sub-pay-cust", UserAppRole.CUSTOMER)
+    member = _user(db_session, "pay-member@example.com", "sub-pay-member", UserAppRole.MEMBER)
 
     owner_client = client_factory({
         "sub": owner.auth_subject,
@@ -86,21 +86,21 @@ def test_owner_payment_settings_and_customer_method_scope(db_session, client_fac
         json={"payment_provider": "cardpointe"},
     )
 
-    customer_client = client_factory({
-        "sub": customer.auth_subject,
-        "email": customer.email,
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
         "email_verified": True,
     })
-    resolved = customer_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
+    resolved = member_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
     assert resolved.status_code == 200
     assert resolved.json()["is_configured"] is True
     assert resolved.json()["has_payment_method"] is False
 
-    setup = customer_client.post("/api/payment-methods/setup-session", json={"space_public_id": space.public_id})
+    setup = member_client.post("/api/payment-methods/setup-session", json={"space_public_id": space.public_id})
     assert setup.status_code == 200
     assert setup.json()["tokenizer_url"] == "https://tokenizer.test"
 
-    method = customer_client.post(
+    method = member_client.post(
         "/api/payment-methods",
         json={
             "space_public_id": space.public_id,
@@ -114,8 +114,8 @@ def test_owner_payment_settings_and_customer_method_scope(db_session, client_fac
     )
     assert method.status_code == 200
     assert method.json()["last4"] == "4242"
-    assert db_session.query(CustomerOwnerPaymentMethod).count() == 1
+    assert db_session.query(MemberOwnerPaymentMethod).count() == 1
 
-    resolved = customer_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
+    resolved = member_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
     assert resolved.json()["has_payment_method"] is True
     assert resolved.json()["payment_method_public_id"] == method.json()["public_id"]

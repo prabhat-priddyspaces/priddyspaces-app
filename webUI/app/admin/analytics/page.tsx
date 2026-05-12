@@ -24,7 +24,7 @@ interface PlatformResp {
     platform_earnings: number;
     owner_net: number;
     failed: number;
-    customers?: number;
+    members?: number;
     owners?: number;
   }>;
   summary: {
@@ -32,7 +32,7 @@ interface PlatformResp {
     platform_earnings: number;
     take_rate_pct: number;
     failed_payments: number;
-    new_customers: number;
+    new_members: number;
     new_owners: number;
   };
 }
@@ -147,7 +147,7 @@ export default function AdminAnalyticsPage() {
               <KPICard label="Platform earnings" value={formatCents(platform.summary.platform_earnings)} />
               <KPICard label="Take rate" value={`${platform.summary.take_rate_pct}%`} />
               <KPICard label="Failed payments" value={formatNumber(platform.summary.failed_payments)} />
-              <KPICard label="New customers" value={formatNumber(platform.summary.new_customers)} />
+              <KPICard label="New members" value={formatNumber(platform.summary.new_members)} />
               <KPICard label="New owners" value={formatNumber(platform.summary.new_owners)} />
             </div>
 
@@ -163,8 +163,8 @@ export default function AdminAnalyticsPage() {
             <Card className="p-4">
               <div className="mb-3 text-sm font-semibold text-textPrimary">Signups (daily)</div>
               <BarByCategory
-                data={platform.rows.map((r) => ({ bucket: r.bucket, customers: r.customers ?? 0, owners: r.owners ?? 0 }))}
-                keys={["customers", "owners"]}
+                data={platform.rows.map((r) => ({ bucket: r.bucket, members: r.members ?? 0, owners: r.owners ?? 0 }))}
+                keys={["members", "owners"]}
                 stacked
               />
             </Card>

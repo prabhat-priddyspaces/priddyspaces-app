@@ -133,7 +133,7 @@ def _metadata_events(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return events
 
 
-def public_space_url(space_public_id: str, *, back: str = "/coworking") -> str:
+def public_space_url(space_public_id: str, *, back: str = "/spaces") -> str:
     return f"/spaces/_.html?{urlencode({'id': str(space_public_id), 'back': back})}"
 
 
@@ -188,8 +188,8 @@ def _limits_for(audience: str) -> tuple[int, int]:
         return settings.ASSISTANT_OWNER_PER_MINUTE, settings.ASSISTANT_OWNER_PER_DAY
     if audience == "staff":
         return settings.ASSISTANT_STAFF_PER_MINUTE, settings.ASSISTANT_STAFF_PER_DAY
-    if audience == "customer":
-        return settings.ASSISTANT_CUSTOMER_PER_MINUTE, settings.ASSISTANT_CUSTOMER_PER_DAY
+    if audience == "member":
+        return settings.ASSISTANT_MEMBER_PER_MINUTE, settings.ASSISTANT_MEMBER_PER_DAY
     if audience == "guest":
         return settings.ASSISTANT_GUEST_PER_MINUTE, settings.ASSISTANT_GUEST_PER_DAY
     return settings.ASSISTANT_ANON_PER_MINUTE, settings.ASSISTANT_ANON_PER_DAY
@@ -731,7 +731,7 @@ def _policy_response(
 
 def _booking_or_action_response(ctx: AssistantContext, text: str, page_context: dict[str, Any]) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
     lowered = text.lower()
-    if "book" in lowered and ctx.audience == "customer":
+    if "book" in lowered and ctx.audience == "member":
         space_public_id = page_context.get("space_public_id")
         start_datetime = page_context.get("start_datetime")
         end_datetime = page_context.get("end_datetime")
@@ -747,16 +747,16 @@ def _booking_or_action_response(ctx: AssistantContext, text: str, page_context: 
                     "end_datetime": end_datetime,
                     "booking_mode": page_context.get("booking_mode") or "hourly",
                     "full_day": bool(page_context.get("full_day") or False),
-                    "customer_owner_payment_method_public_id": page_context.get("customer_owner_payment_method_public_id"),
+                    "member_owner_payment_method_public_id": page_context.get("member_owner_payment_method_public_id"),
                     "payment_authorization_consent": bool(page_context.get("payment_authorization_consent") or False),
                 },
                 warnings=["Existing booking, payment, and conflict validations will run after confirmation."],
             )
             return "I drafted a booking request. Review the details and confirm when you are ready.", [], [proposal]
-        return "I can draft the booking once a space, start time, and end time are selected.", [_citation("marketplace", "search", "/coworking", "Marketplace")], []
+        return "I can draft the booking once a space, start time, and end time are selected.", [_citation("marketplace", "search", "/spaces", "Marketplace")], []
 
     request_id = page_context.get("booking_request_public_id")
-    if "cancel" in lowered and request_id and ctx.audience in {"customer", "owner", "staff"}:
+    if "cancel" in lowered and request_id and ctx.audience in {"member", "owner", "staff"}:
         proposal = _make_proposal(
             kind="booking.cancel",
             summary="Cancel booking request",
@@ -765,7 +765,7 @@ def _booking_or_action_response(ctx: AssistantContext, text: str, page_context: 
             payload={},
             warnings=["Cancellation deadline and refund rules will be re-checked after confirmation."],
         )
-        return "I drafted a cancellation request. Confirm only if you want the existing API to process it.", [_citation("booking", request_id, f"/customer/requests/{request_id}", "Booking request")], [proposal]
+        return "I drafted a cancellation request. Confirm only if you want the existing API to process it.", [_citation("booking", request_id, f"/member/requests/{request_id}", "Booking request")], [proposal]
 
     if ctx.audience in {"owner", "staff"} and request_id and "approve" in lowered:
         proposal = _make_proposal(
@@ -839,14 +839,14 @@ def _analytics_response(db: Session, ctx: AssistantContext) -> tuple[str, list[d
 def _billing_response(db: Session, ctx: AssistantContext) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
     if not ctx.user_id:
         return "Sign in to review invoices and payments.", [], []
-    if ctx.audience == "customer":
+    if ctx.audience == "member":
         invoices = db.query(Invoice).filter(Invoice.user_id == ctx.user_id).order_by(Invoice.created_at.desc()).limit(5).all()
     else:
         invoices = db.query(Invoice).filter(Invoice.tenant_id.in_(ctx.tenant_ids)).order_by(Invoice.created_at.desc()).limit(5).all() if ctx.tenant_ids else []
     if not invoices:
-        return "I could not find recent invoices in your accessible account scope.", [_citation("invoice", "list", "/customer/invoices", "Invoices")], []
+        return "I could not find recent invoices in your accessible account scope.", [_citation("invoice", "list", "/member/invoices", "Invoices")], []
     total = sum(float(inv.amount or 0) for inv in invoices)
-    citations = [_citation("invoice", inv.public_id, f"/customer/invoices?invoice={inv.public_id}", "Invoice") for inv in invoices]
+    citations = [_citation("invoice", inv.public_id, f"/member/invoices?invoice={inv.public_id}", "Invoice") for inv in invoices]
     return f"I found {len(invoices)} recent invoice(s), totaling ${total:.2f} in this view.", citations, []
 
 
@@ -861,7 +861,7 @@ def _floor_plan_response(db: Session, ctx: AssistantContext, page_context: dict[
     if not location:
         return "Open a location or space and I can look up the floor plan for that page.", [], []
     if ctx.audience not in {"platform_admin", "owner", "staff"} and location.id not in ctx.accessible_location_ids:
-        # Customer floor-plan access is intentionally conservative in v1.
+        # Member floor-plan access is intentionally conservative in v1.
         return "Floor plans are available after sign-in only when the location has exposed one for your booking context.", [], []
     plan = db.query(FloorPlan).filter(FloorPlan.location_id == location.id).order_by(FloorPlan.version.desc()).first()
     if not plan:

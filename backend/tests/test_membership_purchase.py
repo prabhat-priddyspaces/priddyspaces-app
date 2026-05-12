@@ -1,5 +1,5 @@
 """End-to-end membership-purchase flow:
-- customer submits a request with membership_plan_public_id
+- member submits a request with membership_plan_public_id
 - owner approves -> Stripe Subscription created (mocked) -> Subscription row + ledger GRANT
 - /subscriptions/{id}/meeting-room-balance reflects the grant
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import (
     BookingMode,
     BookingRequestKind,
@@ -46,17 +46,17 @@ def _seed(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFICE):
         email_verified=True,
         is_active=True,
     )
-    customer = User(
-        email="mp-cust@example.com",
-        auth_subject="mp-cust",
-        role=UserAppRole.CUSTOMER,
+    member = User(
+        email="mp-member@example.com",
+        auth_subject="mp-member",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db.add_all([owner, customer])
+    db.add_all([owner, member])
     db.commit()
     db.refresh(owner)
-    db.refresh(customer)
+    db.refresh(member)
 
     org = Organization(name="MP Org", owner_id=owner.id)
     db.add(org)
@@ -108,8 +108,8 @@ def _seed(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFICE):
     db.commit()
     db.refresh(setting)
 
-    method = CustomerOwnerPaymentMethod(
-        user_id=customer.id,
+    method = MemberOwnerPaymentMethod(
+        user_id=member.id,
         organization_id=org.id,
         tenant_id=org.id,
         provider="stripe",
@@ -127,7 +127,7 @@ def _seed(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFICE):
     db.commit()
     db.refresh(method)
 
-    return owner, customer, org, location, space, setting, method
+    return owner, member, org, location, space, setting, method
 
 
 def _enable_mode_and_make_plan(
@@ -173,7 +173,7 @@ def _enable_mode_and_make_plan(
 def test_membership_purchase_request_create_and_approve(
     db_session, client_factory, monkeypatch
 ):
-    owner, customer, _, _, space, setting, method = _seed(db_session)
+    owner, member, _, _, space, setting, method = _seed(db_session)
     plan = _enable_mode_and_make_plan(
         db_session, space, booking_mode=BookingMode.PRIVATE_OFFICE_LEASE
     )
@@ -192,17 +192,17 @@ def test_membership_purchase_request_create_and_approve(
         "app.api.booking_requests.create_stripe_subscription", fake_create
     )
 
-    customer_client = client_factory(
-        {"sub": "mp-cust", "email": customer.email, "email_verified": True}
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
 
     desired_start = date(2026, 5, 1)
-    create_resp = customer_client.post(
+    create_resp = member_client.post(
         "/api/booking-requests",
         json={
             "membership_plan_public_id": plan.public_id,
             "desired_start_date": desired_start.isoformat(),
-            "customer_owner_payment_method_public_id": method.public_id,
+            "member_owner_payment_method_public_id": method.public_id,
             "payment_authorization_consent": True,
         },
     )
@@ -231,7 +231,7 @@ def test_membership_purchase_request_create_and_approve(
     # Subscription created
     sub = (
         db_session.query(Subscription)
-        .filter(Subscription.user_id == customer.id, Subscription.space_id == space.id)
+        .filter(Subscription.user_id == member.id, Subscription.space_id == space.id)
         .first()
     )
     assert sub is not None
@@ -255,7 +255,7 @@ def test_membership_purchase_request_create_and_approve(
     assert grants[0].hours_delta_minutes == 16 * 60
 
     # Balance endpoint
-    balance_resp = customer_client.get(
+    balance_resp = member_client.get(
         f"/api/subscriptions/{sub.public_id}/meeting-room-balance"
     )
     assert balance_resp.status_code == 200, balance_resp.text
@@ -269,12 +269,12 @@ def test_membership_purchase_request_create_and_approve(
 def test_booking_request_xor_validator_rejects_mixed_payload(
     db_session, client_factory
 ):
-    _, customer, _, _, space, _, method = _seed(db_session)
-    customer_client = client_factory(
-        {"sub": "mp-cust", "email": customer.email, "email_verified": True}
+    _, member, _, _, space, _, method = _seed(db_session)
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
 
-    resp = customer_client.post(
+    resp = member_client.post(
         "/api/booking-requests",
         json={
             "space_public_id": space.public_id,
@@ -282,7 +282,7 @@ def test_booking_request_xor_validator_rejects_mixed_payload(
             "end_datetime": datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc).isoformat(),
             "membership_plan_public_id": "abc",
             "desired_start_date": "2026-05-01",
-            "customer_owner_payment_method_public_id": method.public_id,
+            "member_owner_payment_method_public_id": method.public_id,
             "payment_authorization_consent": True,
         },
     )
@@ -292,19 +292,19 @@ def test_booking_request_xor_validator_rejects_mixed_payload(
 def test_booking_request_xor_validator_rejects_empty_payload(
     db_session, client_factory
 ):
-    _, customer, *_ = _seed(db_session)
-    customer_client = client_factory(
-        {"sub": "mp-cust", "email": customer.email, "email_verified": True}
+    _, member, *_ = _seed(db_session)
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
 
-    resp = customer_client.post("/api/booking-requests", json={})
+    resp = member_client.post("/api/booking-requests", json={})
     assert resp.status_code == 422
 
 
 def test_membership_request_blocked_when_booking_mode_disabled(
     db_session, client_factory, monkeypatch
 ):
-    _, customer, _, _, space, _, method = _seed(db_session)
+    _, member, _, _, space, _, method = _seed(db_session)
     # Plan exists but mode is NOT enabled on the space.
     plan = MembershipPlan(
         tenant_id=space.tenant_id,
@@ -321,15 +321,15 @@ def test_membership_request_blocked_when_booking_mode_disabled(
     db_session.commit()
     db_session.refresh(plan)
 
-    customer_client = client_factory(
-        {"sub": "mp-cust", "email": customer.email, "email_verified": True}
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
-    resp = customer_client.post(
+    resp = member_client.post(
         "/api/booking-requests",
         json={
             "membership_plan_public_id": plan.public_id,
             "desired_start_date": "2026-05-01",
-            "customer_owner_payment_method_public_id": method.public_id,
+            "member_owner_payment_method_public_id": method.public_id,
             "payment_authorization_consent": True,
         },
     )
@@ -339,10 +339,10 @@ def test_membership_request_blocked_when_booking_mode_disabled(
 
 def test_subscription_overlaps_skips_coworking_membership(db_session):
     """Coworking memberships shouldn't block other bookings on the same space."""
-    _, customer, _, _, space, *_ = _seed(db_session, space_type=SpaceType.SHARED_DESK)
+    _, member, _, _, space, *_ = _seed(db_session, space_type=SpaceType.SHARED_DESK)
 
     sub = Subscription(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=space.tenant_id,
         status="active",
@@ -361,10 +361,10 @@ def test_subscription_overlaps_skips_coworking_membership(db_session):
 
 
 def test_subscription_overlaps_blocks_private_office_lease(db_session):
-    _, customer, _, _, space, *_ = _seed(db_session, space_type=SpaceType.PRIVATE_OFFICE)
+    _, member, _, _, space, *_ = _seed(db_session, space_type=SpaceType.PRIVATE_OFFICE)
 
     sub = Subscription(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=space.tenant_id,
         status="active",
@@ -384,10 +384,10 @@ def test_subscription_overlaps_blocks_private_office_lease(db_session):
 
 def test_subscription_overlaps_legacy_subscription_still_blocks(db_session):
     """Subscriptions without a booking_mode (legacy data) keep blocking."""
-    _, customer, _, _, space, *_ = _seed(db_session)
+    _, member, _, _, space, *_ = _seed(db_session)
 
     sub = Subscription(
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         tenant_id=space.tenant_id,
         status="active",

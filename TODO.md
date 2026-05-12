@@ -8,7 +8,7 @@
 ## Phase 1: Tenancy, Auth, RBAC
 - [ ] Tenant model + tenant middleware (API)
 - [ ] JWT auth endpoints + refresh flow
-- [ ] Role permissions (owner/admin/staff/customer)
+- [ ] Role permissions (owner/admin/staff/member)
 
 ## Phase 2: Locations, Spaces, Media
 - [ ] Location CRUD (timezone, geo)

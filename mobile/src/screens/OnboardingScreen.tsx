@@ -16,7 +16,6 @@ import { API_BASE_URL } from "../constants";
 export function OnboardingScreen() {
   const { getToken } = useAuth();
 
-  const [role, setRole] = useState<"owner" | "customer">("customer");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
@@ -42,7 +41,7 @@ export function OnboardingScreen() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          role,
+          role: "member",
           full_name: fullName.trim(),
           phone: phone || undefined,
           country: country || undefined,
@@ -66,27 +65,7 @@ export function OnboardingScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Complete your profile</Text>
-      <Text style={styles.subtitle}>Tell us how you&apos;ll use Priddyspaces.</Text>
-
-      <Text style={styles.label}>I am a</Text>
-      <View style={styles.roleRow}>
-        <TouchableOpacity
-          style={[styles.roleButton, role === "owner" && styles.roleButtonActive]}
-          onPress={() => setRole("owner")}
-        >
-          <Text style={[styles.roleButtonText, role === "owner" && styles.roleButtonTextActive]}>
-            Space Owner
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.roleButton, role === "customer" && styles.roleButtonActive]}
-          onPress={() => setRole("customer")}
-        >
-          <Text style={[styles.roleButtonText, role === "customer" && styles.roleButtonTextActive]}>
-            Customer
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.subtitle}>Set up your member profile to book spaces and manage memberships.</Text>
 
       <Text style={styles.label}>Full name *</Text>
       <TextInput
@@ -148,19 +127,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: "600", color: "#111827", marginBottom: 4 },
   subtitle: { fontSize: 14, color: "#6B7280", marginBottom: 24 },
   label: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 6 },
-  roleRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  roleButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center",
-    backgroundColor: "#FFF",
-  },
-  roleButtonActive: { borderColor: "#111827", backgroundColor: "#111827" },
-  roleButtonText: { fontSize: 14, color: "#374151" },
-  roleButtonTextActive: { color: "#FFF", fontWeight: "600" },
   input: {
     borderWidth: 1,
     borderColor: "#E5E7EB",

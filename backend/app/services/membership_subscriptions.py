@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import stripe
 
 from app.core.crypto import decrypt_secret
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.membership_plan import MembershipPlan
 from app.models.owner_payment_setting import OwnerPaymentSetting
 
@@ -62,12 +62,12 @@ class StripeSubscriptionClient:
         self,
         *,
         plan: MembershipPlan,
-        payment_method: CustomerOwnerPaymentMethod,
+        payment_method: MemberOwnerPaymentMethod,
         commitment_months: int | None,
         metadata: dict[str, str] | None = None,
     ) -> StripeSubscriptionResult:
         if not payment_method.provider_customer_id or not payment_method.provider_payment_method_id:
-            raise MembershipBillingError("Customer payment method is incomplete")
+            raise MembershipBillingError("Member payment method is incomplete")
         price_id = self.ensure_price_id(plan)
         kwargs: dict = {
             "customer": payment_method.provider_customer_id,
@@ -78,7 +78,7 @@ class StripeSubscriptionClient:
         }
         if commitment_months and commitment_months > 1:
             # Stripe doesn't enforce minimums natively; we record it as metadata
-            # and enforce on the customer cancellation path.
+            # and enforce on the member cancellation path.
             kwargs["metadata"] = {
                 **kwargs["metadata"],
                 "commitment_months": str(commitment_months),
@@ -101,7 +101,7 @@ def create_subscription(
     *,
     setting: OwnerPaymentSetting,
     plan: MembershipPlan,
-    payment_method: CustomerOwnerPaymentMethod,
+    payment_method: MemberOwnerPaymentMethod,
     commitment_months: int | None,
     metadata: dict[str, str] | None = None,
 ) -> StripeSubscriptionResult:

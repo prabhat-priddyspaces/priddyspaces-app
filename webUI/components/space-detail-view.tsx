@@ -98,7 +98,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
   }, [spaceId]);
 
   function buildSelfNextHref() {
-    return `/customer/spaces/${spaceId}`;
+    return `/member/spaces/${spaceId}`;
   }
 
   async function submitRequest(payload: ReservationPayload, paymentMethodPublicId: string | null) {
@@ -116,13 +116,13 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
           method: "POST",
           body: JSON.stringify({
             ...payload,
-            customer_owner_payment_method_public_id: paymentMethodPublicId,
+            member_owner_payment_method_public_id: paymentMethodPublicId,
             payment_authorization_consent: true,
           }),
         },
         token
       );
-      router.push("/customer/requests");
+      router.push("/member/requests");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -310,7 +310,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
           onClose={() => setSubscriptionOpen(false)}
           onDone={() => {
             setSubscriptionOpen(false);
-            router.push("/customer/subscriptions");
+            router.push("/member/subscriptions");
           }}
         />
       ) : null}

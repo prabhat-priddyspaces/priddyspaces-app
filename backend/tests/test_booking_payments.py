@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import (
     AvailabilityStatus,
     BookingRequestStatus,
@@ -46,7 +46,7 @@ from app.services.cancellation_refunds import refund_percent_from_snapshot
 # ----------------------------- fixtures -----------------------------
 
 
-def _seed(db) -> tuple[User, User, Space, OwnerPaymentSetting, CustomerOwnerPaymentMethod]:
+def _seed(db) -> tuple[User, User, Space, OwnerPaymentSetting, MemberOwnerPaymentMethod]:
     owner = User(
         email="bp-owner@example.com",
         auth_subject="bp-owner",
@@ -54,17 +54,17 @@ def _seed(db) -> tuple[User, User, Space, OwnerPaymentSetting, CustomerOwnerPaym
         email_verified=True,
         is_active=True,
     )
-    customer = User(
-        email="bp-cust@example.com",
-        auth_subject="bp-cust",
-        role=UserAppRole.CUSTOMER,
+    member = User(
+        email="bp-member@example.com",
+        auth_subject="bp-member",
+        role=UserAppRole.MEMBER,
         email_verified=True,
         is_active=True,
     )
-    db.add_all([owner, customer])
+    db.add_all([owner, member])
     db.commit()
     db.refresh(owner)
-    db.refresh(customer)
+    db.refresh(member)
 
     org = Organization(name="BP Org", owner_id=owner.id)
     db.add(org)
@@ -114,8 +114,8 @@ def _seed(db) -> tuple[User, User, Space, OwnerPaymentSetting, CustomerOwnerPaym
     db.commit()
     db.refresh(setting)
 
-    method = CustomerOwnerPaymentMethod(
-        user_id=customer.id,
+    method = MemberOwnerPaymentMethod(
+        user_id=member.id,
         organization_id=org.id,
         tenant_id=org.id,
         provider="stripe",
@@ -133,20 +133,20 @@ def _seed(db) -> tuple[User, User, Space, OwnerPaymentSetting, CustomerOwnerPaym
     db.commit()
     db.refresh(method)
 
-    return owner, customer, space, setting, method
+    return owner, member, space, setting, method
 
 
-def _make_request(db, customer: User, space: Space, setting: OwnerPaymentSetting, method: CustomerOwnerPaymentMethod, day: int = 5) -> BookingRequest:
+def _make_request(db, member: User, space: Space, setting: OwnerPaymentSetting, method: MemberOwnerPaymentMethod, day: int = 5) -> BookingRequest:
     req = BookingRequest(
         tenant_id=space.tenant_id,
-        user_id=customer.id,
+        user_id=member.id,
         space_id=space.id,
         start_datetime=datetime(2026, 6, day, 10, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2026, 6, day, 12, 0, tzinfo=timezone.utc),
         status=BookingRequestStatus.REQUESTED,
         owner_payment_setting_id=setting.id,
         payment_provider="stripe",
-        customer_owner_payment_method_id=method.id,
+        member_owner_payment_method_id=method.id,
         payment_status="not_charged",
     )
     db.add(req)
@@ -159,8 +159,8 @@ def _make_request(db, customer: User, space: Space, setting: OwnerPaymentSetting
 
 
 def test_retry_after_failure_uses_new_attempt_and_idempotency_key(db_session, monkeypatch):
-    _, customer, space, setting, method = _seed(db_session)
-    req = _make_request(db_session, customer, space, setting, method)
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method)
 
     calls: list[str] = []
 
@@ -190,8 +190,8 @@ def test_retry_after_failure_uses_new_attempt_and_idempotency_key(db_session, mo
 
 
 def test_double_charge_short_circuits_after_success(db_session, monkeypatch):
-    _, customer, space, setting, method = _seed(db_session)
-    req = _make_request(db_session, customer, space, setting, method)
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method)
 
     count = {"n": 0}
 
@@ -221,8 +221,8 @@ def test_double_charge_short_circuits_after_success(db_session, monkeypatch):
 
 
 def test_refund_returns_voided_for_pre_settlement_void(db_session, monkeypatch):
-    _, customer, space, setting, method = _seed(db_session)
-    req = _make_request(db_session, customer, space, setting, method)
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method)
 
     class HappyProvider:
         def charge_saved_method(self, **kwargs):
@@ -243,8 +243,8 @@ def test_refund_returns_voided_for_pre_settlement_void(db_session, monkeypatch):
 
 
 def test_refund_returns_refunded_after_settlement(db_session, monkeypatch):
-    _, customer, space, setting, method = _seed(db_session)
-    req = _make_request(db_session, customer, space, setting, method, day=6)
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method, day=6)
 
     class PostSettlementProvider:
         def charge_saved_method(self, **kwargs):
@@ -296,14 +296,14 @@ def test_tiered_refund_percent_from_snapshot():
 def test_cancellation_deadline_uses_policy_window(db_session):
     from app.services.booking_payments import cancellation_deadline_for_request
 
-    _, customer, space, setting, method = _seed(db_session)
+    _, member, space, setting, method = _seed(db_session)
     db_session.add(CancellationPolicy(
         tenant_id=space.tenant_id,
         space_type=space.space_type,
         cancel_window_hours=24,
     ))
     db_session.commit()
-    req = _make_request(db_session, customer, space, setting, method, day=10)
+    req = _make_request(db_session, member, space, setting, method, day=10)
     deadline = cancellation_deadline_for_request(db_session, req, space)
     # SQLite strips tz on round-trip, so coerce both sides to UTC-aware before comparing.
     start = req.start_datetime
@@ -319,8 +319,8 @@ def test_provider_switch_guard_blocks_when_open_requests_exist(db_session):
     from fastapi import HTTPException
     import pytest
 
-    _, customer, space, setting, method = _seed(db_session)
-    _make_request(db_session, customer, space, setting, method, day=11)
+    _, member, space, setting, method = _seed(db_session)
+    _make_request(db_session, member, space, setting, method, day=11)
 
     assert count_open_requests_for_setting(db_session, setting.id) == 1
     with pytest.raises(HTTPException) as exc:
@@ -329,13 +329,13 @@ def test_provider_switch_guard_blocks_when_open_requests_exist(db_session):
 
 
 def test_provider_switch_guard_allows_when_no_open_requests(db_session):
-    _, customer, space, setting, method = _seed(db_session)
+    _, member, space, setting, method = _seed(db_session)
     # No request created → safe to switch.
     assert_safe_provider_change(db_session, setting, "cardpointe")
 
 
 def test_provider_switch_guard_force_overrides(db_session):
-    _, customer, space, setting, method = _seed(db_session)
-    _make_request(db_session, customer, space, setting, method, day=12)
+    _, member, space, setting, method = _seed(db_session)
+    _make_request(db_session, member, space, setting, method, day=12)
     # force=True bypasses the check.
     assert_safe_provider_change(db_session, setting, "cardpointe", force=True)

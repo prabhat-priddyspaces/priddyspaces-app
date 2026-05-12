@@ -12,7 +12,7 @@ from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.booking_series import BookingSeries
 from app.models.cancellation_policy_tier import CancellationPolicyTier
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.email_event import EmailEvent
 from app.models.email_subscription_group import EmailSubscriptionGroup
 from app.models.floor_plan import FloorPlan
@@ -24,7 +24,7 @@ from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
 from app.models.organization_amenity import OrganizationAmenity
 from app.models.organization_member import OrganizationMember
-from app.models.org_customer import OrgCustomer
+from app.models.org_member_profile import OrgMemberProfile
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
@@ -73,7 +73,7 @@ __all__ = [
     "BookingRequest",
     "BookingSeries",
     "CancellationPolicyTier",
-    "CustomerOwnerPaymentMethod",
+    "MemberOwnerPaymentMethod",
     "EmailEvent",
     "EmailSubscriptionGroup",
     "FloorPlan",
@@ -85,7 +85,7 @@ __all__ = [
     "Organization",
     "OrganizationAmenity",
     "OrganizationMember",
-    "OrgCustomer",
+    "OrgMemberProfile",
     "OwnerPaymentSetting",
     "Payment",
     "PaymentEvent",

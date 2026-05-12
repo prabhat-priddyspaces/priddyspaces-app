@@ -229,7 +229,7 @@ export default function NewSpacePage() {
                   placeholder="20000"
                 />
                 <div className="text-xs text-textMuted">
-                  Used when a customer picks "Full day". Hourly bookings are auto-capped to this amount.
+                  Used when a member picks "Full day". Hourly bookings are auto-capped to this amount.
                 </div>
               </div>
               <div className="space-y-2">

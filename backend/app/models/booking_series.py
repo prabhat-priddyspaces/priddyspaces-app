@@ -18,4 +18,3 @@ class BookingSeries(PublicIdMixin, TimestampMixin, Base):
     first_start_datetime = Column(DateTime(timezone=True), nullable=False)
     last_end_datetime = Column(DateTime(timezone=True), nullable=False)
     status = Column(String(32), nullable=False, default="active", server_default="active")
-

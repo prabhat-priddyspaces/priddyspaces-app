@@ -14,7 +14,7 @@ export function PublicSpaceDetailClient() {
   return (
     <PublicSpaceDetailView
       spaceId={effectiveSpaceId}
-      backHref={searchParams.get("back") || "/coworking"}
+      backHref={searchParams.get("back") || "/spaces"}
       initialDate={searchParams.get("date") ?? undefined}
       initialStartTime={searchParams.get("start_time") ?? undefined}
       initialEndTime={searchParams.get("end_time") ?? undefined}

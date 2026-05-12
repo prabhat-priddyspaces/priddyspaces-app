@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.booking_request import BookingRequest
-from app.models.customer_owner_payment_method import CustomerOwnerPaymentMethod
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingRequestStatus
 from app.models.location import Location
 from app.models.organization import Organization
@@ -69,17 +69,17 @@ def get_default_payment_method(
     organization_id: int,
     provider: str,
     owner_payment_setting_id: int,
-) -> CustomerOwnerPaymentMethod | None:
+) -> MemberOwnerPaymentMethod | None:
     return (
-        db.query(CustomerOwnerPaymentMethod)
+        db.query(MemberOwnerPaymentMethod)
         .filter(
-            CustomerOwnerPaymentMethod.user_id == user_id,
-            CustomerOwnerPaymentMethod.organization_id == organization_id,
-            CustomerOwnerPaymentMethod.provider == provider,
-            CustomerOwnerPaymentMethod.owner_payment_setting_id == owner_payment_setting_id,
-            CustomerOwnerPaymentMethod.status == "active",
+            MemberOwnerPaymentMethod.user_id == user_id,
+            MemberOwnerPaymentMethod.organization_id == organization_id,
+            MemberOwnerPaymentMethod.provider == provider,
+            MemberOwnerPaymentMethod.owner_payment_setting_id == owner_payment_setting_id,
+            MemberOwnerPaymentMethod.status == "active",
         )
-        .order_by(CustomerOwnerPaymentMethod.is_default_for_owner.desc(), CustomerOwnerPaymentMethod.created_at.desc())
+        .order_by(MemberOwnerPaymentMethod.is_default_for_owner.desc(), MemberOwnerPaymentMethod.created_at.desc())
         .first()
     )
 
@@ -90,7 +90,7 @@ def require_payment_method_for_request(
     space: Space,
     payment_method_public_id: str | None,
     consent: bool,
-) -> tuple[OwnerPaymentSetting | None, CustomerOwnerPaymentMethod | None, datetime | None]:
+) -> tuple[OwnerPaymentSetting | None, MemberOwnerPaymentMethod | None, datetime | None]:
     provider, organization, _location = resolve_payment_provider(db, space)
     setting = get_enabled_owner_payment_setting(db, organization.id, provider)
 
@@ -100,18 +100,18 @@ def require_payment_method_for_request(
     if not consent:
         raise HTTPException(status_code=400, detail="Payment authorization consent is required")
 
-    query = db.query(CustomerOwnerPaymentMethod).filter(
-        CustomerOwnerPaymentMethod.user_id == user.id,
-        CustomerOwnerPaymentMethod.organization_id == organization.id,
-        CustomerOwnerPaymentMethod.provider == provider,
-        CustomerOwnerPaymentMethod.owner_payment_setting_id == setting.id,
-        CustomerOwnerPaymentMethod.status == "active",
+    query = db.query(MemberOwnerPaymentMethod).filter(
+        MemberOwnerPaymentMethod.user_id == user.id,
+        MemberOwnerPaymentMethod.organization_id == organization.id,
+        MemberOwnerPaymentMethod.provider == provider,
+        MemberOwnerPaymentMethod.owner_payment_setting_id == setting.id,
+        MemberOwnerPaymentMethod.status == "active",
     )
     if payment_method_public_id:
-        query = query.filter(CustomerOwnerPaymentMethod.public_id == payment_method_public_id)
+        query = query.filter(MemberOwnerPaymentMethod.public_id == payment_method_public_id)
     method = query.order_by(
-        CustomerOwnerPaymentMethod.is_default_for_owner.desc(),
-        CustomerOwnerPaymentMethod.created_at.desc(),
+        MemberOwnerPaymentMethod.is_default_for_owner.desc(),
+        MemberOwnerPaymentMethod.created_at.desc(),
     ).first()
     if not method:
         raise HTTPException(status_code=400, detail="Payment method is required before requesting this booking")
@@ -159,13 +159,13 @@ def assert_safe_provider_change(
         )
 
 
-def set_default_payment_method(db: Session, method: CustomerOwnerPaymentMethod) -> None:
-    db.query(CustomerOwnerPaymentMethod).filter(
-        CustomerOwnerPaymentMethod.user_id == method.user_id,
-        CustomerOwnerPaymentMethod.organization_id == method.organization_id,
-        CustomerOwnerPaymentMethod.provider == method.provider,
-        CustomerOwnerPaymentMethod.owner_payment_setting_id == method.owner_payment_setting_id,
-        CustomerOwnerPaymentMethod.id != method.id,
+def set_default_payment_method(db: Session, method: MemberOwnerPaymentMethod) -> None:
+    db.query(MemberOwnerPaymentMethod).filter(
+        MemberOwnerPaymentMethod.user_id == method.user_id,
+        MemberOwnerPaymentMethod.organization_id == method.organization_id,
+        MemberOwnerPaymentMethod.provider == method.provider,
+        MemberOwnerPaymentMethod.owner_payment_setting_id == method.owner_payment_setting_id,
+        MemberOwnerPaymentMethod.id != method.id,
     ).update({"is_default_for_owner": False})
     method.is_default_for_owner = True
     db.add(method)

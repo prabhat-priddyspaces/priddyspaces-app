@@ -14,7 +14,7 @@ export default function TermsPage() {
           </p>
           <p>
             Priddyspaces provides a multi-location coworking management platform for owners
-            and customers. Owners can list locations and spaces; customers can discover
+            and members. Owners can list locations and spaces; members can discover
             and request bookings.
           </p>
           <p>
