@@ -4,11 +4,31 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+const DETAIL_QUERY_KEYS = ["date", "start_time", "end_time", "plan", "move_in"];
+
+function legacyStaticDetailHref(pathname: string, search: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length !== 2 || segments[0] !== "spaces") return null;
+
+  const spaceId = segments[1];
+  if (!spaceId || spaceId === "_" || spaceId === "_.html") return null;
+
+  const current = new URLSearchParams(search);
+  const next = new URLSearchParams();
+  next.set("id", decodeURIComponent(spaceId));
+  next.set("back", current.get("back") || "/coworking");
+  for (const key of DETAIL_QUERY_KEYS) {
+    const value = current.get(key);
+    if (value) next.set(key, value);
+  }
+  return `/spaces/_.html?${next.toString()}`;
+}
+
 export function DefaultMarketplaceRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/coworking");
+    router.replace(legacyStaticDetailHref(window.location.pathname, window.location.search) || "/coworking");
   }, [router]);
 
   return (
