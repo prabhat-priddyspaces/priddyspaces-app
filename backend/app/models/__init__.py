@@ -43,6 +43,14 @@ from app.models.subscription import Subscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.membership_plan import MembershipPlan
+from app.models.loyalty import (
+    LoyaltyCampaign,
+    LoyaltyLedgerEntry,
+    LoyaltyOwnerSetting,
+    LoyaltyRedemption,
+    LoyaltyRedemptionLock,
+    LoyaltyWallet,
+)
 from app.models.marketing import (
     AudienceSegment,
     BusinessMarketingSenderSetting,
@@ -104,6 +112,12 @@ __all__ = [
     "SubscriptionPlan",
     "SpaceBookingMode",
     "MembershipPlan",
+    "LoyaltyCampaign",
+    "LoyaltyLedgerEntry",
+    "LoyaltyOwnerSetting",
+    "LoyaltyRedemption",
+    "LoyaltyRedemptionLock",
+    "LoyaltyWallet",
     "AudienceSegment",
     "BusinessMarketingSenderSetting",
     "CampaignRecipient",

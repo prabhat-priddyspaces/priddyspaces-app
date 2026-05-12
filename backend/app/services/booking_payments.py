@@ -26,6 +26,13 @@ from app.services.payment_providers import PaymentProviderError, PaymentProvider
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
 from app.services.cancellation_refunds import policy_for_space, policy_snapshot, refund_percent_from_snapshot
+from app.services.loyalty import (
+    discount_cents_for_request,
+    finalize_redemption_for_payment,
+    record_earned_for_payment,
+    release_redemption_for_request,
+    reverse_for_payment_refund,
+)
 
 
 def get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -215,7 +222,15 @@ def charge_booking_request(
         return req, None, None
 
     snapshot = _estimate_request_snapshot(db, req, space)
-    amount_cents = int(snapshot["total_cents"])
+    gross_amount_cents = int(snapshot["total_cents"])
+    loyalty_discount_cents = discount_cents_for_request(db, req)
+    amount_cents = max(0, gross_amount_cents - loyalty_discount_cents)
+    payment_snapshot = {
+        **snapshot,
+        "total_before_loyalty_cents": gross_amount_cents,
+        "loyalty_discount_cents": loyalty_discount_cents,
+        "total_cents": amount_cents,
+    }
     amount = amount_cents // 100
     attempt = (req.payment_attempt_count or 0) + 1
     idempotency_key = f"booking_{req.public_id}_attempt_{attempt}"
@@ -227,9 +242,9 @@ def charge_booking_request(
             tenant_id=req.tenant_id,
             amount=amount,
             amount_cents=amount_cents,
-            subtotal_cents=snapshot.get("base_cents"),
-            discount_cents=snapshot.get("discount_cents"),
-            tax_cents=snapshot.get("tax_cents"),
+            subtotal_cents=payment_snapshot.get("base_cents"),
+            discount_cents=(payment_snapshot.get("discount_cents") or 0) + loyalty_discount_cents,
+            tax_cents=payment_snapshot.get("tax_cents"),
             currency="usd",
             provider=setting.provider,
             payment_method_id=method.id,
@@ -237,8 +252,8 @@ def charge_booking_request(
             attempt_number=attempt,
             idempotency_key=idempotency_key,
             booking_series_id=req.booking_series_id,
-            pricing_snapshot=snapshot,
-            refund_policy_snapshot=snapshot.get("refund_policy"),
+            pricing_snapshot=payment_snapshot,
+            refund_policy_snapshot=payment_snapshot.get("refund_policy"),
         )
         db.add(payment)
         db.commit()
@@ -311,8 +326,8 @@ def charge_booking_request(
         req.status = BookingRequestStatus.APPROVED
         req.payment_status = "succeeded"
         req.approved_at = datetime.now(timezone.utc)
-        req.pricing_snapshot = json.dumps(snapshot)
-        req.refund_policy_snapshot = json.dumps(snapshot.get("refund_policy") or {})
+        req.pricing_snapshot = json.dumps(payment_snapshot)
+        req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
         _create_invoice(db, req=req, booking=booking, payment=payment)
         db.add(payment)
         db.add(req)
@@ -320,6 +335,9 @@ def charge_booking_request(
         db.refresh(req)
         db.refresh(booking)
         db.refresh(payment)
+        finalize_redemption_for_payment(db, req, booking, payment)
+        db.commit()
+        record_earned_for_payment(db, payment, booking=booking, booking_request=req)
         member = db.query(User).filter(User.id == req.user_id).first()
         if member:
             send_email(member.email, "Booking approved and charged", f"Request {req.public_id} was approved and charged.")
@@ -345,6 +363,7 @@ def charge_booking_request(
             Booking.booking_series_id == req.booking_series_id,
             Booking.status == BookingStatus.PENDING,
         ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
+    release_redemption_for_request(db, req, reason="released")
     db.add(payment)
     db.add(req)
     db.commit()
@@ -441,4 +460,6 @@ def refund_booking_payment(db: Session, *, req: BookingRequest | None, booking: 
     payment.raw_response = result.raw_response
     payment.provider_reference_id = result.provider_reference_id or payment.provider_reference_id
     db.add(payment)
+    if payment.status in {PaymentStatus.REFUNDED, PaymentStatus.VOIDED}:
+        reverse_for_payment_refund(db, payment)
     return payment

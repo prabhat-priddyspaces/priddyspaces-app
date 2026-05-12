@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, marketplace, marketing, me, media, membership_plans, onboarding, organization_members, organizations, org_member_profiles, owner_calendar, owner_payments, payments, pricing, space_booking_modes, space_volume_discounts, spaces, stripe_connect, subscription_plans, subscriptions, webhooks, webhooks_clerk
+from app.api import admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, onboarding, organization_members, organizations, org_member_profiles, owner_calendar, owner_payments, payments, pricing, space_booking_modes, space_volume_discounts, spaces, stripe_connect, subscription_plans, subscriptions, webhooks, webhooks_clerk
 from app.core.config import settings
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -87,6 +87,7 @@ app.include_router(org_member_profiles.router, prefix="/api")
 app.include_router(admin_calendar.router, prefix="/api")
 app.include_router(space_volume_discounts.router, prefix="/api")
 app.include_router(marketing.router, prefix="/api")
+app.include_router(loyalty.router, prefix="/api")
 app.include_router(onboarding.router)
 app.include_router(webhooks_clerk.router)
 

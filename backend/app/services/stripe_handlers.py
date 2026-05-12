@@ -13,6 +13,7 @@ from app.models.payment_event import PaymentEvent
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.services.invoices import generate_invoice_pdf
+from app.services.loyalty import record_earned_for_payment, reverse_for_payment_refund
 from app.services.notifications import send_email
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.storage import upload_invoice_pdf
@@ -180,6 +181,7 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
         status="issued",
         invoice_payload=invoice_payload,
     )
+    record_earned_for_payment(db, payment, booking=booking)
     if customer_email:
         send_email(
             to_email=customer_email,
@@ -234,6 +236,8 @@ def _handle_subscription_invoice_event(db: Session, event_type: str, data: dict[
         status="paid" if is_paid else "payment_failed",
         invoice_payload=invoice_payload if is_paid else None,
     )
+    if is_paid:
+        record_earned_for_payment(db, payment)
 
     if not customer_email:
         return
@@ -324,6 +328,7 @@ def handle_event(db: Session, event: dict[str, Any]) -> dict[str, Any]:
                 payment.status = PaymentStatus.REFUNDED if amount_refunded >= amount_total else PaymentStatus.VOIDED
                 db.add(payment)
                 db.commit()
+                reverse_for_payment_refund(db, payment)
 
     if event_type == "payment_method.detached":
         provider_pm_id = data.get("id")
