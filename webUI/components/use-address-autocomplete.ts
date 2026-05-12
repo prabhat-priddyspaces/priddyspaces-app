@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject, useEffect, useState } from "react";
+import { RefObject, useEffect, useRef, useState } from "react";
 
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 
@@ -131,8 +131,13 @@ export function useAddressAutocomplete(
   options: AutocompleteOptions = {},
 ): UseAddressAutocompleteResult {
   const [warning, setWarning] = useState<string | null>(null);
+  const onSelectRef = useRef(onSelect);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const types = options.types ?? ["address"];
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   useEffect(() => {
     if (!apiKey) {
@@ -173,7 +178,7 @@ export function useAddressAutocomplete(
         });
         listener = autocomplete.addListener("place_changed", () => {
           if (!autocomplete) return;
-          onSelect(parsePlace(autocomplete.getPlace()));
+          onSelectRef.current(parsePlace(autocomplete.getPlace()));
         });
       } catch (err) {
         if (!cancelled) {

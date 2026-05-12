@@ -21,10 +21,7 @@ interface Props {
 
 export function PlaceAutocomplete({ value, onChange, onSelect, id, placeholder, disabled }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { warning } = useAddressAutocomplete(inputRef, (place) => {
-    onSelect(place);
-    if (place.formatted) onChange(place.formatted);
-  });
+  const { warning } = useAddressAutocomplete(inputRef, onSelect);
 
   return (
     <div className="space-y-1">
