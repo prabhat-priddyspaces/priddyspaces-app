@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Clock3,
+  Gift,
   Mail,
   MapPin,
   Phone,
@@ -50,6 +51,8 @@ import { SubscriptionModal } from "@/components/subscription-modal";
 import { PublicLocationMiniMap } from "@/components/public-location-mini-map";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { GuestCheckoutModal } from "@/components/guest-checkout-modal";
+import type { LoyaltyRedemptionLock, LoyaltyRedemptionPreview } from "@/lib/loyalty";
+import { formatCents, formatPoints } from "@/lib/loyalty";
 
 const AVAILABILITY_RANGE_DAYS = 60;
 
@@ -141,6 +144,9 @@ export function PublicSpaceDetailView({
   const [authorizationConsent, setAuthorizationConsent] = useState(false);
   const [guestCheckoutOpen, setGuestCheckoutOpen] = useState(false);
   const [guestPayload, setGuestPayload] = useState<ReservationPayload | null>(null);
+  const [loyaltyPreview, setLoyaltyPreview] = useState<LoyaltyRedemptionPreview | null>(null);
+  const [loyaltyPoints, setLoyaltyPoints] = useState("");
+  const [loyaltyLoading, setLoyaltyLoading] = useState(false);
 
   useEffect(() => {
     if (!spaceId) {
@@ -396,6 +402,96 @@ export function PublicSpaceDetailView({
     return qs ? `/spaces/${spaceId}?${qs}` : `/spaces/${spaceId}`;
   }
 
+  function currentReservationPayload(): ReservationPayload | null {
+    if (!detail || !date) return null;
+    const effectiveStart = allDay ? openWindow.start : startTime;
+    const effectiveEnd = allDay ? openWindow.end : endTime;
+    if (!effectiveStart || !effectiveEnd) return null;
+    const locationTimezone = detail.location.timezone || availability?.timezone || "UTC";
+    const start = zonedDateTimeToUtc(date, effectiveStart, locationTimezone);
+    const end = zonedDateTimeToUtc(date, effectiveEnd, locationTimezone);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return null;
+    }
+    const recurrenceTotal = Math.max(1, Math.min(52, Number(recurrenceCount || 1)));
+    const recurrence =
+      recurrenceFrequency === "none"
+        ? undefined
+        : {
+            frequency: recurrenceFrequency,
+            interval: 1,
+            count: recurrenceTotal,
+          };
+    return {
+      space_public_id: detail.space.public_id,
+      start_datetime: start.toISOString(),
+      end_datetime: end.toISOString(),
+      booking_mode: allDay ? "day_pass" : "hourly",
+      full_day: allDay,
+      recurrence,
+    };
+  }
+
+  useEffect(() => {
+    const token = getAccessToken() ?? undefined;
+    const payload = currentReservationPayload();
+    if (!token || !payload || leaseBookingMode) {
+      setLoyaltyPreview(null);
+      setLoyaltyPoints("");
+      return;
+    }
+    let active = true;
+    setLoyaltyLoading(true);
+    apiFetch<LoyaltyRedemptionPreview>(
+      "/api/loyalty/redemptions/preview",
+      { method: "POST", body: JSON.stringify(payload) },
+      token,
+    )
+      .then((preview) => {
+        if (!active) return;
+        setLoyaltyPreview(preview);
+        setLoyaltyPoints((current) => {
+          if (current) {
+            const parsed = Number(current);
+            if (Number.isFinite(parsed) && parsed > preview.max_redeemable_points) {
+              return String(preview.max_redeemable_points);
+            }
+            return current;
+          }
+          return preview.eligible && preview.max_redeemable_points > 0
+            ? String(preview.max_redeemable_points)
+            : "";
+        });
+      })
+      .catch(() => {
+        if (active) setLoyaltyPreview(null);
+      })
+      .finally(() => {
+        if (active) setLoyaltyLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [detail?.space.public_id, date, startTime, endTime, allDay, openWindow.start, openWindow.end, leaseBookingMode, recurrenceFrequency, recurrenceCount]);
+
+  async function createLoyaltyLock(payload: ReservationPayload): Promise<string | null> {
+    const token = getAccessToken() ?? undefined;
+    const requested = Number(loyaltyPoints || 0);
+    if (!token || !loyaltyPreview?.eligible || requested <= 0) return null;
+    const lock = await apiFetch<LoyaltyRedemptionLock>(
+      "/api/loyalty/redemptions/lock",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          points_requested: requested,
+        }),
+      },
+      token,
+    );
+    return lock.public_id;
+  }
+
   async function submitReservation(payload: ReservationPayload, paymentMethodPublicId: string | null) {
     const token = getAccessToken() ?? undefined;
     if (!token) {
@@ -405,6 +501,7 @@ export function PublicSpaceDetailView({
     setRequesting(true);
     setError("");
     try {
+      const redemptionLockPublicId = await createLoyaltyLock(payload);
       await apiFetch(
         "/api/booking-requests",
         {
@@ -413,6 +510,7 @@ export function PublicSpaceDetailView({
             ...payload,
             member_owner_payment_method_public_id: paymentMethodPublicId,
             payment_authorization_consent: true,
+            redemption_lock_public_id: redemptionLockPublicId,
           }),
         },
         token,
@@ -434,42 +532,15 @@ export function PublicSpaceDetailView({
       return;
     }
 
-    const effectiveStart = allDay ? openWindow.start : startTime;
-    const effectiveEnd = allDay ? openWindow.end : endTime;
-
-    if (!effectiveStart || !effectiveEnd) {
+    const payload = currentReservationPayload();
+    if (!payload) {
       setError("Choose a start and end time before reserving.");
       return;
     }
 
-    const locationTimezone = detail.location.timezone || availability?.timezone || "UTC";
-    const start = zonedDateTimeToUtc(date, effectiveStart, locationTimezone);
-    const end = zonedDateTimeToUtc(date, effectiveEnd, locationTimezone);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-      setError("End time must be after start time.");
-      return;
-    }
-    const recurrenceTotal = Math.max(1, Math.min(52, Number(recurrenceCount || 1)));
-    const recurrence =
-      recurrenceFrequency === "none"
-        ? undefined
-        : {
-            frequency: recurrenceFrequency,
-            interval: 1,
-            count: recurrenceTotal,
-          };
-    const reservationPayload: ReservationPayload = {
-      space_public_id: detail.space.public_id,
-      start_datetime: start.toISOString(),
-      end_datetime: end.toISOString(),
-      booking_mode: allDay ? "day_pass" : "hourly",
-      full_day: allDay,
-      recurrence,
-    };
-
     const token = getAccessToken() ?? undefined;
     if (!token) {
-      setGuestPayload(reservationPayload);
+      setGuestPayload(payload);
       setGuestCheckoutOpen(true);
       return;
     }
@@ -490,11 +561,11 @@ export function PublicSpaceDetailView({
         throw new Error(resolved.message || "This owner has not configured payments.");
       }
       if (!resolved.has_payment_method) {
-        setPendingReservation(reservationPayload);
+        setPendingReservation(payload);
         setPaymentMethodOpen(true);
         return;
       }
-      await submitReservation(reservationPayload, resolved.payment_method_public_id);
+      await submitReservation(payload, resolved.payment_method_public_id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reservation failed");
     } finally {
@@ -511,6 +582,11 @@ export function PublicSpaceDetailView({
     setSelectedPlan(plan);
     setSubscriptionOpen(true);
   }
+
+  const requestedLoyaltyPoints = Math.max(0, Number(loyaltyPoints || 0));
+  const loyaltyDiscountCents = loyaltyPreview
+    ? Math.min(requestedLoyaltyPoints * loyaltyPreview.point_value_cents, loyaltyPreview.max_discount_cents)
+    : 0;
 
   if (loading) {
     return (
@@ -960,6 +1036,46 @@ export function PublicSpaceDetailView({
                     </label>
                   ) : null}
 
+                  {isAuthenticated && !leaseBookingMode ? (
+                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                          <Gift className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-slate-900">Rewards</div>
+                          {loyaltyLoading ? (
+                            <div className="mt-1 text-sm text-slate-500">Checking your balance...</div>
+                          ) : loyaltyPreview?.eligible ? (
+                            <>
+                              <div className="mt-1 text-sm text-slate-600">
+                                {formatPoints(loyaltyPreview.total_balance)} points available. Use up to{" "}
+                                {formatPoints(loyaltyPreview.max_redeemable_points)} points on this booking.
+                              </div>
+                              <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={loyaltyPreview.max_redeemable_points}
+                                  value={loyaltyPoints}
+                                  onChange={(event) => setLoyaltyPoints(event.target.value)}
+                                  className="h-10 rounded-2xl border border-slate-200 px-3 text-sm font-medium text-slate-900 outline-none"
+                                />
+                                <div className="flex h-10 items-center rounded-2xl bg-emerald-50 px-3 text-sm font-semibold text-emerald-700">
+                                  Save {formatCents(loyaltyDiscountCents)}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-1 text-sm text-slate-500">
+                              {loyaltyPreview?.reason || "Rewards are not available for this booking."}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={handleReserve}
@@ -1013,10 +1129,17 @@ export function PublicSpaceDetailView({
                       </div>
                     ) : null}
 
+                    {loyaltyDiscountCents > 0 ? (
+                      <div className="flex items-center justify-between text-emerald-700">
+                        <span>Rewards</span>
+                        <span>-{formatCents(loyaltyDiscountCents)}</span>
+                      </div>
+                    ) : null}
+
                     <div className="border-t border-slate-200" />
                     <div className="flex items-center justify-between font-semibold text-slate-900">
-                      <span>Total before taxes</span>
-                      <span>${breakdown.total.toLocaleString()}</span>
+                      <span>Estimated due on approval</span>
+                      <span>{formatCents(Math.max(0, breakdown.total * 100 - loyaltyDiscountCents))}</span>
                     </div>
                   </div>
                 ) : (

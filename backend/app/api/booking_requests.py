@@ -21,6 +21,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.location import Location
+from app.models.loyalty import LoyaltyRedemptionLock
 from datetime import datetime, time, timezone
 
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
@@ -70,6 +71,7 @@ from app.services.pricing import (
     VolumeDiscount,
     estimate_booking_price,
 )
+from app.services.loyalty import attach_lock_to_booking_request, release_redemption_for_request
 from app.services.notifications import (
     send_email,
     send_guest_approval_email,
@@ -248,6 +250,15 @@ def _to_out(
             refund_policy_snapshot = json.loads(req.refund_policy_snapshot)
         except json.JSONDecodeError:
             refund_policy_snapshot = None
+    redemption_lock_public_id = None
+    loyalty_points_used = 0
+    loyalty_discount_cents = 0
+    if db and req.loyalty_redemption_lock_id:
+        lock = db.query(LoyaltyRedemptionLock).filter(LoyaltyRedemptionLock.id == req.loyalty_redemption_lock_id).first()
+        if lock:
+            redemption_lock_public_id = lock.public_id
+            loyalty_points_used = lock.points or 0
+            loyalty_discount_cents = lock.discount_cents or 0
     return BookingRequestOut(
         public_id=req.public_id,
         space_id=req.space_id,
@@ -261,6 +272,9 @@ def _to_out(
         payment_status=req.payment_status,
         payment_provider=req.payment_provider,
         member_owner_payment_method_public_id=payment_method_public_id,
+        redemption_lock_public_id=redemption_lock_public_id,
+        loyalty_points_used=loyalty_points_used,
+        loyalty_discount_cents=loyalty_discount_cents,
         approved_at=req.approved_at,
         cancelled_at=req.cancelled_at,
         cancellation_deadline_at=req.cancellation_deadline_at,
@@ -527,6 +541,8 @@ def create_guest_booking_request(
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
+    if payload.redemption_lock_public_id and not settings.PAYMENT_CHARGE_ON_APPROVAL:
+        raise HTTPException(status_code=400, detail="Rewards redemption requires payment on approval")
 
     from app.models.enums import SpaceVisibility
     if space.visibility != SpaceVisibility.PUBLIC:
@@ -639,6 +655,8 @@ def create_booking_request(
     user = get_or_create_user(db, token)
 
     if payload.membership_plan_public_id:
+        if payload.redemption_lock_public_id:
+            raise HTTPException(status_code=400, detail="Rewards cannot be redeemed for memberships or leases")
         req = _create_membership_purchase_request(payload, user, db)
         space = db.query(Space).filter(Space.id == req.space_id).first()
         send_email(user.email, "Membership request submitted", f"Request {req.public_id} submitted.")
@@ -718,6 +736,8 @@ def create_booking_request(
     db.add(req)
     try:
         db.flush()
+        if payload.redemption_lock_public_id:
+            attach_lock_to_booking_request(db, req, payload.redemption_lock_public_id, user, space)
         if instant:
             series = None
             if len(occurrences) > 1:
@@ -1056,6 +1076,7 @@ def reject_booking_request(
     if req.status != BookingRequestStatus.REQUESTED:
         raise HTTPException(status_code=400, detail="Request already processed")
 
+    release_redemption_for_request(db, req, reason="released")
     req.status = BookingRequestStatus.REJECTED
     req.operator_notes = payload.operator_notes
     db.add(req)
@@ -1128,6 +1149,7 @@ def cancel_booking_request(
         db.add(booking)
         req.payment_status = payment.status.value if payment else "cancelled"
     else:
+        release_redemption_for_request(db, req, reason="released")
         req.payment_status = req.payment_status or "not_charged"
 
     req.status = BookingRequestStatus.CANCELLED

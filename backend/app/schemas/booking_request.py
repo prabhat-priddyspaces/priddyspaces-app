@@ -64,6 +64,7 @@ class BookingRequestCreate(BaseModel):
 
     member_owner_payment_method_public_id: str | None = None
     payment_authorization_consent: bool = False
+    redemption_lock_public_id: str | None = None
 
     # Explicit pricing-mode signals from the booking widget. Optional for backwards
     # compat with older clients; modern widgets always send one of these.
@@ -115,6 +116,9 @@ class BookingRequestOut(BaseModel):
     payment_status: str | None = None
     payment_provider: str | None = None
     member_owner_payment_method_public_id: str | None = None
+    redemption_lock_public_id: str | None = None
+    loyalty_points_used: int = 0
+    loyalty_discount_cents: int = 0
     approved_at: datetime | None = None
     cancelled_at: datetime | None = None
     cancellation_deadline_at: datetime | None = None

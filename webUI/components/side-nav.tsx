@@ -10,6 +10,7 @@ const nav = [
   { href: "/owner/requests", label: "Requests" },
   { href: "/owner/members", label: "Members" },
   { href: "/owner/marketing", label: "Marketing" },
+  { href: "/owner/loyalty", label: "Loyalty" },
   { href: "/owner/analytics", label: "Analytics" },
   { href: "/owner/locations", label: "Locations" },
   { href: "/owner/locations/spaces", label: "Inventory" },
