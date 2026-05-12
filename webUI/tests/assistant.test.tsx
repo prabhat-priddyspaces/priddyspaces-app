@@ -1,14 +1,21 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { assistantStream } from "../lib/assistantStream";
 import { AssistantMount } from "../components/assistant-mount";
 
 const useAssistantMock = vi.hoisted(() => vi.fn());
+const sendMock = vi.hoisted(() => vi.fn());
+const setMessagesMock = vi.hoisted(() => vi.fn());
+const reverseGeocodeMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../hooks/useAssistant", () => ({
   useAssistant: useAssistantMock,
+}));
+
+vi.mock("@/components/use-address-autocomplete", () => ({
+  reverseGeocode: reverseGeocodeMock,
 }));
 
 vi.mock("../lib/auth", () => ({
@@ -35,7 +42,7 @@ describe("assistant stream", () => {
             start(controller) {
               controller.enqueue(
                 encoder.encode(
-                  'event: message\ndata: {"enabled":true,"conversation_public_id":"conv_1","guest_id":"guest_1","message":{"public_id":"msg_1","role":"assistant","content":"Hi","citations":[],"proposals":[]},"rate_limited":false,"cost_capped":false}\n\n',
+                  'event: message\ndata: {"enabled":true,"conversation_public_id":"conv_1","guest_id":"guest_1","message":{"public_id":"msg_1","role":"assistant","content":"Hi","citations":[],"proposals":[],"client_actions":[]},"rate_limited":false,"cost_capped":false}\n\n',
                 ),
               );
               controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
@@ -55,6 +62,9 @@ describe("assistant stream", () => {
 
 describe("AssistantMount", () => {
   beforeEach(() => {
+    sendMock.mockReset();
+    setMessagesMock.mockReset();
+    reverseGeocodeMock.mockReset();
     useAssistantMock.mockReturnValue({
       enabled: true,
       loading: false,
@@ -65,6 +75,7 @@ describe("AssistantMount", () => {
           role: "assistant",
           content: "Review this proposal.",
           citations: [{ type: "space", id: "space_1", url: "/spaces/space_1", title: "Space" }],
+          client_actions: [],
           proposals: [
             {
               proposal_id: "prop_1",
@@ -81,8 +92,8 @@ describe("AssistantMount", () => {
       ],
       conversationId: "conv_1",
       guestId: "guest_1",
-      send: vi.fn(),
-      setMessages: vi.fn(),
+      send: sendMock,
+      setMessages: setMessagesMock,
     });
   });
 
@@ -99,5 +110,113 @@ describe("AssistantMount", () => {
     );
     expect(screen.getByText("Talk to a human")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+  });
+
+  it("requests browser geolocation from request_location actions and resends the original query", async () => {
+    reverseGeocodeMock.mockResolvedValue({ city: "Plantation", state: "FL", formatted: "Plantation, FL" });
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({
+        coords: { latitude: 26.132, longitude: -80.2624 },
+      } as GeolocationPosition),
+    );
+    Object.defineProperty(navigator, "geolocation", {
+      value: { getCurrentPosition },
+      configurable: true,
+    });
+    useAssistantMock.mockReturnValue({
+      enabled: true,
+      loading: false,
+      error: "",
+      messages: [
+        {
+          public_id: "msg_location",
+          role: "assistant",
+          content: "I need your location to search within 50 miles.",
+          citations: [],
+          proposals: [],
+          client_actions: [
+            {
+              action_id: "act_1",
+              kind: "request_location",
+              label: "Use my location",
+              payload: {
+                original_message: "show me cheapest meeting room near me",
+                radius_miles: 50,
+              },
+            },
+          ],
+        },
+      ],
+      conversationId: "conv_1",
+      guestId: "guest_1",
+      send: sendMock,
+      setMessages: setMessagesMock,
+    });
+
+    render(<AssistantMount />);
+    fireEvent.click(screen.getByLabelText("Open assistant"));
+    fireEvent.click(screen.getByRole("button", { name: /Use my location/ }));
+
+    await waitFor(() => {
+      expect(getCurrentPosition).toHaveBeenCalled();
+      expect(sendMock).toHaveBeenCalledWith(
+        "show me cheapest meeting room near me",
+        expect.objectContaining({
+          lat: 26.132,
+          lng: -80.2624,
+          location_label: "Plantation, FL",
+          radius_miles: 50,
+          source: "browser",
+        }),
+      );
+    });
+  });
+
+  it("shows a city or ZIP fallback when location permission is denied", async () => {
+    const getCurrentPosition = vi.fn((_success: PositionCallback, error: PositionErrorCallback) =>
+      error({ code: 1, message: "denied", PERMISSION_DENIED: 1 } as GeolocationPositionError),
+    );
+    Object.defineProperty(navigator, "geolocation", {
+      value: { getCurrentPosition },
+      configurable: true,
+    });
+    useAssistantMock.mockReturnValue({
+      enabled: true,
+      loading: false,
+      error: "",
+      messages: [
+        {
+          public_id: "msg_location",
+          role: "assistant",
+          content: "I need your location to search within 50 miles.",
+          citations: [],
+          proposals: [],
+          client_actions: [
+            {
+              action_id: "act_1",
+              kind: "request_location",
+              label: "Use my location",
+              payload: {
+                original_message: "meeting room near me",
+                radius_miles: 50,
+              },
+            },
+          ],
+        },
+      ],
+      conversationId: "conv_1",
+      guestId: "guest_1",
+      send: sendMock,
+      setMessages: setMessagesMock,
+    });
+
+    render(<AssistantMount />);
+    fireEvent.click(screen.getByLabelText("Open assistant"));
+    fireEvent.click(screen.getByRole("button", { name: /Use my location/ }));
+
+    await waitFor(() => expect(setMessagesMock).toHaveBeenCalled());
+    const updater = setMessagesMock.mock.calls[0][0] as (messages: unknown[]) => Array<{ content: string }>;
+    expect(updater([])[0].content).toContain("city or ZIP");
+    expect(sendMock).not.toHaveBeenCalled();
   });
 });

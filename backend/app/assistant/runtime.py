@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
@@ -33,7 +34,21 @@ from app.models.payment import Payment
 from app.models.space import Space
 from app.models.subscription import Subscription
 from app.models.user import User
-from app.schemas.assistant import AssistantCitation, AssistantMessageOut, AssistantProposal
+from app.schemas.assistant import AssistantCitation, AssistantClientAction, AssistantMessageOut, AssistantProposal
+from app.services.public_marketplace import PublicMarketplaceSearchFilters, search_public_locations
+
+
+DEFAULT_NEAR_ME_RADIUS_MILES = 50
+MARKETPLACE_CATEGORY_ROUTES = {
+    "coworking": "coworking",
+    "private_office": "private-offices",
+    "meeting_room": "meeting-rooms",
+}
+MARKETPLACE_CATEGORY_LABELS = {
+    "coworking": "coworking spaces",
+    "private_office": "private offices",
+    "meeting_room": "meeting rooms",
+}
 
 
 def disabled_chat_response() -> dict[str, Any]:
@@ -49,12 +64,14 @@ def disabled_chat_response() -> dict[str, Any]:
 
 
 def serialize_message(message: AssistantMessage) -> AssistantMessageOut:
+    event_metadata = message.event_metadata or {}
     return AssistantMessageOut(
         public_id=message.public_id,
         role=message.role,
         content=message.content,
         citations=[AssistantCitation(**item) for item in (message.citations or [])],
         proposals=[AssistantProposal(**item) for item in (message.proposals or [])],
+        client_actions=[AssistantClientAction(**item) for item in (event_metadata.get("client_actions") or [])],
         created_at=message.created_at,
     )
 
@@ -65,6 +82,29 @@ def _citation(type_: str, id_: str, url: str, title: str | None = None) -> dict[
 
 def public_space_url(space_public_id: str, *, back: str = "/coworking") -> str:
     return f"/spaces/_.html?{urlencode({'id': str(space_public_id), 'back': back})}"
+
+
+def public_location_url(
+    route_key: str,
+    location_public_id: str,
+    *,
+    q: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_miles: float | None = None,
+    sort: str | None = None,
+) -> str:
+    params: dict[str, str] = {"id": str(location_public_id)}
+    if q:
+        params["q"] = q
+    if lat is not None and lng is not None:
+        params["lat"] = f"{lat:.6f}"
+        params["lng"] = f"{lng:.6f}"
+    if radius_miles is not None:
+        params["radius_miles"] = f"{radius_miles:g}"
+    if sort:
+        params["sort"] = sort
+    return f"/{route_key}/_.html?{urlencode(params)}"
 
 
 def _make_proposal(
@@ -186,63 +226,260 @@ def get_or_create_conversation(
     return conversation
 
 
-def _search_marketplace(db: Session, text: str) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
-    terms = [part.strip() for part in text.replace(",", " ").split() if len(part.strip()) > 2]
-    query = (
-        db.query(Space, Location)
-        .join(Location, Location.id == Space.location_id)
-        .join(Organization, Organization.id == Location.organization_id)
-        .filter(
-            Space.visibility == SpaceVisibility.PUBLIC,
-            Location.status == LocationStatus.ACTIVE,
-            Organization.review_status == OrganizationReviewStatus.APPROVED,
-        )
+def _context_float(page_context: dict[str, Any], key: str) -> float | None:
+    value = page_context.get(key)
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _context_radius(page_context: dict[str, Any]) -> float | None:
+    radius = _context_float(page_context, "radius_miles")
+    if radius is None or radius <= 0:
+        return None
+    return min(radius, 1000)
+
+
+def _is_near_me_query(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        phrase in lowered
+        for phrase in ["near me", "nearby", "near my location", "around me", "close to me", "close by"]
     )
-    for term in terms[:4]:
-        like = f"%{term}%"
-        query = query.filter(
-            Location.name.ilike(like)
-            | Location.city.ilike(like)
-            | Location.neighborhood.ilike(like)
-            | Space.name.ilike(like)
-            | Space.space_type.ilike(like)
-        )
-    rows = query.limit(5).all()
-    if not rows and terms:
-        rows = (
-            db.query(Space, Location)
-            .join(Location, Location.id == Space.location_id)
-            .join(Organization, Organization.id == Location.organization_id)
-            .filter(
-                Space.visibility == SpaceVisibility.PUBLIC,
-                Location.status == LocationStatus.ACTIVE,
-                Organization.review_status == OrganizationReviewStatus.APPROVED,
-            )
-            .limit(5)
-            .all()
+
+
+def _is_price_sorted_query(text: str) -> bool:
+    lowered = text.lower()
+    return any(word in lowered for word in ["cheap", "cheapest", "lowest", "least expensive", "affordable", "price"])
+
+
+def _marketplace_category(text: str) -> str:
+    lowered = text.lower()
+    if any(word in lowered for word in ["meeting", "conference", "boardroom", "board room"]):
+        return "meeting_room"
+    if "private office" in lowered or "office" in lowered:
+        return "private_office"
+    return "coworking"
+
+
+def _marketplace_query_text(text: str) -> str | None:
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
+    stopwords = {
+        "a",
+        "an",
+        "and",
+        "around",
+        "available",
+        "availability",
+        "board",
+        "boardroom",
+        "by",
+        "cheap",
+        "cheapest",
+        "close",
+        "conference",
+        "coworking",
+        "desk",
+        "find",
+        "for",
+        "from",
+        "in",
+        "least",
+        "location",
+        "locations",
+        "lowest",
+        "me",
+        "meeting",
+        "my",
+        "near",
+        "nearby",
+        "office",
+        "please",
+        "price",
+        "pricing",
+        "private",
+        "room",
+        "rooms",
+        "search",
+        "show",
+        "space",
+        "spaces",
+        "the",
+        "to",
+        "with",
+    }
+    kept = [token for token in tokens if token not in stopwords and len(token) > 1]
+    query = " ".join(kept).strip()
+    return query or None
+
+
+def _location_label(page_context: dict[str, Any]) -> str:
+    for key in ["location_label", "q"]:
+        value = page_context.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "your location"
+
+
+def _request_location_action(text: str) -> dict[str, Any]:
+    return {
+        "action_id": f"act_{uuid4().hex}",
+        "kind": "request_location",
+        "label": "Use my location",
+        "payload": {
+            "original_message": text,
+            "radius_miles": DEFAULT_NEAR_ME_RADIUS_MILES,
+        },
+    }
+
+
+def _money(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number.is_integer():
+        return f"${int(number)}"
+    return f"${number:.2f}"
+
+
+def _location_price(result: dict[str, Any], category: str) -> str:
+    if category == "meeting_room":
+        hourly = _money(result.get("starting_hourly_price"))
+        if hourly:
+            return f"{hourly}/hr"
+    if category == "private_office":
+        monthly = _money(result.get("starting_monthly_price"))
+        if monthly:
+            return f"{monthly}/mo"
+    daily = _money(result.get("starting_day_pass_price"))
+    if daily:
+        return f"{daily}/day"
+    monthly = _money(result.get("starting_monthly_price"))
+    if monthly:
+        return f"{monthly}/mo"
+    hourly = _money(result.get("starting_hourly_price"))
+    if hourly:
+        return f"{hourly}/hr"
+    return "pricing not configured"
+
+
+def _search_marketplace(
+    db: Session,
+    text: str,
+    page_context: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    category = _marketplace_category(text)
+    category_label = MARKETPLACE_CATEGORY_LABELS[category]
+    route_key = MARKETPLACE_CATEGORY_ROUTES[category]
+    near_me = _is_near_me_query(text)
+    lat = _context_float(page_context, "lat")
+    lng = _context_float(page_context, "lng")
+    has_coords = lat is not None and lng is not None
+    if near_me and not has_coords:
+        return (
+            f"I need your location to search for {category_label} within {DEFAULT_NEAR_ME_RADIUS_MILES} miles.",
+            [],
+            [],
+            [_request_location_action(text)],
         )
 
-    citations: list[dict[str, Any]] = []
-    if not rows:
+    text_query = _marketplace_query_text(text)
+    use_coords = bool(has_coords and (near_me or not text_query))
+    radius_miles = _context_radius(page_context) if use_coords else None
+    if use_coords and radius_miles is None:
+        radius_miles = DEFAULT_NEAR_ME_RADIUS_MILES
+    q = None if use_coords else text_query
+    if not q and not use_coords:
+        raw_q = page_context.get("q")
+        q = raw_q.strip() if isinstance(raw_q, str) and raw_q.strip() else None
+    sort = "price_asc" if _is_price_sorted_query(text) else None
+    filters = PublicMarketplaceSearchFilters(
+        category=category,
+        q=q,
+        sort=sort,
+        lat=lat if use_coords else None,
+        lng=lng if use_coords else None,
+        radius_miles=radius_miles,
+        page=1,
+        page_size=5,
+    )
+    payload = search_public_locations(db, filters)
+    results = [item for item in payload.get("results", []) if isinstance(item, dict)]
+    search_params = {
+        key: value
+        for key, value in {
+            "q": q,
+            "lat": f"{lat:.6f}" if use_coords and lat is not None else None,
+            "lng": f"{lng:.6f}" if use_coords and lng is not None else None,
+            "radius_miles": f"{radius_miles:g}" if radius_miles is not None else None,
+            "sort": sort,
+        }.items()
+        if value
+    }
+    search_url = f"/{route_key}"
+    if search_params:
+        search_url = f"{search_url}?{urlencode(search_params)}"
+    if not results:
+        if use_coords:
+            label = _location_label(page_context)
+            return (
+                f"I could not find {category_label} within {radius_miles:g} miles of {label}. Try widening the radius or searching by city.",
+                [_citation("marketplace", "search", search_url, "Marketplace search")],
+                [],
+                [],
+            )
         return (
-            "I could not find matching public spaces yet. Try a city, neighborhood, team size, or space type.",
-            [_citation("marketplace", "search", "/coworking", "Marketplace search")],
+            f"I could not find matching public {category_label}. Try a city, neighborhood, team size, or date.",
+            [_citation("marketplace", "search", search_url, "Marketplace search")],
+            [],
             [],
         )
-    lines = ["Here are matching spaces I found:"]
-    for space, location in rows:
-        price_bits = []
-        if space.price_hourly is not None:
-            price_bits.append(f"${space.price_hourly}/hr")
-        if space.price_daily is not None:
-            price_bits.append(f"${space.price_daily}/day")
-        if space.price_monthly is not None:
-            price_bits.append(f"${space.price_monthly}/mo")
-        label = space.name or space.space_type.replace("_", " ").title()
-        price = ", ".join(price_bits) if price_bits else "pricing not configured"
-        lines.append(f"- {label} at {location.name} in {location.city or 'this market'}: capacity {space.capacity}, {price}.")
-        citations.append(_citation("space", space.public_id, public_space_url(space.public_id), label))
-    return "\n".join(lines), citations, []
+
+    if use_coords:
+        label = _location_label(page_context)
+        prefix = "Cheapest " if sort == "price_asc" else ""
+        lines = [f"{prefix}{category_label.capitalize()} within {radius_miles:g} miles of {label}:"]
+    elif q:
+        lines = [f"Matching {category_label} for {q}:"]
+    else:
+        lines = [f"Here are matching {category_label}:"]
+
+    citations: list[dict[str, Any]] = []
+    for result in results:
+        location_public_id = str(result["location_public_id"])
+        name = str(result.get("name") or "Location")
+        city_state = ", ".join(str(part) for part in [result.get("city"), result.get("state")] if part)
+        address = ", ".join(str(part) for part in [result.get("address"), city_state] if part) or "address not configured"
+        matching_count = int(result.get("matching_space_count") or 0)
+        noun = category_label[:-1] if matching_count == 1 and category_label.endswith("s") else category_label
+        distance = result.get("distance_miles")
+        distance_text = f", {float(distance):.1f} miles away" if distance is not None else ""
+        lines.append(
+            f"- {name} ({address}): {matching_count} matching {noun}, from {_location_price(result, category)}{distance_text}."
+        )
+        citations.append(
+            _citation(
+                "location",
+                location_public_id,
+                public_location_url(
+                    route_key,
+                    location_public_id,
+                    q=q,
+                    lat=lat if use_coords else None,
+                    lng=lng if use_coords else None,
+                    radius_miles=radius_miles,
+                    sort=sort,
+                ),
+                name,
+            )
+        )
+    return "\n".join(lines), citations, [], []
 
 
 def _policy_category(text: str) -> str | None:
@@ -462,14 +699,14 @@ def _local_assistant_response(
     ctx: AssistantContext,
     text: str,
     page_context: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     lowered = text.lower()
     tool_calls: list[dict[str, Any]] = []
 
     action_answer, action_citations, action_proposals = _booking_or_action_response(ctx, text, page_context)
     if action_answer:
         tool_calls.append({"name": "proposal_builder", "status": "completed"})
-        return action_answer, action_citations, action_proposals, tool_calls
+        return action_answer, action_citations, action_proposals, tool_calls, []
 
     if any(word in lowered for word in ["human", "support", "escalate", "agent"]):
         proposal = _make_proposal(
@@ -480,35 +717,35 @@ def _local_assistant_response(
             payload={"subject": page_context.get("subject") or "Assistant escalation"},
             warnings=[],
         )
-        return "I can create a support ticket with this conversation transcript.", [_citation("support", "escalation", "/support", "Support escalation")], [proposal], [{"name": "propose_escalate_to_human", "status": "completed"}]
+        return "I can create a support ticket with this conversation transcript.", [_citation("support", "escalation", "/support", "Support escalation")], [proposal], [{"name": "propose_escalate_to_human", "status": "completed"}], []
 
     category = _policy_category(text)
     if category == "floor_plan":
         answer, citations, metadata = _floor_plan_response(db, ctx, page_context)
-        return answer, citations, metadata, [{"name": "get_floor_plan", "status": "completed"}]
+        return answer, citations, metadata, [{"name": "get_floor_plan", "status": "completed"}], []
     if category:
         answer, citations, metadata = _policy_response(db, ctx, category, page_context)
-        return answer, citations, metadata, [{"name": "owner_policy_kb", "status": "completed"}]
+        return answer, citations, metadata, [{"name": "owner_policy_kb", "status": "completed"}], []
 
     if ctx.audience in {"owner", "staff"} and any(word in lowered for word in ["pending", "approval", "arrivals", "handoff"]):
         answer, citations, proposals = _owner_pending_response(db, ctx)
-        return answer, citations, proposals, [{"name": "list_pending_requests", "status": "completed"}]
+        return answer, citations, proposals, [{"name": "list_pending_requests", "status": "completed"}], []
 
     if ctx.audience in {"owner", "staff"} and any(word in lowered for word in ["revenue", "occupancy", "analytics", "mrr", "churn"]):
         answer, citations, proposals = _analytics_response(db, ctx)
-        return answer, citations, proposals, [{"name": "get_revenue_summary", "status": "completed"}]
+        return answer, citations, proposals, [{"name": "get_revenue_summary", "status": "completed"}], []
 
     if ctx.audience == "platform_admin" and any(word in lowered for word in ["diagnostic", "failed", "onboarding", "listing", "platform"]):
         answer, citations, proposals = _platform_response(db)
-        return answer, citations, proposals, [{"name": "platform_diagnostics", "status": "completed"}]
+        return answer, citations, proposals, [{"name": "platform_diagnostics", "status": "completed"}], []
 
     if any(word in lowered for word in ["invoice", "payment", "billing", "refund"]):
         answer, citations, proposals = _billing_response(db, ctx)
-        return answer, citations, proposals, [{"name": "billing_summary", "status": "completed"}]
+        return answer, citations, proposals, [{"name": "billing_summary", "status": "completed"}], []
 
     if any(word in lowered for word in ["find", "search", "space", "room", "desk", "office", "availability", "price", "pricing"]):
-        answer, citations, proposals = _search_marketplace(db, text)
-        return answer, citations, proposals, [{"name": "search_locations", "status": "completed"}]
+        answer, citations, proposals, client_actions = _search_marketplace(db, text, page_context)
+        return answer, citations, proposals, [{"name": "search_locations", "status": "completed"}], client_actions
 
     provider = call_openai_response(
         instructions=(
@@ -518,11 +755,12 @@ def _local_assistant_response(
         input_text=text,
     )
     if provider and provider.text:
-        return provider.text, [_citation("assistant", "provider", "/assistant", "Assistant response")], [], []
+        return provider.text, [_citation("assistant", "provider", "/assistant", "Assistant response")], [], [], []
 
     return (
         "I can help search spaces, explain configured policies, draft booking or cancellation proposals, summarize billing, and escalate to a human when needed.",
         [_citation("assistant", "capabilities", "/assistant", "Assistant capabilities")],
+        [],
         [],
         [],
     )
@@ -563,9 +801,19 @@ def process_chat(
     db.add(user_message)
     db.commit()
 
-    answer, citations, proposals_or_metadata, tool_calls = _local_assistant_response(db, ctx=ctx, text=redacted_message, page_context=page_context)
+    answer, citations, proposals_or_metadata, tool_calls, client_actions = _local_assistant_response(
+        db,
+        ctx=ctx,
+        text=redacted_message,
+        page_context=page_context,
+    )
     proposals = [item for item in proposals_or_metadata if "proposal_id" in item]
     metadata = [item for item in proposals_or_metadata if "proposal_id" not in item]
+    event_metadata: dict[str, Any] = {}
+    if metadata:
+        event_metadata["events"] = metadata
+    if client_actions:
+        event_metadata["client_actions"] = client_actions
     usage = {"input_tokens": max(1, len(redacted_message.split())), "output_tokens": max(1, len(answer.split()))}
     cost = estimate_cost_usd(settings.ASSISTANT_PRIMARY_MODEL, usage)
     assistant_message = AssistantMessage(
@@ -580,7 +828,7 @@ def process_chat(
         redaction_counts={},
         estimated_cost_usd=cost,
         model=settings.ASSISTANT_PRIMARY_MODEL,
-        event_metadata={"events": metadata} if metadata else None,
+        event_metadata=event_metadata or None,
     )
     conversation.last_message_at = datetime.now(timezone.utc)
     if metadata and any(item.get("missing_policy_category") for item in metadata):

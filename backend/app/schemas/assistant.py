@@ -29,12 +29,20 @@ class AssistantProposal(BaseModel):
     status: str = "pending"
 
 
+class AssistantClientAction(BaseModel):
+    action_id: str
+    kind: str
+    label: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class AssistantMessageOut(BaseModel):
     public_id: str
     role: str
     content: str
     citations: list[AssistantCitation] = Field(default_factory=list)
     proposals: list[AssistantProposal] = Field(default_factory=list)
+    client_actions: list[AssistantClientAction] = Field(default_factory=list)
     created_at: datetime | None = None
 
 

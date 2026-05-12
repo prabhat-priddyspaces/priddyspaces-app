@@ -42,6 +42,28 @@ export function useAssistant() {
       .catch(() => setStatus({ enabled: false, primary_model: "", summary_model: "" }));
   }, []);
 
+  function buildPageContext(pageContext: Record<string, unknown>) {
+    const current =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : new URLSearchParams();
+    const context: Record<string, unknown> = { pathname };
+    const q = current.get("q");
+    const lat = current.get("lat");
+    const lng = current.get("lng");
+    const radiusMiles = current.get("radius_miles");
+
+    if (q) {
+      context.q = q;
+      context.location_label = q;
+    }
+    if (lat) context.lat = Number(lat);
+    if (lng) context.lng = Number(lng);
+    if (radiusMiles) context.radius_miles = Number(radiusMiles);
+
+    return { ...context, ...pageContext };
+  }
+
   async function send(message: string, pageContext: Record<string, unknown> = {}) {
     const trimmed = message.trim();
     if (!trimmed) return;
@@ -53,6 +75,7 @@ export function useAssistant() {
       content: trimmed,
       citations: [],
       proposals: [],
+      client_actions: [],
     };
     setMessages((current) => [...current, optimistic]);
     try {
@@ -62,7 +85,7 @@ export function useAssistant() {
           message: trimmed,
           conversation_public_id: conversationId,
           guest_id: guestId,
-          page_context: { ...pageContext, pathname },
+          page_context: buildPageContext(pageContext),
         },
         token,
       );
@@ -90,6 +113,7 @@ export function useAssistant() {
           content: response.disabled_reason || "Assistant unavailable",
           citations: [],
           proposals: [],
+          client_actions: [],
         },
       ]);
     }
