@@ -1,7 +1,7 @@
 """rename customer role and records to member
 
 Revision ID: 0035_member_role_rename
-Revises: 0033_assistant_v1
+Revises: 0035_instant_booking_payments
 Create Date: 2026-05-12
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "0035_member_role_rename"
-down_revision = "0033_assistant_v1"
+down_revision = "0035_instant_booking_payments"
 branch_labels = None
 depends_on = None
 

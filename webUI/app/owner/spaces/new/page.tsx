@@ -39,6 +39,8 @@ export default function NewSpacePage() {
     price_hourly: "",
     availability_start_time: "",
     availability_end_time: "",
+    buffer_before_minutes: "0",
+    buffer_after_minutes: "0",
     visibility: "public",
   });
   const [message, setMessage] = useState("");
@@ -98,6 +100,8 @@ export default function NewSpacePage() {
             price_hourly: form.price_hourly ? Number(form.price_hourly) : null,
             availability_start_time: form.availability_start_time || null,
             availability_end_time: form.availability_end_time || null,
+            buffer_before_minutes: Number(form.buffer_before_minutes || 0),
+            buffer_after_minutes: Number(form.buffer_after_minutes || 0),
             visibility: form.visibility,
           }),
         },
@@ -255,6 +259,30 @@ export default function NewSpacePage() {
                   type="time"
                   value={form.availability_end_time}
                   onChange={(e) => setForm({ ...form, availability_end_time: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="buffer_before">Buffer before (minutes)</Label>
+                <Input
+                  id="buffer_before"
+                  type="number"
+                  min={0}
+                  value={form.buffer_before_minutes}
+                  onChange={(e) => setForm({ ...form, buffer_before_minutes: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="buffer_after">Buffer after (minutes)</Label>
+                <Input
+                  id="buffer_after"
+                  type="number"
+                  min={0}
+                  value={form.buffer_after_minutes}
+                  onChange={(e) => setForm({ ...form, buffer_after_minutes: e.target.value })}
+                  placeholder="15"
                 />
               </div>
             </div>

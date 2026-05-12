@@ -10,6 +10,8 @@ from app.models.assistant import (
 )
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
+from app.models.booking_series import BookingSeries
+from app.models.cancellation_policy_tier import CancellationPolicyTier
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.email_event import EmailEvent
 from app.models.email_subscription_group import EmailSubscriptionGroup
@@ -26,6 +28,7 @@ from app.models.org_member_profile import OrgMemberProfile
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
+from app.models.payment_refund import PaymentRefund
 from app.models.platform_setting import PlatformSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.space import Space
@@ -68,6 +71,8 @@ __all__ = [
     "SupportTicket",
     "Booking",
     "BookingRequest",
+    "BookingSeries",
+    "CancellationPolicyTier",
     "MemberOwnerPaymentMethod",
     "EmailEvent",
     "EmailSubscriptionGroup",
@@ -84,6 +89,7 @@ __all__ = [
     "OwnerPaymentSetting",
     "Payment",
     "PaymentEvent",
+    "PaymentRefund",
     "PlatformSetting",
     "PlatformTeamMember",
     "Space",

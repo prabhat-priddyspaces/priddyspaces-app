@@ -5,6 +5,21 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from app.models.enums import BookingRequestKind, BookingRequestStatus
 
 
+class BookingRecurrenceCreate(BaseModel):
+    frequency: str
+    interval: int = Field(default=1, ge=1, le=12)
+    count: int | None = Field(default=None, ge=1, le=52)
+    until_date: date | None = None
+
+    @model_validator(mode="after")
+    def _validate_recurrence(self):
+        if self.frequency not in {"weekly", "monthly"}:
+            raise ValueError("frequency must be weekly or monthly")
+        if self.count is None and self.until_date is None:
+            raise ValueError("Provide count or until_date")
+        return self
+
+
 class GuestBookingRequestCreate(BaseModel):
     """Guest (unauthenticated) hourly or day-pass booking request."""
 
@@ -54,9 +69,12 @@ class BookingRequestCreate(BaseModel):
     # compat with older clients; modern widgets always send one of these.
     booking_mode: str | None = None  # 'hourly' | 'day_pass'
     full_day: bool = False
+    recurrence: BookingRecurrenceCreate | None = None
 
     @model_validator(mode="after")
     def _validate_xor(self):
+        if self.booking_mode is not None and self.booking_mode not in {"hourly", "day_pass"}:
+            raise ValueError("booking_mode must be hourly or day_pass")
         is_booking = bool(self.space_public_id and self.start_datetime and self.end_datetime)
         is_membership = bool(self.membership_plan_public_id and self.desired_start_date)
         if is_booking and is_membership:
@@ -102,6 +120,15 @@ class BookingRequestOut(BaseModel):
     cancellation_deadline_at: datetime | None = None
     payment_authorization_consent_at: datetime | None = None
     operator_notes: str | None = None
+    instant_booking: bool = False
+    booking_series_public_id: str | None = None
+    occurrence_count: int = 1
+    recurrence_frequency: str | None = None
+    recurrence_interval: int | None = None
+    recurrence_count: int | None = None
+    recurrence_until_date: date | None = None
+    payment_breakdown: dict | None = None
+    refund_policy_snapshot: dict | None = None
     price_daily: int | None = None
     price_monthly: int | None = None
     price_hourly: int | None = None

@@ -10,6 +10,8 @@ class MarketplaceSpaceOut(BaseModel):
     availability_status: str
     availability_start_time: str | None = None
     availability_end_time: str | None = None
+    buffer_before_minutes: int = 0
+    buffer_after_minutes: int = 0
     location_public_id: str
     location_name: str
     location_address: str
@@ -95,6 +97,8 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
     availability_status: str
     availability_start_time: str | None = None
     availability_end_time: str | None = None
+    buffer_before_minutes: int = 0
+    buffer_after_minutes: int = 0
     price_daily: int | None = None
     price_monthly: int | None = None
     hourly_price: int | None = None
@@ -126,6 +130,7 @@ class MarketplaceSpaceDetailLocationOut(BaseModel):
 class MarketplaceCancellationPolicyOut(BaseModel):
     cancel_window_hours: int
     refund_percent: int
+    tiers: list[dict] = []
 
 
 class MarketplaceSupportContactOut(BaseModel):
@@ -158,6 +163,8 @@ class SpaceAvailabilityOut(BaseModel):
     granularity_minutes: int | None
     availability_start_time: str | None
     availability_end_time: str | None
+    buffer_before_minutes: int = 0
+    buffer_after_minutes: int = 0
     hourly_price: int | None
     daily_price: int | None
     days: list[SpaceAvailabilityDayOut]

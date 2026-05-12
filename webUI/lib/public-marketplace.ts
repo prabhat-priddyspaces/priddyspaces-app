@@ -89,6 +89,8 @@ export interface MarketplaceSpaceDetailSpace {
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
+  buffer_before_minutes: number;
+  buffer_after_minutes: number;
   price_daily: number | null;
   price_monthly: number | null;
   hourly_price: number | null;
@@ -120,6 +122,10 @@ export interface MarketplaceSpaceDetailLocation {
 export interface MarketplaceCancellationPolicy {
   cancel_window_hours: number;
   refund_percent: number;
+  tiers?: Array<{
+    min_hours_before_start: number;
+    refund_percent: number;
+  }>;
 }
 
 export interface MarketplaceSupportContact {
@@ -152,6 +158,8 @@ export interface SpaceAvailabilityResponse {
   granularity_minutes: number | null;
   availability_start_time: string | null;
   availability_end_time: string | null;
+  buffer_before_minutes: number;
+  buffer_after_minutes: number;
   hourly_price: number | null;
   daily_price: number | null;
   days: SpaceAvailabilityDay[];

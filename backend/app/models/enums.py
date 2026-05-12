@@ -115,6 +115,7 @@ class PaymentStatus(str, enum.Enum):
     REQUIRES_PAYMENT = "requires_payment"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    PARTIALLY_REFUNDED = "partially_refunded"
     REFUNDED = "refunded"
     VOIDED = "voided"
 

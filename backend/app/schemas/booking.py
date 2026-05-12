@@ -14,6 +14,8 @@ class BookingOut(BaseModel):
     public_id: str
     start_datetime: datetime
     end_datetime: datetime
+    booking_series_id: int | None = None
+    recurrence_sequence: int | None = None
     status: BookingStatus
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,6 +28,7 @@ class BookingCancelOut(BaseModel):
     public_id: str
     status: BookingStatus
     refund_percent: int
+    refund_amount_cents: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

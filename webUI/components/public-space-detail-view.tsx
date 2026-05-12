@@ -43,6 +43,7 @@ import {
   timeToMinutes,
   todayIso,
   todayIsoInZone,
+  zonedDateTimeToUtc,
 } from "@/lib/space-availability";
 import { AvailabilityCalendar } from "@/components/availability-calendar";
 import { SubscriptionModal } from "@/components/subscription-modal";
@@ -83,6 +84,11 @@ interface ReservationPayload {
   end_datetime: string;
   booking_mode: "hourly" | "day_pass";
   full_day: boolean;
+  recurrence?: {
+    frequency: "weekly" | "monthly";
+    interval: number;
+    count: number;
+  };
 }
 
 function buildDirectionsHref(address: string, lat: number | null, lng: number | null) {
@@ -124,6 +130,8 @@ export function PublicSpaceDetailView({
   const [startTime, setStartTime] = useState(initialStartTime);
   const [endTime, setEndTime] = useState(initialEndTime);
   const [allDay, setAllDay] = useState(false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<"none" | "weekly" | "monthly">("none");
+  const [recurrenceCount, setRecurrenceCount] = useState("4");
   const [autoFilled, setAutoFilled] = useState(Boolean(initialDate));
   const [requesting, setRequesting] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
@@ -363,6 +371,19 @@ export function PublicSpaceDetailView({
   }, [allDay, dailyPrice, hourlyPrice, dayOpenSpan, hours, volumeDiscounts]);
 
   const subtotal = breakdown?.total ?? null;
+  const bufferBefore = availability?.buffer_before_minutes ?? detail?.space.buffer_before_minutes ?? 0;
+  const bufferAfter = availability?.buffer_after_minutes ?? detail?.space.buffer_after_minutes ?? 0;
+  const cancellationTiers = detail?.cancellation_policy?.tiers ?? [];
+  const cancellationTierText = cancellationTiers.length > 0
+    ? cancellationTiers
+        .slice()
+        .sort((a, b) => b.min_hours_before_start - a.min_hours_before_start)
+        .map((tier) => `${tier.refund_percent}% refund ${tier.min_hours_before_start}+h before`)
+        .join(" · ")
+    : detail?.cancellation_policy
+      ? `${detail.cancellation_policy.refund_percent}% refund ${detail.cancellation_policy.cancel_window_hours}+h before`
+      : null;
+  const reserveActionLabel = leaseBookingMode ? "Request to Book" : "Reserve & Pay";
 
   function buildSelfNextHref(extra?: { planPublicId?: string | null; moveInDate?: string }) {
     const params = new URLSearchParams();
@@ -421,41 +442,45 @@ export function PublicSpaceDetailView({
       return;
     }
 
-    const start = new Date(`${date}T${effectiveStart}`);
-    const end = new Date(`${date}T${effectiveEnd}`);
+    const locationTimezone = detail.location.timezone || availability?.timezone || "UTC";
+    const start = zonedDateTimeToUtc(date, effectiveStart, locationTimezone);
+    const end = zonedDateTimeToUtc(date, effectiveEnd, locationTimezone);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       setError("End time must be after start time.");
       return;
     }
+    const recurrenceTotal = Math.max(1, Math.min(52, Number(recurrenceCount || 1)));
+    const recurrence =
+      recurrenceFrequency === "none"
+        ? undefined
+        : {
+            frequency: recurrenceFrequency,
+            interval: 1,
+            count: recurrenceTotal,
+          };
+    const reservationPayload: ReservationPayload = {
+      space_public_id: detail.space.public_id,
+      start_datetime: start.toISOString(),
+      end_datetime: end.toISOString(),
+      booking_mode: allDay ? "day_pass" : "hourly",
+      full_day: allDay,
+      recurrence,
+    };
 
     const token = getAccessToken() ?? undefined;
     if (!token) {
-      const guestReservationPayload: ReservationPayload = {
-        space_public_id: detail.space.public_id,
-        start_datetime: start.toISOString(),
-        end_datetime: end.toISOString(),
-        booking_mode: allDay ? "day_pass" : "hourly",
-        full_day: allDay,
-      };
-      setGuestPayload(guestReservationPayload);
+      setGuestPayload(reservationPayload);
       setGuestCheckoutOpen(true);
       return;
     }
     if (!authorizationConsent) {
-      setError("Authorize payment on approval before reserving.");
+      setError("Authorize card billing before reserving.");
       return;
     }
 
     setRequesting(true);
     setError("");
     try {
-      const payload: ReservationPayload = {
-        space_public_id: detail.space.public_id,
-        start_datetime: start.toISOString(),
-        end_datetime: end.toISOString(),
-        booking_mode: allDay ? "day_pass" : "hourly",
-        full_day: allDay,
-      };
       const resolved = await apiFetch<PaymentMethodResolve>(
         `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(detail.space.public_id)}`,
         { method: "GET" },
@@ -465,11 +490,11 @@ export function PublicSpaceDetailView({
         throw new Error(resolved.message || "This owner has not configured payments.");
       }
       if (!resolved.has_payment_method) {
-        setPendingReservation(payload);
+        setPendingReservation(reservationPayload);
         setPaymentMethodOpen(true);
         return;
       }
-      await submitReservation(payload, resolved.payment_method_public_id);
+      await submitReservation(reservationPayload, resolved.payment_method_public_id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reservation failed");
     } finally {
@@ -739,10 +764,7 @@ export function PublicSpaceDetailView({
                       <ShieldCheck className="h-4 w-4" />
                       Book with confidence
                     </div>
-                    <p className="mt-2 leading-6 text-teal-800">
-                      Cancel up to {detail.cancellation_policy.cancel_window_hours} hours before start time for a{" "}
-                      {detail.cancellation_policy.refund_percent}% refund.
-                    </p>
+                    <p className="mt-2 leading-6 text-teal-800">{cancellationTierText}</p>
                   </div>
                 ) : null}
                 <LeaseBookingWidget
@@ -766,10 +788,7 @@ export function PublicSpaceDetailView({
                     <ShieldCheck className="h-4 w-4" />
                     Book with confidence
                   </div>
-                  <p className="mt-2 leading-6 text-teal-800">
-                    Cancel up to {detail.cancellation_policy.cancel_window_hours} hours before start time for a{" "}
-                    {detail.cancellation_policy.refund_percent}% refund.
-                  </p>
+                  <p className="mt-2 leading-6 text-teal-800">{cancellationTierText}</p>
                 </div>
               ) : null}
 
@@ -874,6 +893,41 @@ export function PublicSpaceDetailView({
                       Full day
                     </button>
                   </div>
+
+                  <div className="grid gap-2 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+                    <label className="grid gap-1 text-xs font-medium text-slate-500">
+                      Recurrence
+                      <select
+                        value={recurrenceFrequency}
+                        onChange={(event) => setRecurrenceFrequency(event.target.value as "none" | "weekly" | "monthly")}
+                        className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none"
+                      >
+                        <option value="none">One time</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </label>
+                    {recurrenceFrequency !== "none" ? (
+                      <label className="grid gap-1 text-xs font-medium text-slate-500">
+                        Occurrences
+                        <input
+                          type="number"
+                          min={1}
+                          max={52}
+                          value={recurrenceCount}
+                          onChange={(event) => setRecurrenceCount(event.target.value)}
+                          className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none"
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+
+                  {bufferBefore > 0 || bufferAfter > 0 ? (
+                    <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                      This space includes {bufferBefore} min before and {bufferAfter} min after each booking for turnover.
+                    </div>
+                  ) : null}
+
                   {volumeDiscounts.length > 0 && !allDay ? (
                     <div className="text-xs text-slate-600">
                       {volumeDiscounts
@@ -902,7 +956,7 @@ export function PublicSpaceDetailView({
                         onChange={(event) => setAuthorizationConsent(event.target.checked)}
                         className="mt-1"
                       />
-                      <span>I authorize this owner to charge my card upon approval.</span>
+                      <span>I authorize this owner to charge my card now for instant bookings or upon approval for request-to-book spaces.</span>
                     </label>
                   ) : null}
 
@@ -912,7 +966,7 @@ export function PublicSpaceDetailView({
                     disabled={requesting || !date || (!allDay && (!startTime || !endTime))}
                     className="inline-flex h-12 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {requesting ? "Reserving..." : isAuthenticated ? "Reserve" : "Sign in to reserve"}
+                    {requesting ? "Reserving..." : isAuthenticated ? reserveActionLabel : `Sign in to ${reserveActionLabel}`}
                   </button>
                 </div>
 

@@ -41,6 +41,10 @@ class PaymentOut(BaseModel):
     subscription_id: int | None
     payment_method_id: int | None = None
     amount_cents: int | None = None
+    subtotal_cents: int | None = None
+    discount_cents: int | None = None
+    tax_cents: int | None = None
+    refunded_amount_cents: int | None = None
     currency: str | None = None
     provider_payment_id: str | None = None
     provider_reference_id: str | None = None
@@ -51,3 +55,13 @@ class PaymentOut(BaseModel):
     created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OwnerPayoutSummaryOut(BaseModel):
+    gross_cents: int
+    tax_cents: int
+    refunded_cents: int
+    platform_fee_cents: int
+    owner_net_cents: int
+    succeeded_count: int
+    failed_count: int

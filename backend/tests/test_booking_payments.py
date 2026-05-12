@@ -40,6 +40,7 @@ from app.services.owner_payments import (
     count_open_requests_for_setting,
 )
 from app.services.payment_providers import ChargeResult
+from app.services.cancellation_refunds import refund_percent_from_snapshot
 
 
 # ----------------------------- fixtures -----------------------------
@@ -261,6 +262,32 @@ def test_refund_returns_refunded_after_settlement(db_session, monkeypatch):
     refunded = refund_booking_payment(db_session, req=req, booking=booking)
     assert refunded is not None
     assert refunded.status == PaymentStatus.REFUNDED
+
+
+def test_tiered_refund_percent_from_snapshot():
+    snapshot = {
+        "tiers": [
+            {"min_hours_before_start": 48, "refund_percent": 100},
+            {"min_hours_before_start": 24, "refund_percent": 50},
+            {"min_hours_before_start": 0, "refund_percent": 0},
+        ]
+    }
+    start = datetime(2026, 6, 10, 12, 0, tzinfo=timezone.utc)
+    assert refund_percent_from_snapshot(
+        snapshot,
+        start_datetime=start,
+        now=datetime(2026, 6, 8, 11, 59, tzinfo=timezone.utc),
+    ) == 100
+    assert refund_percent_from_snapshot(
+        snapshot,
+        start_datetime=start,
+        now=datetime(2026, 6, 9, 11, 59, tzinfo=timezone.utc),
+    ) == 50
+    assert refund_percent_from_snapshot(
+        snapshot,
+        start_datetime=start,
+        now=datetime(2026, 6, 10, 11, 59, tzinfo=timezone.utc),
+    ) == 0
 
 
 # --------------------- cancellation deadline boundary ---------------------

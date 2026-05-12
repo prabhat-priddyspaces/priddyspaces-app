@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -15,6 +16,7 @@ from app.models.location import Location
 from app.models.organization import Organization
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
+from app.models.payment_refund import PaymentRefund
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.tax_config import TaxConfig
@@ -22,7 +24,8 @@ from app.models.user import User
 from app.services.notifications import send_email
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
-from app.services.pricing import estimate_booking_amount
+from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
+from app.services.cancellation_refunds import policy_for_space, policy_snapshot, refund_percent_from_snapshot
 
 
 def get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -40,20 +43,80 @@ def get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
 
 
 def estimate_request_amount(db: Session, req: BookingRequest, space: Space) -> int:
+    return _estimate_request_snapshot(db, req, space)["total_cents"]
+
+
+def _granularity_to_minutes(value) -> int:
+    raw = getattr(value, "value", value)
+    return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
+
+
+def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]:
+    try:
+        from app.models.space_volume_discount import SpaceVolumeDiscount
+    except ImportError:
+        return []
+    rows = (
+        db.query(SpaceVolumeDiscount)
+        .filter(
+            SpaceVolumeDiscount.space_id == space_id,
+            SpaceVolumeDiscount.is_active.is_(True),
+        )
+        .all()
+    )
+    return [VolumeDiscount(min_hours=float(r.min_hours), discount_percent=int(r.discount_percent)) for r in rows]
+
+
+def _snapshot_from_estimate(estimate: EstimateResult, *, occurrence_count: int, refund_snapshot: dict) -> dict:
+    return {
+        "base_cents": estimate.base_cents * occurrence_count,
+        "discount_cents": estimate.discount_cents * occurrence_count,
+        "tax_cents": estimate.tax_cents * occurrence_count,
+        "total_cents": estimate.total_cents * occurrence_count,
+        "rate_basis": estimate.rate_basis,
+        "units": estimate.units,
+        "occurrence_count": occurrence_count,
+        "refund_policy": refund_snapshot,
+    }
+
+
+def _estimate_request_snapshot(db: Session, req: BookingRequest, space: Space) -> dict:
+    if req.pricing_snapshot:
+        try:
+            parsed = json.loads(req.pricing_snapshot)
+            if isinstance(parsed, dict) and parsed.get("total_cents") is not None:
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
     rule = get_active_pricing_rule(db, space.id)
     tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
-    amount = estimate_booking_amount(
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    granularity_minutes = _granularity_to_minutes(location.booking_granularity) if location else 60
+    request_kind = getattr(req.request_kind, "value", req.request_kind)
+    is_day_pass = request_kind == "daily_booking"
+    booking_mode = "day_pass" if is_day_pass else ("hourly" if req.instant_booking else None)
+    estimate = estimate_booking_price(
         req.start_datetime,
         req.end_datetime,
-        space.price_daily,
-        space.price_monthly,
+        price_hourly=space.price_hourly,
+        price_daily=space.price_daily,
+        price_monthly=space.price_monthly,
         rate_type=rule.rate_type if rule else None,
         rate_amount=rule.rate_amount if rule else None,
+        booking_mode=booking_mode,
+        full_day=is_day_pass,
+        volume_discounts=_active_volume_discounts(db, space.id),
+        granularity_minutes=granularity_minutes,
         tax_rate_percent=tax.rate_percent if tax else None,
     )
-    if amount is None:
+    if estimate is None:
         raise HTTPException(status_code=400, detail="Unable to calculate booking amount")
-    return amount
+    refund_snapshot = {}
+    if location:
+        refund_snapshot = policy_snapshot(db, policy_for_space(db, location, space))
+    occurrence_count = max(1, req.occurrence_count or 1)
+    return _snapshot_from_estimate(estimate, occurrence_count=occurrence_count, refund_snapshot=refund_snapshot)
 
 
 def cancellation_deadline_for_request(db: Session, req: BookingRequest, space: Space) -> datetime:
@@ -151,8 +214,9 @@ def charge_booking_request(
         db.refresh(req)
         return req, None, None
 
-    amount = estimate_request_amount(db, req, space)
-    amount_cents = amount * 100
+    snapshot = _estimate_request_snapshot(db, req, space)
+    amount_cents = int(snapshot["total_cents"])
+    amount = amount_cents // 100
     attempt = (req.payment_attempt_count or 0) + 1
     idempotency_key = f"booking_{req.public_id}_attempt_{attempt}"
     payment = db.query(Payment).filter(Payment.idempotency_key == idempotency_key).first()
@@ -163,12 +227,18 @@ def charge_booking_request(
             tenant_id=req.tenant_id,
             amount=amount,
             amount_cents=amount_cents,
+            subtotal_cents=snapshot.get("base_cents"),
+            discount_cents=snapshot.get("discount_cents"),
+            tax_cents=snapshot.get("tax_cents"),
             currency="usd",
             provider=setting.provider,
             payment_method_id=method.id,
             status=PaymentStatus.REQUIRES_PAYMENT,
             attempt_number=attempt,
             idempotency_key=idempotency_key,
+            booking_series_id=req.booking_series_id,
+            pricing_snapshot=snapshot,
+            refund_policy_snapshot=snapshot.get("refund_policy"),
         )
         db.add(payment)
         db.commit()
@@ -202,22 +272,47 @@ def charge_booking_request(
             payment.stripe_payment_intent_id = result.provider_payment_id
         _apply_commission(db, payment)
 
-        booking = Booking(
-            user_id=req.user_id,
-            space_id=req.space_id,
-            tenant_id=req.tenant_id,
-            start_datetime=req.start_datetime,
-            end_datetime=req.end_datetime,
-            status=BookingStatus.CONFIRMED,
-            stripe_payment_intent_id=payment.stripe_payment_intent_id,
-        )
-        db.add(booking)
-        db.flush()
+        if req.booking_id:
+            booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+            if not booking:
+                raise HTTPException(status_code=409, detail="Booking hold no longer exists")
+            booking.status = BookingStatus.CONFIRMED
+            booking.stripe_payment_intent_id = payment.stripe_payment_intent_id
+            db.add(booking)
+        else:
+            booking = Booking(
+                user_id=req.user_id,
+                space_id=req.space_id,
+                tenant_id=req.tenant_id,
+                start_datetime=req.start_datetime,
+                end_datetime=req.end_datetime,
+                inventory_start_datetime=req.start_datetime - timedelta(minutes=space.buffer_before_minutes or 0),
+                inventory_end_datetime=req.end_datetime + timedelta(minutes=space.buffer_after_minutes or 0),
+                booking_request_id=req.id,
+                booking_series_id=req.booking_series_id,
+                status=BookingStatus.CONFIRMED,
+                stripe_payment_intent_id=payment.stripe_payment_intent_id,
+            )
+            db.add(booking)
+            db.flush()
+            req.booking_id = booking.id
+        if req.booking_series_id:
+            db.query(Booking).filter(
+                Booking.booking_series_id == req.booking_series_id,
+                Booking.status == BookingStatus.PENDING,
+            ).update(
+                {
+                    Booking.status: BookingStatus.CONFIRMED,
+                    Booking.stripe_payment_intent_id: payment.stripe_payment_intent_id,
+                },
+                synchronize_session=False,
+            )
         payment.booking_id = booking.id
-        req.booking_id = booking.id
         req.status = BookingRequestStatus.APPROVED
         req.payment_status = "succeeded"
         req.approved_at = datetime.now(timezone.utc)
+        req.pricing_snapshot = json.dumps(snapshot)
+        req.refund_policy_snapshot = json.dumps(snapshot.get("refund_policy") or {})
         _create_invoice(db, req=req, booking=booking, payment=payment)
         db.add(payment)
         db.add(req)
@@ -239,6 +334,17 @@ def charge_booking_request(
         payment.provider_reference_id = result.provider_reference_id
     req.status = BookingRequestStatus.PAYMENT_FAILED
     req.payment_status = "failed"
+    if req.booking_id:
+        booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+        if booking:
+            booking.status = BookingStatus.CANCELED
+            db.add(booking)
+        req.booking_id = None
+    if req.booking_series_id:
+        db.query(Booking).filter(
+            Booking.booking_series_id == req.booking_series_id,
+            Booking.status == BookingStatus.PENDING,
+        ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
     db.add(payment)
     db.add(req)
     db.commit()
@@ -250,8 +356,19 @@ def charge_booking_request(
     return req, None, payment
 
 
+def _refund_snapshot(req: BookingRequest | None, payment: Payment | None) -> dict:
+    if req and req.refund_policy_snapshot:
+        try:
+            return json.loads(req.refund_policy_snapshot)
+        except json.JSONDecodeError:
+            return {}
+    if payment and payment.refund_policy_snapshot:
+        return payment.refund_policy_snapshot
+    return {}
+
+
 def refund_booking_payment(db: Session, *, req: BookingRequest | None, booking: Booking, amount_cents: int | None = None) -> Payment | None:
-    query = db.query(Payment).filter(Payment.status == PaymentStatus.SUCCEEDED)
+    query = db.query(Payment).filter(Payment.status.in_([PaymentStatus.SUCCEEDED, PaymentStatus.PARTIALLY_REFUNDED]))
     if req:
         query = query.filter(Payment.booking_request_id == req.id)
     else:
@@ -259,6 +376,23 @@ def refund_booking_payment(db: Session, *, req: BookingRequest | None, booking: 
     payment = query.order_by(Payment.created_at.desc()).first()
     if not payment:
         return None
+    refund_percent = refund_percent_from_snapshot(
+        _refund_snapshot(req, payment),
+        start_datetime=booking.start_datetime,
+    )
+    remaining_cents = max(0, (payment.amount_cents or payment.amount * 100) - (payment.refunded_amount_cents or 0))
+    if amount_cents is None:
+        amount_cents = int(round(remaining_cents * (refund_percent / 100.0)))
+    else:
+        amount_cents = min(amount_cents, remaining_cents)
+    if amount_cents <= 0:
+        payment.refunded_amount_cents = payment.refunded_amount_cents or 0
+        db.add(payment)
+        return payment
+    idempotency_key = f"refund_{payment.public_id}_{booking.public_id}_{amount_cents}"
+    existing_refund = db.query(PaymentRefund).filter(PaymentRefund.idempotency_key == idempotency_key).first()
+    if existing_refund and existing_refund.status in {"refunded", "voided"}:
+        return payment
     setting = None
     if req and req.owner_payment_setting_id:
         setting = db.query(OwnerPaymentSetting).filter(OwnerPaymentSetting.id == req.owner_payment_setting_id).first()
@@ -276,10 +410,31 @@ def refund_booking_payment(db: Session, *, req: BookingRequest | None, booking: 
         provider_reference_id=payment.provider_reference_id,
         amount_cents=amount_cents,
     )
-    if result.status == "voided":
-        payment.status = PaymentStatus.VOIDED
-    elif result.status == "refunded":
-        payment.status = PaymentStatus.REFUNDED
+    refund = existing_refund or PaymentRefund(
+        tenant_id=payment.tenant_id or booking.tenant_id,
+        payment_id=payment.id,
+        booking_id=booking.id,
+        booking_request_id=req.id if req else None,
+        amount_cents=amount_cents,
+        refund_percent=refund_percent,
+        provider=payment.provider or setting.provider,
+        idempotency_key=idempotency_key,
+    )
+    refund.raw_response = result.raw_response
+    refund.provider_refund_id = result.provider_payment_id
+    refund.provider_reference_id = result.provider_reference_id
+    refund.status = result.status
+    refund.failure_reason = result.failure_reason
+    db.add(refund)
+    if result.status in {"voided", "refunded"}:
+        payment.refunded_amount_cents = (payment.refunded_amount_cents or 0) + amount_cents
+        total_cents = payment.amount_cents or payment.amount * 100
+        if result.status == "voided" and payment.refunded_amount_cents >= total_cents:
+            payment.status = PaymentStatus.VOIDED
+        elif payment.refunded_amount_cents >= total_cents:
+            payment.status = PaymentStatus.REFUNDED
+        else:
+            payment.status = PaymentStatus.PARTIALLY_REFUNDED
     else:
         payment.status = PaymentStatus.FAILED
         payment.failure_reason = result.failure_reason or "Refund failed"

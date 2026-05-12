@@ -3,6 +3,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
@@ -37,12 +38,15 @@ def get_space_availability(
     range_end = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc)
 
     bookings = (
-        db.query(Booking.start_datetime, Booking.end_datetime)
+        db.query(
+            func.coalesce(Booking.inventory_start_datetime, Booking.start_datetime),
+            func.coalesce(Booking.inventory_end_datetime, Booking.end_datetime),
+        )
         .filter(
             Booking.space_id == space_id,
             Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
-            Booking.start_datetime < range_end,
-            Booking.end_datetime > range_start,
+            func.coalesce(Booking.inventory_start_datetime, Booking.start_datetime) < range_end,
+            func.coalesce(Booking.inventory_end_datetime, Booking.end_datetime) > range_start,
         )
         .all()
     )
@@ -51,7 +55,7 @@ def get_space_availability(
         db.query(BookingRequest.start_datetime, BookingRequest.end_datetime)
         .filter(
             BookingRequest.space_id == space_id,
-            BookingRequest.status.in_([BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED]),
+            BookingRequest.status == BookingRequestStatus.REQUESTED,
             BookingRequest.start_datetime < range_end,
             BookingRequest.end_datetime > range_start,
         )
