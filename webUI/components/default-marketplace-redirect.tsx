@@ -15,20 +15,33 @@ const APP_ROUTE_PREFIXES = [
 
 export function legacyStaticDetailHref(pathname: string, search: string) {
   const segments = pathname.split("/").filter(Boolean);
-  if (segments.length !== 2 || segments[0] !== "spaces") return null;
+  if (segments.length !== 2 || !["spaces", "locations"].includes(segments[0])) return null;
 
-  const spaceId = segments[1];
-  if (!spaceId || spaceId === "_" || spaceId === "_.html") return null;
+  const resourceId = segments[1];
+  if (!resourceId || resourceId === "_" || resourceId === "_.html") return null;
 
-  const current = new URLSearchParams(search);
   const next = new URLSearchParams();
-  next.set("id", decodeURIComponent(spaceId));
-  next.set("back", current.get("back") || "/spaces");
-  for (const key of DETAIL_QUERY_KEYS) {
-    const value = current.get(key);
-    if (value) next.set(key, value);
+  next.set("id", decodeURIComponent(resourceId));
+
+  if (segments[0] === "spaces") {
+    const current = new URLSearchParams(search);
+    next.set("back", current.get("back") || "/spaces");
+    for (const key of DETAIL_QUERY_KEYS) {
+      const value = current.get(key);
+      if (value) next.set(key, value);
+    }
   }
-  return `/spaces/_.html?${next.toString()}`;
+  return `/${segments[0]}/_.html?${next.toString()}`;
+}
+
+function staticExportHtmlHref(pathname: string, search: string) {
+  if (pathname.startsWith("/_next/") || pathname.startsWith("/api/")) return null;
+
+  const targetPath = pathname.replace(/\/+$/, "");
+  const lastSegment = targetPath.split("/").pop() || "";
+  if (!targetPath || lastSegment.includes(".")) return null;
+
+  return `${targetPath}.html${search}`;
 }
 
 export function defaultMarketplaceFallbackHref(pathname: string, search: string) {
@@ -42,7 +55,7 @@ export function defaultMarketplaceFallbackHref(pathname: string, search: string)
   ) {
     return null;
   }
-  return "/spaces";
+  return staticExportHtmlHref(pathname, search) || "/spaces";
 }
 
 export function DefaultMarketplaceRedirect() {
