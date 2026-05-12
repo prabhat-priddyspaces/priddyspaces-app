@@ -1,0 +1,33 @@
+[
+  {
+    "name": "near_me_requires_location",
+    "message": "meeting room near me",
+    "contains": ["need your location", "50 miles"],
+    "event_kinds": ["missing_required_slot"]
+  },
+  {
+    "name": "explicit_city_overrides_page_context",
+    "message": "meeting room in new york",
+    "page_context": {
+      "q": "Plantation, FL",
+      "lat": 26.132,
+      "lng": -80.2624,
+      "radius_miles": 50
+    },
+    "contains": ["New York Rooms"],
+    "not_contains": ["Assistant HQ"],
+    "event_kinds": ["context_mismatch"]
+  },
+  {
+    "name": "pricing_has_price_basis",
+    "message": "what is the price for meeting room in Miami",
+    "contains": ["$40/hr"],
+    "event_kinds": []
+  },
+  {
+    "name": "unsupported_is_deterministic",
+    "message": "tell me a joke",
+    "contains": ["I can help search spaces"],
+    "event_kinds": ["unsupported_intent", "low_confidence_intent"]
+  }
+]

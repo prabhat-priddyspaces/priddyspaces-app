@@ -11,6 +11,13 @@ interface AssistantQuality {
   metrics: Record<string, number>;
   low_rated_conversations: Array<{ conversation_public_id: string | null; reason: string | null }>;
   missing_policy_categories: Array<{ category: string; count: number }>;
+  reliability_events: Array<{ kind: string; count: number }>;
+  recent_reliability_events: Array<{
+    kind: string;
+    conversation_public_id: string | null;
+    message_public_id: string;
+    details: Record<string, unknown>;
+  }>;
   tool_failure_rates: Array<{ tool: string; failures: number }>;
   usage_by_persona: Array<{ audience: string; conversations: number }>;
   abandoned_booking_drafts: Array<Record<string, unknown>>;
@@ -95,6 +102,21 @@ export default function AssistantQualityPage() {
             </div>
           </Card>
           <Card>
+            <h3 className="text-sm font-semibold text-textPrimary">Reliability Events</h3>
+            <div className="mt-4 space-y-3">
+              {data?.reliability_events.length ? (
+                data.reliability_events.map((item) => (
+                  <div key={item.kind} className="flex justify-between text-sm">
+                    <span className="text-textSecondary">{item.kind}</span>
+                    <span className="font-medium text-textPrimary">{item.count}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-textMuted">No reliability events logged.</div>
+              )}
+            </div>
+          </Card>
+          <Card>
             <h3 className="text-sm font-semibold text-textPrimary">Low-Rated Conversations</h3>
             <div className="mt-4 space-y-3">
               {data?.low_rated_conversations.length ? (
@@ -106,6 +128,21 @@ export default function AssistantQualityPage() {
                 ))
               ) : (
                 <div className="text-sm text-textMuted">No low-rated conversations.</div>
+              )}
+            </div>
+          </Card>
+          <Card>
+            <h3 className="text-sm font-semibold text-textPrimary">Recent Reliability Events</h3>
+            <div className="mt-4 space-y-3">
+              {data?.recent_reliability_events.length ? (
+                data.recent_reliability_events.map((item) => (
+                  <div key={`${item.message_public_id}-${item.kind}`} className="rounded-sm border border-border p-3 text-sm">
+                    <div className="font-medium text-textPrimary">{item.kind}</div>
+                    <div className="text-textMuted">{item.conversation_public_id || "unknown conversation"}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-textMuted">No recent reliability events.</div>
               )}
             </div>
           </Card>

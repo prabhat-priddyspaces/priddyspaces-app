@@ -18,11 +18,12 @@ export interface AssistantProposal {
 
 export interface AssistantClientAction {
   action_id: string;
-  kind: "request_location" | string;
+  kind: "request_location" | "clarify_input" | string;
   label: string;
   payload: {
     original_message?: string;
     radius_miles?: number;
+    prompt?: string;
     [key: string]: unknown;
   };
 }

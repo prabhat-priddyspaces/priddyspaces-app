@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Bot, ExternalLink, MapPin, MessageCircle, Send, X } from "lucide-react";
+import { Bot, ExternalLink, HelpCircle, MapPin, MessageCircle, Send, X } from "lucide-react";
 
 import { useAssistant } from "@/hooks/useAssistant";
 import type { AssistantCitation, AssistantClientAction, AssistantMessage, AssistantProposal } from "@/lib/assistantTypes";
@@ -115,7 +115,22 @@ function ClientActionButtons({
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       {actions.map((action) => {
-        if (action.kind !== "request_location") return null;
+        if (action.kind === "request_location") {
+          return (
+            <Button
+              key={action.action_id}
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => onAction(action)}
+              className="gap-1"
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              {action.label || "Use my location"}
+            </Button>
+          );
+        }
+        if (action.kind !== "clarify_input") return null;
         return (
           <Button
             key={action.action_id}
@@ -125,8 +140,8 @@ function ClientActionButtons({
             onClick={() => onAction(action)}
             className="gap-1"
           >
-            <MapPin className="h-3.5 w-3.5" />
-            {action.label || "Use my location"}
+            <HelpCircle className="h-3.5 w-3.5" />
+            {action.label || "Add details"}
           </Button>
         );
       })}
@@ -212,6 +227,14 @@ export function AssistantMount() {
   }
 
   async function handleClientAction(action: AssistantClientAction) {
+    if (action.kind === "clarify_input") {
+      const prompt =
+        typeof action.payload.prompt === "string" && action.payload.prompt.trim()
+          ? action.payload.prompt
+          : "Add the missing details and I can help from there.";
+      appendAssistantMessage(prompt);
+      return;
+    }
     if (action.kind !== "request_location") return;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       appendAssistantMessage("Location access is not available in this browser. Tell me your city or ZIP code instead.");

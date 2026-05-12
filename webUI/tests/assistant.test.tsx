@@ -219,4 +219,44 @@ describe("AssistantMount", () => {
     expect(updater([])[0].content).toContain("city or ZIP");
     expect(sendMock).not.toHaveBeenCalled();
   });
+
+  it("renders clarify_input actions and appends the clarification prompt", async () => {
+    useAssistantMock.mockReturnValue({
+      enabled: true,
+      loading: false,
+      error: "",
+      messages: [
+        {
+          public_id: "msg_clarify",
+          role: "assistant",
+          content: "I need more details.",
+          citations: [],
+          proposals: [],
+          client_actions: [
+            {
+              action_id: "act_clarify",
+              kind: "clarify_input",
+              label: "Add booking details",
+              payload: {
+                prompt: "Choose a space, start time, and end time.",
+                original_message: "book a meeting room",
+              },
+            },
+          ],
+        },
+      ],
+      conversationId: "conv_1",
+      guestId: "guest_1",
+      send: sendMock,
+      setMessages: setMessagesMock,
+    });
+
+    render(<AssistantMount />);
+    fireEvent.click(screen.getByLabelText("Open assistant"));
+    fireEvent.click(screen.getByRole("button", { name: /Add booking details/ }));
+
+    expect(setMessagesMock).toHaveBeenCalled();
+    const updater = setMessagesMock.mock.calls[0][0] as (messages: unknown[]) => Array<{ content: string }>;
+    expect(updater([])[0].content).toBe("Choose a space, start time, and end time.");
+  });
 });
