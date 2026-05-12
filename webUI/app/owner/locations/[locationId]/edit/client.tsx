@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WorkingHoursEditor } from "@/components/working-hours-editor";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import { normalizeWorkingHours, type PublicWorkingHour } from "@/lib/working-hours";
 
 interface Location {
   public_id: string;
@@ -31,6 +33,8 @@ interface Location {
   public_email: string | null;
   public_hours_weekdays: string | null;
   public_hours_weekends: string | null;
+  public_working_hours_enabled?: boolean;
+  public_working_hours?: PublicWorkingHour[];
   public_parking_notes: string | null;
   public_transit_notes: string | null;
   public_included_items: string | null;
@@ -58,8 +62,8 @@ export function EditLocationClient() {
     lng: "",
     public_phone: "",
     public_email: "",
-    public_hours_weekdays: "",
-    public_hours_weekends: "",
+    public_working_hours_enabled: false,
+    public_working_hours: normalizeWorkingHours([]),
     public_parking_notes: "",
     public_transit_notes: "",
     public_included_items: "",
@@ -102,8 +106,8 @@ export function EditLocationClient() {
           lng: loc.lng != null ? String(loc.lng) : "",
           public_phone: loc.public_phone || "",
           public_email: loc.public_email || "",
-          public_hours_weekdays: loc.public_hours_weekdays || "",
-          public_hours_weekends: loc.public_hours_weekends || "",
+          public_working_hours_enabled: Boolean(loc.public_working_hours_enabled),
+          public_working_hours: normalizeWorkingHours(loc.public_working_hours),
           public_parking_notes: loc.public_parking_notes || "",
           public_transit_notes: loc.public_transit_notes || "",
           public_included_items: loc.public_included_items || "",
@@ -149,8 +153,8 @@ export function EditLocationClient() {
             lng: form.lng ? Number(form.lng) : null,
             public_phone: form.public_phone,
             public_email: form.public_email,
-            public_hours_weekdays: form.public_hours_weekdays,
-            public_hours_weekends: form.public_hours_weekends,
+            public_working_hours_enabled: form.public_working_hours_enabled,
+            public_working_hours: form.public_working_hours,
             public_parking_notes: form.public_parking_notes,
             public_transit_notes: form.public_transit_notes,
             public_included_items: form.public_included_items,
@@ -319,24 +323,17 @@ export function EditLocationClient() {
                 />
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="public_hours_weekdays">Weekday hours</Label>
-                <Input
-                  id="public_hours_weekdays"
-                  value={form.public_hours_weekdays}
-                  onChange={(e) => setForm({ ...form, public_hours_weekdays: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="public_hours_weekends">Weekend hours</Label>
-                <Input
-                  id="public_hours_weekends"
-                  value={form.public_hours_weekends}
-                  onChange={(e) => setForm({ ...form, public_hours_weekends: e.target.value })}
-                />
-              </div>
-            </div>
+            <WorkingHoursEditor
+              enabled={form.public_working_hours_enabled}
+              hours={form.public_working_hours}
+              onChange={(next) =>
+                setForm({
+                  ...form,
+                  public_working_hours_enabled: next.enabled,
+                  public_working_hours: next.hours,
+                })
+              }
+            />
             <div className="grid gap-2">
               <Label htmlFor="public_parking_notes">Parking notes</Label>
               <textarea

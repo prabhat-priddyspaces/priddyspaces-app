@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.working_hours import PublicWorkingHour
 
 
 class MarketplaceSpaceOut(BaseModel):
@@ -50,6 +52,8 @@ class MarketplaceLocationSummaryOut(BaseModel):
     starting_hourly_price: int | None = None
     starting_membership_price: int | None = None
     distance_miles: float | None = None
+    public_working_hours_enabled: bool = False
+    public_working_hours: list[PublicWorkingHour] = Field(default_factory=list)
 
 
 class MarketplaceLocationSearchOut(BaseModel):
@@ -122,6 +126,8 @@ class MarketplaceSpaceDetailLocationOut(BaseModel):
     public_email: str | None = None
     public_hours_weekdays: str | None = None
     public_hours_weekends: str | None = None
+    public_working_hours_enabled: bool = False
+    public_working_hours: list[PublicWorkingHour] = Field(default_factory=list)
     public_parking_notes: list[str]
     public_transit_notes: list[str]
     public_included_items: list[str]

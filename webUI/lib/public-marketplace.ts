@@ -1,3 +1,5 @@
+import type { PublicWorkingHour } from "@/lib/working-hours";
+
 export type PublicMarketplaceRoute = "spaces" | "private-offices" | "meeting-rooms";
 export type PublicMarketplaceApiCategory = "coworking" | "private_office" | "meeting_room";
 type SearchLike = Pick<URLSearchParams, "get">;
@@ -35,6 +37,8 @@ export interface MarketplaceLocationSummary {
   starting_hourly_price: number | null;
   starting_membership_price: number | null;
   distance_miles: number | null;
+  public_working_hours_enabled?: boolean;
+  public_working_hours?: PublicWorkingHour[];
 }
 
 export const DEFAULT_RADIUS_MILES = 50;
@@ -114,6 +118,8 @@ export interface MarketplaceSpaceDetailLocation {
   public_email: string | null;
   public_hours_weekdays: string | null;
   public_hours_weekends: string | null;
+  public_working_hours_enabled?: boolean;
+  public_working_hours?: PublicWorkingHour[];
   public_parking_notes: string[];
   public_transit_notes: string[];
   public_included_items: string[];

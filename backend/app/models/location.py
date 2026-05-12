@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, Integer, String, Float
+from sqlalchemy import Boolean, Column, Enum, Float, Integer, JSON, String
 
 from app.models.base import Base
 from app.models.enums import BookingGranularity, LocationStatus, enum_values
@@ -25,6 +25,8 @@ class Location(PublicIdMixin, TimestampMixin, Base):
     public_email = Column(String(255), nullable=True)
     public_hours_weekdays = Column(String(255), nullable=True)
     public_hours_weekends = Column(String(255), nullable=True)
+    public_working_hours_enabled = Column(Boolean, nullable=False, default=False)
+    public_working_hours = Column(JSON, nullable=False, default=list)
     public_parking_notes = Column(String(2048), nullable=True)
     public_transit_notes = Column(String(2048), nullable=True)
     public_included_items = Column(String(2048), nullable=True)

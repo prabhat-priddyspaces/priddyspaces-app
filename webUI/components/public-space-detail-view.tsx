@@ -51,6 +51,7 @@ import { SubscriptionModal } from "@/components/subscription-modal";
 import { PublicLocationMiniMap } from "@/components/public-location-mini-map";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { GuestCheckoutModal } from "@/components/guest-checkout-modal";
+import { PublicWorkingHours } from "@/components/public-working-hours";
 import type { LoyaltyRedemptionLock, LoyaltyRedemptionPreview } from "@/lib/loyalty";
 import { formatCents, formatPoints } from "@/lib/loyalty";
 
@@ -724,25 +725,12 @@ export function PublicSpaceDetailView({
               </div>
 
               <div className="grid gap-5">
-                {(detail.location.public_hours_weekdays || detail.location.public_hours_weekends) ? (
-                  <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-                    <div className="text-sm font-semibold text-slate-900">Hours</div>
-                    <div className="mt-4 space-y-3 text-sm text-slate-600">
-                      {detail.location.public_hours_weekdays ? (
-                        <div className="flex items-start gap-3">
-                          <Clock3 className="mt-0.5 h-4 w-4 text-slate-400" />
-                          <span>{detail.location.public_hours_weekdays}</span>
-                        </div>
-                      ) : null}
-                      {detail.location.public_hours_weekends ? (
-                        <div className="flex items-start gap-3">
-                          <Clock3 className="mt-0.5 h-4 w-4 text-slate-400" />
-                          <span>{detail.location.public_hours_weekends}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
+                <PublicWorkingHours
+                  enabled={detail.location.public_working_hours_enabled}
+                  hours={detail.location.public_working_hours}
+                  legacyWeekdays={detail.location.public_hours_weekdays}
+                  legacyWeekends={detail.location.public_hours_weekends}
+                />
 
                 {(detail.location.public_phone || detail.location.public_email) ? (
                   <div className="rounded-[24px] border border-slate-200 bg-white p-5">

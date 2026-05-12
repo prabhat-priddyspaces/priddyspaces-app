@@ -600,6 +600,13 @@ def test_public_location_detail_supports_meeting_room_filters_and_time_validatio
     assert body["spaces"][0]["name"] == "Conference 14-B"
     assert body["spaces"][0]["hourly_price"] == 60
     assert body["spaces"][0]["availability_start_time"] == "09:00:00"
+    assert body["public_working_hours_enabled"] is True
+    assert next(row for row in body["public_working_hours"] if row["day"] == "monday") == {
+        "day": "monday",
+        "enabled": True,
+        "start_time": "09:00",
+        "end_time": "17:00",
+    }
 
     outside_hours = client.get(
         f"/api/marketplace/locations/{seeded['meeting_location'].public_id}"
@@ -623,6 +630,14 @@ def test_public_marketplace_space_detail_returns_listing_content(db_session, cli
     assert body["images"][1]["image_url"] == "https://images.example.com/conference-secondary.jpg"
     assert body["location"]["public_phone"] == "(954) 906-7565"
     assert body["location"]["public_email"] == "hello@harborrooms.test"
+    assert body["location"]["public_working_hours_enabled"] is True
+    assert next(row for row in body["location"]["public_working_hours"] if row["day"] == "friday") == {
+        "day": "friday",
+        "enabled": True,
+        "start_time": "09:00",
+        "end_time": "17:00",
+    }
+    assert next(row for row in body["location"]["public_working_hours"] if row["day"] == "saturday")["enabled"] is False
     assert body["location"]["public_parking_notes"] == [
         "Onsite parking in covered garage",
         "01 & 101 Bus @ SE 3 Ave",

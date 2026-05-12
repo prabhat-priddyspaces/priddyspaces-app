@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WorkingHoursEditor } from "@/components/working-hours-editor";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { defaultWorkingHours } from "@/lib/working-hours";
 
 interface Organization {
   public_id: string;
@@ -45,8 +47,8 @@ export default function NewLocation() {
     timezone: "America/New_York",
     public_phone: "",
     public_email: "",
-    public_hours_weekdays: "",
-    public_hours_weekends: "",
+    public_working_hours_enabled: true,
+    public_working_hours: defaultWorkingHours(),
     public_parking_notes: "",
     public_transit_notes: "",
     public_included_items: "",
@@ -177,8 +179,8 @@ export default function NewLocation() {
             timezone: form.timezone,
             public_phone: form.public_phone || undefined,
             public_email: form.public_email || undefined,
-            public_hours_weekdays: form.public_hours_weekdays || undefined,
-            public_hours_weekends: form.public_hours_weekends || undefined,
+            public_working_hours_enabled: form.public_working_hours_enabled,
+            public_working_hours: form.public_working_hours,
             public_parking_notes: form.public_parking_notes || undefined,
             public_transit_notes: form.public_transit_notes || undefined,
             public_included_items: form.public_included_items || undefined,
@@ -434,26 +436,17 @@ export default function NewLocation() {
                 />
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="public_hours_weekdays">Weekday hours</Label>
-                <Input
-                  id="public_hours_weekdays"
-                  value={form.public_hours_weekdays}
-                  onChange={(e) => setForm({ ...form, public_hours_weekdays: e.target.value })}
-                  placeholder="Monday - Friday • 9:00 AM to 5:00 PM"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="public_hours_weekends">Weekend hours</Label>
-                <Input
-                  id="public_hours_weekends"
-                  value={form.public_hours_weekends}
-                  onChange={(e) => setForm({ ...form, public_hours_weekends: e.target.value })}
-                  placeholder="Saturday - Sunday • Closed"
-                />
-              </div>
-            </div>
+            <WorkingHoursEditor
+              enabled={form.public_working_hours_enabled}
+              hours={form.public_working_hours}
+              onChange={(next) =>
+                setForm({
+                  ...form,
+                  public_working_hours_enabled: next.enabled,
+                  public_working_hours: next.hours,
+                })
+              }
+            />
             <div className="grid gap-2">
               <Label htmlFor="public_parking_notes">Parking notes</Label>
               <textarea

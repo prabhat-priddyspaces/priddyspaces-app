@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.amenity import AmenityOut
 from app.models.enums import BookingGranularity, LocationStatus
+from app.schemas.working_hours import PublicWorkingHour
 
 
 class LocationCreate(BaseModel):
@@ -19,6 +20,8 @@ class LocationCreate(BaseModel):
     public_email: str | None = None
     public_hours_weekdays: str | None = None
     public_hours_weekends: str | None = None
+    public_working_hours_enabled: bool = False
+    public_working_hours: list[PublicWorkingHour] | None = None
     public_parking_notes: str | None = None
     public_transit_notes: str | None = None
     public_included_items: str | None = None
@@ -47,6 +50,8 @@ class LocationOut(BaseModel):
     public_email: str | None = None
     public_hours_weekdays: str | None = None
     public_hours_weekends: str | None = None
+    public_working_hours_enabled: bool = False
+    public_working_hours: list[PublicWorkingHour] = Field(default_factory=list)
     public_parking_notes: str | None = None
     public_transit_notes: str | None = None
     public_included_items: str | None = None
@@ -70,6 +75,8 @@ class LocationUpdate(BaseModel):
     public_email: str | None = None
     public_hours_weekdays: str | None = None
     public_hours_weekends: str | None = None
+    public_working_hours_enabled: bool | None = None
+    public_working_hours: list[PublicWorkingHour] | None = None
     public_parking_notes: str | None = None
     public_transit_notes: str | None = None
     public_included_items: str | None = None

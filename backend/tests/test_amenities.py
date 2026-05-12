@@ -135,6 +135,104 @@ def test_location_rejects_cross_org_amenity_ids(db_session, client_factory):
     assert response.status_code == 400
 
 
+def test_location_create_and_update_structured_working_hours(db_session, client_factory):
+    owner, org = _seed_owner_org(db_session)
+    client = client_factory(
+        {"sub": owner.auth_subject, "email": owner.email, "email_verified": True}
+    )
+
+    created = client.post(
+        "/api/locations",
+        json={
+            "organization_public_id": org.public_id,
+            "name": "Hours Location",
+            "address": "100 Main",
+            "city": "Austin",
+            "timezone": "America/Chicago",
+            "public_working_hours_enabled": True,
+            "public_working_hours": [
+                {
+                    "day": "monday",
+                    "enabled": True,
+                    "start_time": "09:00",
+                    "end_time": "17:00",
+                }
+            ],
+        },
+    )
+    assert created.status_code == 200
+    body = created.json()
+    assert body["public_working_hours_enabled"] is True
+    assert len(body["public_working_hours"]) == 7
+    monday = next(row for row in body["public_working_hours"] if row["day"] == "monday")
+    saturday = next(row for row in body["public_working_hours"] if row["day"] == "saturday")
+    assert monday == {
+        "day": "monday",
+        "enabled": True,
+        "start_time": "09:00",
+        "end_time": "17:00",
+    }
+    assert saturday["enabled"] is False
+
+    invalid = client.patch(
+        f"/api/locations/{body['public_id']}",
+        json={
+            "public_working_hours_enabled": True,
+            "public_working_hours": [
+                {
+                    "day": "tuesday",
+                    "enabled": True,
+                    "start_time": "17:00",
+                    "end_time": "09:00",
+                }
+            ],
+        },
+    )
+    assert invalid.status_code == 422
+
+    updated = client.patch(
+        f"/api/locations/{body['public_id']}",
+        json={
+            "public_working_hours_enabled": True,
+            "public_working_hours": [
+                {
+                    "day": "wednesday",
+                    "enabled": True,
+                    "start_time": "10:30",
+                    "end_time": "15:00",
+                }
+            ],
+        },
+    )
+    assert updated.status_code == 200
+    hours = updated.json()["public_working_hours"]
+    assert next(row for row in hours if row["day"] == "wednesday")["start_time"] == "10:30"
+    assert next(row for row in hours if row["day"] == "monday")["enabled"] is False
+
+
+def test_location_working_hours_reject_duplicate_days(db_session, client_factory):
+    owner, org = _seed_owner_org(db_session)
+    client = client_factory(
+        {"sub": owner.auth_subject, "email": owner.email, "email_verified": True}
+    )
+
+    response = client.post(
+        "/api/locations",
+        json={
+            "organization_public_id": org.public_id,
+            "name": "Duplicate Hours",
+            "address": "100 Main",
+            "timezone": "America/Chicago",
+            "public_working_hours_enabled": True,
+            "public_working_hours": [
+                {"day": "monday", "enabled": True, "start_time": "09:00", "end_time": "12:00"},
+                {"day": "monday", "enabled": True, "start_time": "13:00", "end_time": "17:00"},
+            ],
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_space_detail_prefers_location_amenities(db_session, client_factory):
     owner, org = _seed_owner_org(db_session)
     location = Location(

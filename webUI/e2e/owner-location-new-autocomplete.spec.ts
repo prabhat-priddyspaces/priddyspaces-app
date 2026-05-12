@@ -124,3 +124,80 @@ test("owner location new: address autocomplete loads and binds without warnings"
   await expect(page.getByText("New York, NY, 10001", { exact: false })).toBeVisible();
   await expect(page.getByText("40.7484, -73.9857", { exact: false })).toBeVisible();
 });
+
+test("owner location new: working hours editor saves structured defaults", async ({ page }) => {
+  await mockSession(page, "owner");
+  let createPayload: any = null;
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("owner"));
+      return;
+    }
+    if (key === "GET /api/orgs") {
+      await json(route, [{ public_id: "org_1", name: "Skyline Works" }]);
+      return;
+    }
+    if (key === "GET /api/orgs/org_1/amenities") {
+      await json(route, []);
+      return;
+    }
+    if (key === "POST /api/locations") {
+      createPayload = JSON.parse(route.request().postData() || "{}");
+      await json(route, { public_id: "loc_1" });
+      return;
+    }
+    if (url.pathname.startsWith("/api/amenities") || url.pathname.startsWith("/api/orgs/")) {
+      await json(route, []);
+      return;
+    }
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.route("https://maps.googleapis.com/maps/api/js**", async (route) => {
+    const url = new URL(route.request().url());
+    const callbackName = url.searchParams.get("callback");
+    const body = `
+      (function () {
+        window.google = window.google || {};
+        window.google.maps = window.google.maps || {};
+        window.google.maps.places = window.google.maps.places || {};
+        window.google.maps.places.Autocomplete = function () {
+          this.addListener = function () { return { remove: function () {} }; };
+          this.getPlace = function () { return {}; };
+        };
+        window["${callbackName}"] && window["${callbackName}"]();
+      })();
+    `;
+    await route.fulfill({ status: 200, contentType: "application/javascript", body });
+  });
+
+  await page.goto("/owner/locations/new");
+
+  await expect(page.getByText("Enable working hours")).toBeVisible();
+  await expect(page.getByTitle("Monday")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTitle("Saturday")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByText("Monday")).toBeVisible();
+  await expect(page.getByLabel("Monday start time")).toHaveValue("09:00");
+  await expect(page.getByLabel("Monday end time")).toHaveValue("17:00");
+
+  await page.getByLabel("Location name").fill("Downtown HQ");
+  await page.locator("input#address").fill("100 Main St");
+  await page.getByRole("button", { name: "Save Location Only" }).click();
+
+  await expect.poll(() => createPayload).not.toBeNull();
+  expect(createPayload.public_working_hours_enabled).toBe(true);
+  expect(createPayload.public_working_hours).toHaveLength(7);
+  expect(createPayload.public_working_hours.find((row: any) => row.day === "monday")).toEqual({
+    day: "monday",
+    enabled: true,
+    start_time: "09:00",
+    end_time: "17:00",
+  });
+  expect(createPayload.public_working_hours.find((row: any) => row.day === "saturday").enabled).toBe(false);
+  expect(createPayload.public_hours_weekdays).toBeUndefined();
+  expect(createPayload.public_hours_weekends).toBeUndefined();
+});

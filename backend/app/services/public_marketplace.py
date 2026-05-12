@@ -19,6 +19,7 @@ from app.models.space import Space
 from app.models.space_image import SpaceImage
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
+from app.schemas.working_hours import effective_public_working_hours
 from app.services.amenities import get_location_amenities_map
 
 
@@ -440,6 +441,13 @@ def _build_location_payload(
     location_amenities: list[str],
     distance_miles: float | None = None,
 ) -> dict[str, object]:
+    working_hours_enabled, working_hours = effective_public_working_hours(
+        enabled=location.public_working_hours_enabled,
+        hours=location.public_working_hours,
+        legacy_weekdays=location.public_hours_weekdays,
+        legacy_weekends=location.public_hours_weekends,
+    )
+
     return {
         "location_public_id": location.public_id,
         "name": location.name,
@@ -460,6 +468,8 @@ def _build_location_payload(
         "starting_hourly_price": None,
         "starting_membership_price": None,
         "distance_miles": distance_miles,
+        "public_working_hours_enabled": working_hours_enabled,
+        "public_working_hours": working_hours,
         "_relevance": 0,
         "_spaces": [],
     }
@@ -847,6 +857,12 @@ def get_public_space_detail(
             break
 
     amenities = location_amenities or space_amenities
+    working_hours_enabled, working_hours = effective_public_working_hours(
+        enabled=location.public_working_hours_enabled,
+        hours=location.public_working_hours,
+        legacy_weekdays=location.public_hours_weekdays,
+        legacy_weekends=location.public_hours_weekends,
+    )
     return {
         "space": {
             "public_id": space.public_id,
@@ -889,6 +905,8 @@ def get_public_space_detail(
             "public_email": location.public_email,
             "public_hours_weekdays": location.public_hours_weekdays,
             "public_hours_weekends": location.public_hours_weekends,
+            "public_working_hours_enabled": working_hours_enabled,
+            "public_working_hours": working_hours,
             "public_parking_notes": _split_lines(location.public_parking_notes),
             "public_transit_notes": _split_lines(location.public_transit_notes),
             "public_included_items": _split_lines(location.public_included_items),

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { PublicWorkingHours } from "@/components/public-working-hours";
 import { PublicTopbar } from "@/components/public-topbar";
 import {
   PUBLIC_MARKETPLACE_CONFIGS,
@@ -215,6 +216,11 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                 {activeConfig.label} at this location, filtered by your current search.
               </div>
             </div>
+
+            <PublicWorkingHours
+              enabled={location.public_working_hours_enabled}
+              hours={location.public_working_hours}
+            />
 
             {location.spaces.length === 0 ? (
               <div className="rounded-[28px] border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">

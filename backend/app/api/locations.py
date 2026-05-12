@@ -7,6 +7,11 @@ from app.models.enums import LocationStatus, OrganizationReviewStatus, UserAppRo
 from app.models.location import Location
 from app.models.organization import Organization
 from app.schemas.location import LocationCreate, LocationOut, LocationUpdate
+from app.schemas.working_hours import (
+    effective_public_working_hours,
+    parse_legacy_public_hours,
+    validate_public_working_hours,
+)
 from app.services.amenities import get_location_amenities_map, sync_location_amenities
 from app.services.lookups import get_org_by_public_id
 from app.services.auth_user import get_or_create_user
@@ -23,11 +28,79 @@ def _clean_optional_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _working_hours_to_dicts(value):
+    if value is None:
+        return None
+    return [item.model_dump() if hasattr(item, "model_dump") else dict(item) for item in value]
+
+
+def _validate_working_hours_or_422(enabled: bool, value) -> list[dict[str, object]]:
+    try:
+        return validate_public_working_hours(enabled, value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _create_working_hours(payload: LocationCreate) -> tuple[bool, list[dict[str, object]]]:
+    incoming_hours = _working_hours_to_dicts(payload.public_working_hours)
+    enabled = bool(payload.public_working_hours_enabled)
+    if incoming_hours is not None:
+        return enabled, _validate_working_hours_or_422(enabled, incoming_hours)
+
+    parsed_enabled, parsed_hours = parse_legacy_public_hours(
+        payload.public_hours_weekdays,
+        payload.public_hours_weekends,
+    )
+    if parsed_enabled:
+        enabled = payload.public_working_hours_enabled or parsed_enabled
+        return enabled, _validate_working_hours_or_422(enabled, parsed_hours)
+
+    return enabled, _validate_working_hours_or_422(enabled, [])
+
+
+def _apply_working_hours_update(location: Location, payload: LocationUpdate) -> None:
+    hours_fields_changed = (
+        payload.public_working_hours_enabled is not None
+        or payload.public_working_hours is not None
+        or payload.public_hours_weekdays is not None
+        or payload.public_hours_weekends is not None
+    )
+    if not hours_fields_changed:
+        return
+
+    enabled = (
+        bool(payload.public_working_hours_enabled)
+        if payload.public_working_hours_enabled is not None
+        else bool(location.public_working_hours_enabled)
+    )
+    incoming_hours = _working_hours_to_dicts(payload.public_working_hours)
+    if incoming_hours is None:
+        if location.public_working_hours:
+            incoming_hours = location.public_working_hours
+        else:
+            parsed_enabled, parsed_hours = parse_legacy_public_hours(
+                location.public_hours_weekdays,
+                location.public_hours_weekends,
+            )
+            if payload.public_working_hours_enabled is None:
+                enabled = parsed_enabled
+            incoming_hours = parsed_hours
+
+    location.public_working_hours_enabled = enabled
+    location.public_working_hours = _validate_working_hours_or_422(enabled, incoming_hours)
+
+
 def _serialize_location(
     location: Location,
     organization_public_id: str,
     amenities: list[dict[str, int | str | None]] | None = None,
 ) -> LocationOut:
+    working_hours_enabled, working_hours = effective_public_working_hours(
+        enabled=location.public_working_hours_enabled,
+        hours=location.public_working_hours,
+        legacy_weekdays=location.public_hours_weekdays,
+        legacy_weekends=location.public_hours_weekends,
+    )
     return LocationOut(
         public_id=location.public_id,
         organization_public_id=organization_public_id,
@@ -44,6 +117,8 @@ def _serialize_location(
         public_email=location.public_email,
         public_hours_weekdays=location.public_hours_weekdays,
         public_hours_weekends=location.public_hours_weekends,
+        public_working_hours_enabled=working_hours_enabled,
+        public_working_hours=working_hours,
         public_parking_notes=location.public_parking_notes,
         public_transit_notes=location.public_transit_notes,
         public_included_items=location.public_included_items,
@@ -66,6 +141,7 @@ def create_location(
     user = get_or_create_user(db, token)
     member = get_org_member(db, org.id, user.id)
     require_owner_or_admin(member)
+    working_hours_enabled, working_hours = _create_working_hours(payload)
 
     location = Location(
         organization_id=org.id,
@@ -83,6 +159,8 @@ def create_location(
         public_email=_clean_optional_text(payload.public_email),
         public_hours_weekdays=_clean_optional_text(payload.public_hours_weekdays),
         public_hours_weekends=_clean_optional_text(payload.public_hours_weekends),
+        public_working_hours_enabled=working_hours_enabled,
+        public_working_hours=working_hours,
         public_parking_notes=_clean_optional_text(payload.public_parking_notes),
         public_transit_notes=_clean_optional_text(payload.public_transit_notes),
         public_included_items=_clean_optional_text(payload.public_included_items),
@@ -170,6 +248,7 @@ def update_location(
         location.public_hours_weekdays = _clean_optional_text(payload.public_hours_weekdays)
     if payload.public_hours_weekends is not None:
         location.public_hours_weekends = _clean_optional_text(payload.public_hours_weekends)
+    _apply_working_hours_update(location, payload)
     if payload.public_parking_notes is not None:
         location.public_parking_notes = _clean_optional_text(payload.public_parking_notes)
     if payload.public_transit_notes is not None:
