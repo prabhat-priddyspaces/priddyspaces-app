@@ -49,6 +49,7 @@ from app.services.platform_auth import (
     get_effective_user,
     get_or_create_platform_settings,
     get_user_for_token_subject,
+    infer_app_role,
     issue_impersonation_token,
     issue_standard_token,
     require_platform_roles,
@@ -1239,13 +1240,15 @@ def start_impersonation(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     ensure_not_platform_target(db, target)
-    if target.role not in {UserAppRole.MEMBER, UserAppRole.OWNER}:
+    target_app_role = infer_app_role(db, target)
+    if target_app_role not in {UserAppRole.MEMBER, UserAppRole.OWNER}:
         raise HTTPException(status_code=400, detail="Only member and owner-side users can be impersonated")
 
     impersonation_token = issue_impersonation_token(
         actor=actor,
         actor_platform_member=platform_member,
         target=target,
+        target_app_role=target_app_role,
         reason=payload.reason,
     )
     write_audit_log(
@@ -1262,7 +1265,7 @@ def start_impersonation(
     return {
         "access_token": impersonation_token,
         "default_route": build_default_route(
-            app_role=target.role,
+            app_role=target_app_role,
             platform_role=platform_member.role,
             impersonating=True,
         ),

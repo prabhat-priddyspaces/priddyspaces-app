@@ -293,6 +293,66 @@ def test_impersonation_stop_uses_actor_platform_role(db_session, client_factory)
     assert response.json()["default_route"] == "/admin"
 
 
+def test_impersonation_start_infers_owner_role_from_membership(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="impersonate-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    owner = _create_user(db_session, email="roleless-owner@example.com", role=None)
+    org = Organization(name="Roleless Owner Org", owner_id=owner.id, review_status=OrganizationReviewStatus.APPROVED)
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+    membership = OrganizationMember(
+        organization_id=org.id,
+        tenant_id=org.id,
+        user_id=owner.id,
+        role=UserRole.OWNER,
+        is_active=True,
+    )
+    db_session.add(membership)
+    db_session.commit()
+
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    response = client.post(
+        "/api/admin/impersonation/start",
+        json={"user_public_id": str(owner.public_id), "reason": "Owner support review"},
+    )
+    assert response.status_code == 200
+    assert response.json()["default_route"] == "/owner"
+
+
+def test_me_infers_impersonated_owner_role_from_membership(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="me-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    owner = _create_user(db_session, email="me-roleless-owner@example.com", role=None)
+    org = Organization(name="Me Roleless Owner Org", owner_id=owner.id, review_status=OrganizationReviewStatus.APPROVED)
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+    db_session.add(OrganizationMember(
+        organization_id=org.id,
+        tenant_id=org.id,
+        user_id=owner.id,
+        role=UserRole.OWNER,
+        is_active=True,
+    ))
+    db_session.commit()
+    client = client_factory({
+        "sub": str(owner.public_id),
+        "actor_sub": str(admin.public_id),
+        "email": owner.email,
+        "email_verified": True,
+        "impersonation_reason": "Owner support review",
+    })
+
+    response = client.get("/api/me")
+    assert response.status_code == 200
+    assert response.json()["app_role"] == "owner"
+    assert response.json()["default_route"] == "/owner"
+
+
 def test_admin_booking_activity_includes_member_and_inventory_context(db_session, client_factory):
     admin = _create_platform_member(db_session, email="admin-bookings@example.com", role=PlatformTeamRole.SUPERADMIN)
     member = _create_user(db_session, email="booker@example.com", role=UserAppRole.MEMBER)

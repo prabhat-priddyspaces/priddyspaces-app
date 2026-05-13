@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.jwt import issue_token
 from app.core.password import hash_password
-from app.models.enums import OrganizationReviewStatus, PlatformTeamRole, UserAppRole
+from app.models.enums import OrganizationReviewStatus, PlatformTeamRole, UserAppRole, UserRole
 from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
 from app.models.platform_setting import PlatformSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.user import User
@@ -34,6 +35,27 @@ def get_effective_user(db: Session, token: dict) -> User:
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Account disabled")
     return user
+
+
+def infer_app_role(db: Session, user: User) -> UserAppRole | None:
+    if user.role is not None:
+        return user.role
+    membership = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user.id,
+            OrganizationMember.is_active.is_(True),
+        )
+        .order_by(OrganizationMember.created_at.desc())
+        .first()
+    )
+    if not membership:
+        return None
+    if membership.role in {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}:
+        return UserAppRole.OWNER
+    if membership.role == UserRole.MEMBER:
+        return UserAppRole.MEMBER
+    return None
 
 
 def get_actor_user(db: Session, token: dict) -> User:
@@ -166,9 +188,10 @@ def issue_impersonation_token(
     actor: User,
     actor_platform_member: PlatformTeamMember,
     target: User,
+    target_app_role: UserAppRole | None,
     reason: str,
 ) -> str:
-    role_val = target.role.value if target.role else None
+    role_val = target_app_role.value if target_app_role else None
     return issue_token(
         str(target.public_id),
         target.email,

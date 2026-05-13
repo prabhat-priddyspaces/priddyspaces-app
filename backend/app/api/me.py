@@ -18,6 +18,7 @@ from app.services.platform_auth import (
     get_actor_user,
     get_effective_user,
     get_platform_member_for_token,
+    infer_app_role,
     is_impersonating,
 )
 
@@ -32,7 +33,7 @@ def get_me(
     actor = get_actor_user(db, token)
     platform_member = get_platform_member_for_token(db, token)
     impersonating = is_impersonating(token)
-    app_role = user.role
+    app_role = infer_app_role(db, user)
     platform_role = platform_member.role if platform_member else None
     has_org = db.query(Organization).filter(Organization.owner_id == user.id).first() is not None
     return MeOut(
@@ -42,7 +43,7 @@ def get_me(
         last_name=user.last_name,
         phone=user.phone,
         company_name=user.company_name,
-        role=user.role.value if user.role else None,
+            role=app_role.value if app_role else None,
         app_role=app_role,
         platform_role=platform_role,
         has_organization=has_org,
@@ -129,7 +130,7 @@ def update_me(
     actor = get_actor_user(db, token)
     platform_member = get_platform_member_for_token(db, token)
     impersonating = is_impersonating(token)
-    app_role = user.role
+    app_role = infer_app_role(db, user)
     platform_role = platform_member.role if platform_member else None
     has_org = db.query(Organization).filter(Organization.owner_id == user.id).first() is not None
     return MeOut(
@@ -139,7 +140,7 @@ def update_me(
         last_name=user.last_name,
         phone=user.phone,
         company_name=user.company_name,
-        role=user.role.value if user.role else None,
+            role=app_role.value if app_role else None,
         app_role=app_role,
         platform_role=platform_role,
         has_organization=has_org,
