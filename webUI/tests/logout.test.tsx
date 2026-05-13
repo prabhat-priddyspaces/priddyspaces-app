@@ -68,7 +68,7 @@ describe("logout flows", () => {
     );
     await waitFor(() => {
       expect(document.body).toHaveTextContent("Sign in");
-      expect(document.body).toHaveTextContent("Join Now");
+      expect(document.body).toHaveTextContent("Get started");
     });
   });
 

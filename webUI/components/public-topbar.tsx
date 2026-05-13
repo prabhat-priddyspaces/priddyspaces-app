@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Logo } from "@/components/shell/logo";
+import { Button } from "@/components/ui/button";
 import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { apiFetch } from "@/lib/api";
 import { clearAccessToken, getAccessToken } from "@/lib/auth";
@@ -13,7 +15,11 @@ type AuthState =
   | { status: "guest"; me: null }
   | { status: "user"; me: MeResponse };
 
-export function PublicTopbar({ subtitle = "Public Marketplace" }: { subtitle?: string }) {
+export function PublicTopbar({
+  subtitle = "Public Marketplace",
+}: {
+  subtitle?: string;
+}) {
   const [auth, setAuth] = useState<AuthState>({ status: "unknown", me: null });
   const appSignOut = useAppSignOut();
 
@@ -39,42 +45,57 @@ export function PublicTopbar({ subtitle = "Public Marketplace" }: { subtitle?: s
   }
 
   return (
-    <div className="border-b border-slate-200/70 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-5">
-        <Link href="/spaces" className="block">
-          <div className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">Priddyspaces</div>
-          <div className="mt-1 text-lg font-semibold text-slate-900">{subtitle}</div>
+    <div className="border-b border-line bg-bg-elev/90 backdrop-blur sticky top-0 z-30">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-4">
+        <Link
+          href="/spaces"
+          className="flex items-center gap-3"
+        >
+          <Logo size={32} />
+          <div>
+            <div className="text-[15px] font-semibold tracking-[-0.01em] text-text">
+              Priddyspaces
+            </div>
+            <div className="text-[11px] text-text-3 -mt-0.5">{subtitle}</div>
+          </div>
         </Link>
-        <div className="flex items-center gap-3">
+        <nav className="hidden md:flex items-center gap-6 text-[13px] text-text-2">
+          <Link href="/spaces" className="hover:text-text">
+            Coworking
+          </Link>
+          <Link href="/meeting-rooms" className="hover:text-text">
+            Meeting rooms
+          </Link>
+          <Link href="/private-offices" className="hover:text-text">
+            Private offices
+          </Link>
+          <Link href="/locations" className="hover:text-text">
+            Locations
+          </Link>
+        </nav>
+        <div className="flex items-center gap-2">
           {auth.status === "user" ? (
             <>
-              <Link
-                href={getDashboardHref(auth.me)}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
-              >
-                Dashboard
+              <Link href={getDashboardHref(auth.me)}>
+                <Button variant="default" size="default">
+                  Dashboard
+                </Button>
               </Link>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-              >
+              <Button variant="primary" size="default" onClick={handleSignOut}>
                 Sign out
-              </button>
+              </Button>
             </>
           ) : auth.status === "guest" ? (
             <>
-              <Link
-                href="/sign-in"
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
-              >
-                Sign in
+              <Link href="/sign-in">
+                <Button variant="default" size="default">
+                  Sign in
+                </Button>
               </Link>
-              <Link
-                href="/sign-up"
-                className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-              >
-                Join Now
+              <Link href="/sign-up">
+                <Button variant="primary" size="default">
+                  Get started
+                </Button>
               </Link>
             </>
           ) : null}
