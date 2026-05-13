@@ -17,7 +17,7 @@ from app.services.authz import accessible_location_ids, require_location_roles
 from app.services.availability import booking_overlaps, subscription_overlaps
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
-from app.services.notifications import send_email
+from app.services.notifications import send_booking_cancelled_email
 from app.models.user import User
 from app.services.booking_payments import refund_booking_payment
 from app.services.cancellation_refunds import refund_percent_from_snapshot
@@ -245,9 +245,7 @@ def cancel_booking(
         db.add(req)
     db.commit()
     db.refresh(booking)
-    member = db.query(User).filter(User.id == booking.user_id).first()
-    if member:
-        send_email(member.email, "Booking canceled", f"Booking {booking.public_id} has been canceled.")
+    send_booking_cancelled_email(db, booking, req, space, location)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -394,9 +392,7 @@ def refund_booking(
         db.add(req)
     db.commit()
     db.refresh(booking)
-    member = db.query(User).filter(User.id == booking.user_id).first()
-    if member:
-        send_email(member.email, "Booking refunded", f"Booking {booking.public_id} refund initiated.")
+    send_booking_cancelled_email(db, booking, req, space, location)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,

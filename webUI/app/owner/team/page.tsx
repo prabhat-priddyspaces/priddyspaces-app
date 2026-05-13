@@ -21,6 +21,7 @@ interface Member {
   user_email: string;
   role: string;
   can_override_pricing: boolean;
+  receives_new_booking_email: boolean;
   location_public_ids: string[];
 }
 
@@ -41,6 +42,7 @@ export default function OwnerTeamPage() {
     email: "",
     role: "staff",
     can_override_pricing: false,
+    receives_new_booking_email: false,
     location_public_ids: [] as string[],
   });
 
@@ -102,18 +104,52 @@ export default function OwnerTeamPage() {
             email: form.email,
             role: form.role,
             can_override_pricing: form.can_override_pricing,
+            receives_new_booking_email: form.receives_new_booking_email,
             location_public_ids: form.role === "owner" ? [] : form.location_public_ids,
           }),
         },
         token
       );
       setMessage("Team member added");
-      setForm({ email: "", role: "staff", can_override_pricing: false, location_public_ids: [] });
+      setForm({
+        email: "",
+        role: "staff",
+        can_override_pricing: false,
+        receives_new_booking_email: false,
+        location_public_ids: [],
+      });
       await loadMembers();
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : "Failed to add member");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleNewBookingEmail(member: Member) {
+    if (!orgId) return;
+    setMessage("");
+    const nextValue = !member.receives_new_booking_email;
+    setMembers((current) =>
+      current.map((item) =>
+        item.public_id === member.public_id
+          ? { ...item, receives_new_booking_email: nextValue }
+          : item
+      )
+    );
+    try {
+      const token = getAccessToken() ?? undefined;
+      await apiFetch<Member>(
+        `/api/orgs/${orgId}/members/${member.public_id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ receives_new_booking_email: nextValue }),
+        },
+        token
+      );
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : "Failed to update notification preference");
+      await loadMembers();
     }
   }
 
@@ -131,6 +167,8 @@ export default function OwnerTeamPage() {
     locations.forEach((location) => map.set(location.public_id, location.name));
     return map;
   }, [locations]);
+
+  const hasBookingEmailRecipient = members.some((member) => member.receives_new_booking_email);
 
   return (
     <AppShell>
@@ -179,6 +217,8 @@ export default function OwnerTeamPage() {
                 setForm((current) => ({
                   ...current,
                   role: e.target.value,
+                  receives_new_booking_email:
+                    e.target.value === "owner" || e.target.value === "admin",
                   location_public_ids: e.target.value === "owner" ? [] : current.location_public_ids,
                 }))
               }
@@ -199,6 +239,19 @@ export default function OwnerTeamPage() {
               {saving ? "Adding..." : "Add"}
             </Button>
           </div>
+          <label className="flex items-center gap-2 text-sm text-textPrimary">
+            <input
+              type="checkbox"
+              checked={form.receives_new_booking_email}
+              onChange={(e) =>
+                setForm((current) => ({
+                  ...current,
+                  receives_new_booking_email: e.target.checked,
+                }))
+              }
+            />
+            <span>New booking emails</span>
+          </label>
           {form.role !== "owner" ? (
             <div className="grid gap-2">
               <div className="text-xs text-textMuted">Assigned locations</div>
@@ -229,11 +282,28 @@ export default function OwnerTeamPage() {
             <div className="text-sm text-textMuted">No team members yet.</div>
           ) : (
             <div className="grid gap-3">
+              {!hasBookingEmailRecipient ? (
+                <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+                  No team members are selected to receive new booking emails.
+                </div>
+              ) : null}
               {members.map((member) => (
                 <div key={member.public_id} className="rounded-md border border-border p-3">
-                  <div className="text-sm font-semibold text-textPrimary">{member.user_email}</div>
-                  <div className="text-xs text-textMuted">
-                    {member.role} • {member.user_public_id}
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-textPrimary">{member.user_email}</div>
+                      <div className="text-xs text-textMuted">
+                        {member.role} • {member.user_public_id}
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-textPrimary">
+                      <input
+                        type="checkbox"
+                        checked={member.receives_new_booking_email}
+                        onChange={() => toggleNewBookingEmail(member)}
+                      />
+                      <span>New booking emails</span>
+                    </label>
                   </div>
                   <div className="text-xs text-textMuted">
                     Pricing override: {member.can_override_pricing ? "Yes" : "No"}

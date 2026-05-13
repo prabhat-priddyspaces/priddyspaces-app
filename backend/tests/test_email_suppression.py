@@ -68,6 +68,29 @@ def test_send_email_works_without_db_session():
     mock_post.assert_called_once()
 
 
+def test_send_email_includes_html_and_attachments():
+    attachment = {
+        "content": "Qk9EWQ==",
+        "type": "text/calendar",
+        "filename": "booking.ics",
+        "disposition": "attachment",
+    }
+    with _patched_post() as mock_post:
+        send_email(
+            to_email="calendar@example.com",
+            subject="Calendar",
+            body="Plain",
+            html_body="<p>HTML</p>",
+            attachments=[attachment],
+        )
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["content"] == [
+        {"type": "text/plain", "value": "Plain"},
+        {"type": "text/html", "value": "<p>HTML</p>"},
+    ]
+    assert payload["attachments"] == [attachment]
+
+
 def test_send_email_skipped_when_group_unsubscribed(db_session):
     _make_user(db_session, "groups@example.com")
     db_session.add(

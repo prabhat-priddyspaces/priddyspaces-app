@@ -4,13 +4,16 @@ from app.models.enums import UserAppRole, UserRole, SpaceType, AvailabilityStatu
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
+from app.models.location_admin import LocationAdmin
 from app.models.location import Location
 from app.models.space import Space
 from app.models.booking import Booking
+from app.models.audit_log import AuditLog
 from app.models.booking_series import BookingSeries
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.services.payment_providers import ChargeResult
+from app.api.booking_requests import _owner_notification_emails_for_space
 
 
 def _seed_owner_space(db):
@@ -35,7 +38,8 @@ def _seed_owner_space(db):
         tenant_id=org.id,
         user_id=owner.id,
         role=UserRole.OWNER,
-        can_override_pricing=True
+        can_override_pricing=True,
+        receives_new_booking_email=True,
     )
     db.add(member)
 
@@ -163,6 +167,85 @@ def test_booking_request_create_and_list(db_session, client_factory):
     assert len(owner_list.json()) == 1
 
 
+def test_owner_notification_recipients_require_opt_in_and_location_access(db_session):
+    owner, space = _seed_owner_space(db_session)
+    location = db_session.query(Location).filter(Location.id == space.location_id).first()
+    org_id = location.organization_id
+
+    admin = User(
+        email="admin-recipient@example.com",
+        auth_subject="sub-admin-recipient",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+        is_active=True,
+    )
+    staff = User(
+        email="staff-recipient@example.com",
+        auth_subject="sub-staff-recipient",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+        is_active=True,
+    )
+    opted_out = User(
+        email="opted-out@example.com",
+        auth_subject="sub-opted-out",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+        is_active=True,
+    )
+    no_access = User(
+        email="no-access@example.com",
+        auth_subject="sub-no-access",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add_all([admin, staff, opted_out, no_access])
+    db_session.commit()
+
+    db_session.add_all(
+        [
+            OrganizationMember(
+                organization_id=org_id,
+                tenant_id=org_id,
+                user_id=admin.id,
+                role=UserRole.ADMIN,
+                receives_new_booking_email=True,
+            ),
+            OrganizationMember(
+                organization_id=org_id,
+                tenant_id=org_id,
+                user_id=staff.id,
+                role=UserRole.STAFF,
+                receives_new_booking_email=True,
+            ),
+            OrganizationMember(
+                organization_id=org_id,
+                tenant_id=org_id,
+                user_id=opted_out.id,
+                role=UserRole.ADMIN,
+                receives_new_booking_email=False,
+            ),
+            OrganizationMember(
+                organization_id=org_id,
+                tenant_id=org_id,
+                user_id=no_access.id,
+                role=UserRole.STAFF,
+                receives_new_booking_email=True,
+            ),
+            LocationAdmin(location_id=location.id, tenant_id=org_id, user_id=admin.id),
+            LocationAdmin(location_id=location.id, tenant_id=org_id, user_id=staff.id),
+        ]
+    )
+    db_session.commit()
+
+    assert _owner_notification_emails_for_space(db_session, space) == [
+        "admin-recipient@example.com",
+        "owner@example.com",
+        "staff-recipient@example.com",
+    ]
+
+
 def test_booking_request_approve_creates_booking(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     owner, space = _seed_owner_space(db_session)
@@ -211,6 +294,75 @@ def test_booking_request_approve_creates_booking(db_session, client_factory, mon
     assert booking.status == BookingStatus.CONFIRMED
 
 
+def test_booking_request_approval_sends_one_calendar_email_and_audits_actor(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
+    sent: list[dict] = []
+
+    def fake_send_email(to_email, subject, body, **kwargs):
+        sent.append(
+            {
+                "to_email": to_email,
+                "subject": subject,
+                "body": body,
+                "attachments": kwargs.get("attachments") or [],
+            }
+        )
+
+    monkeypatch.setattr("app.services.notifications.send_email", fake_send_email)
+    owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="calendar-member@example.com",
+        auth_subject="sub-calendar-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=4))
+    assert create.status_code == 200
+    req_id = create.json()["public_id"]
+    sent.clear()
+
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    approve = owner_client.post(f"/api/booking-requests/{req_id}/approve", json={"operator_notes": "ok"})
+    assert approve.status_code == 200
+
+    confirmed = [email for email in sent if email["subject"] == "Booking confirmed"]
+    assert len(confirmed) == 1
+    assert confirmed[0]["to_email"] == member.email
+    assert len(confirmed[0]["attachments"]) == 1
+    attachment = confirmed[0]["attachments"][0]
+    assert attachment["filename"].endswith(".ics")
+    assert "text/calendar" in attachment["type"]
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.entity_public_id == req_id)
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.action == "booking_request_approved"
+    assert audit.actor_id == owner.id
+    assert audit.context["actor_email"] == owner.email
+
+
 def test_booking_request_reject(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
     member = User(
@@ -249,6 +401,59 @@ def test_booking_request_reject(db_session, client_factory):
     reject = owner_client.post(f"/api/booking-requests/{req_id}/reject", json={"operator_notes": "no"})
     assert reject.status_code == 200
     assert reject.json()["status"] == BookingRequestStatus.REJECTED.value
+
+
+def test_booking_request_rejection_sends_update_without_calendar_attachment(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    sent: list[dict] = []
+
+    def fake_send_email(to_email, subject, body, **kwargs):
+        sent.append(
+            {
+                "to_email": to_email,
+                "subject": subject,
+                "attachments": kwargs.get("attachments") or [],
+            }
+        )
+
+    monkeypatch.setattr("app.services.notifications.send_email", fake_send_email)
+    owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="reject-member@example.com",
+        auth_subject="sub-reject-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=5))
+    assert create.status_code == 200
+    req_id = create.json()["public_id"]
+    sent.clear()
+
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    reject = owner_client.post(f"/api/booking-requests/{req_id}/reject", json={"operator_notes": "no"})
+    assert reject.status_code == 200
+
+    updates = [email for email in sent if email["subject"] == "Booking request update"]
+    assert len(updates) == 1
+    assert updates[0]["to_email"] == member.email
+    assert updates[0]["attachments"] == []
 
 
 def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypatch):

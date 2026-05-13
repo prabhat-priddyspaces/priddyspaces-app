@@ -12,6 +12,7 @@ from app.schemas.organization_member import (
     OrganizationMemberCreate,
     OrganizationMemberDetailOut,
     OrganizationMemberOut,
+    OrganizationMemberUpdate,
 )
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.auth_user import get_or_create_user
@@ -20,6 +21,10 @@ from app.services.lookups import get_org_by_public_id
 from app.services.notifications import send_email
 
 router = APIRouter()
+
+
+def _default_receives_new_booking_email(role: UserRole) -> bool:
+    return role in {UserRole.OWNER, UserRole.ADMIN}
 
 
 def _resolve_member_user(db: Session, payload: OrganizationMemberCreate) -> User:
@@ -111,6 +116,8 @@ def add_member(
         member = existing
         member.role = payload.role
         member.can_override_pricing = payload.can_override_pricing
+        if payload.receives_new_booking_email is not None:
+            member.receives_new_booking_email = payload.receives_new_booking_email
     else:
         member = OrganizationMember(
             organization_id=org.id,
@@ -118,6 +125,11 @@ def add_member(
             user_id=user.id,
             role=payload.role,
             can_override_pricing=payload.can_override_pricing,
+            receives_new_booking_email=(
+                payload.receives_new_booking_email
+                if payload.receives_new_booking_email is not None
+                else _default_receives_new_booking_email(payload.role)
+            ),
         )
         db.add(member)
 
@@ -145,6 +157,7 @@ def add_member(
         user_id=member.user_id,
         role=member.role,
         can_override_pricing=member.can_override_pricing,
+        receives_new_booking_email=member.receives_new_booking_email,
         location_public_ids=location_public_ids,
     )
 
@@ -188,7 +201,65 @@ def list_members(
                 user_email=user.email,
                 role=member.role,
                 can_override_pricing=member.can_override_pricing,
+                receives_new_booking_email=member.receives_new_booking_email,
                 location_public_ids=[public_id for public_id, in assigned_locations],
             )
         )
     return results
+
+
+@router.patch("/orgs/{org_public_id}/members/{member_public_id}", response_model=OrganizationMemberDetailOut)
+def update_member(
+    org_public_id: str,
+    member_public_id: str,
+    payload: OrganizationMemberUpdate,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    org = get_org_by_public_id(db, org_public_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    requester = get_or_create_user(db, token)
+    requester_member = get_org_member(db, org.id, requester.id)
+    require_owner_or_admin(requester_member)
+
+    row = (
+        db.query(OrganizationMember, User)
+        .join(User, User.id == OrganizationMember.user_id)
+        .filter(
+            OrganizationMember.organization_id == org.id,
+            OrganizationMember.public_id == member_public_id,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Team member not found")
+
+    member, user = row
+    if payload.receives_new_booking_email is not None:
+        member.receives_new_booking_email = payload.receives_new_booking_email
+
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+
+    assigned_locations = (
+        db.query(Location.public_id)
+        .join(LocationAdmin, LocationAdmin.location_id == Location.id)
+        .filter(
+            LocationAdmin.user_id == user.id,
+            LocationAdmin.tenant_id == org.id,
+        )
+        .all()
+    )
+    return OrganizationMemberDetailOut(
+        public_id=member.public_id,
+        user_id=member.user_id,
+        user_public_id=user.public_id,
+        user_email=user.email,
+        role=member.role,
+        can_override_pricing=member.can_override_pricing,
+        receives_new_booking_email=member.receives_new_booking_email,
+        location_public_ids=[public_id for public_id, in assigned_locations],
+    )
