@@ -35,6 +35,7 @@ class GuestBookingRequestCreate(BaseModel):
     guest_phone: str | None = Field(default=None, max_length=64)
     guest_company_name: str | None = Field(default=None, max_length=255)
     guest_notes: str | None = Field(default=None, max_length=1024)
+    redemption_lock_public_id: str | None = None
 
 
 class GuestBookingRequestOut(BaseModel):

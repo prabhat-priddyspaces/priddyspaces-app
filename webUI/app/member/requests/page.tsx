@@ -22,6 +22,11 @@ interface BookingRequest {
   cancellation_deadline_at: string | null;
 }
 
+function memberRequestDetailHref(publicId: string) {
+  const params = new URLSearchParams({ id: publicId });
+  return `/member/requests/_?${params.toString()}`;
+}
+
 export default function MemberRequestsPage() {
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +132,7 @@ export default function MemberRequestsPage() {
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Link href={`/member/requests/${b.public_id}`}>
+                    <Link href={memberRequestDetailHref(b.public_id)}>
                       <Button size="sm" variant="secondary">
                         View details
                       </Button>

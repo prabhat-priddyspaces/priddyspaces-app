@@ -195,7 +195,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
 
   await page.getByRole("link", { name: "View details" }).click();
 
-  await expect(page).toHaveURL(/\/member\/requests\/req_1$/);
+  await expect(page).toHaveURL(/\/member\/requests\/_\?id=req_1$/);
   await expect(page.getByText("Request details")).toBeVisible();
   await expect(page.getByText("Payment: pay_req_1")).toBeVisible();
   await expect(page.getByText("Invoice: inv_req_1")).toBeVisible();

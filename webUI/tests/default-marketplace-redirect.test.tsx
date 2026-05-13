@@ -66,6 +66,12 @@ describe("DefaultMarketplaceRedirect", () => {
     expect(defaultMarketplaceFallbackHref("/member/requests", "")).toBeNull();
   });
 
+  it("recovers member request detail URLs for static export", () => {
+    expect(defaultMarketplaceFallbackHref("/member/requests/req_1", "?tab=payment")).toBe(
+      "/member/requests/_.html?tab=payment&id=req_1",
+    );
+  });
+
   it("recovers legacy owner space media URLs for static export", () => {
     expect(
       defaultMarketplaceFallbackHref(
