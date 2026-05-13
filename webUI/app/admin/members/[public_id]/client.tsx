@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -79,22 +79,25 @@ interface MemberDetail {
 
 export function AdminMemberDetailClient() {
   const params = useParams<{ public_id: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const memberPublicId = searchParams.get("id") || (params.public_id === "_" ? "" : params.public_id);
   const [data, setData] = useState<MemberDetail | null>(null);
   const [orgActivity, setOrgActivity] = useState<OrgActivity[]>([]);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    if (!memberPublicId) return;
     const token = getAccessToken() ?? undefined;
     try {
       const [result, orgs] = await Promise.all([
         apiFetch<MemberDetail>(
-          `/api/admin/members/${params.public_id}`,
+          `/api/admin/members/${memberPublicId}`,
           { method: "GET" },
           token
         ),
         apiFetch<OrgActivity[]>(
-          `/api/admin/members/${params.public_id}/orgs`,
+          `/api/admin/members/${memberPublicId}/orgs`,
           { method: "GET" },
           token
         ).catch(() => [] as OrgActivity[]),
@@ -104,13 +107,14 @@ export function AdminMemberDetailClient() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load member");
     }
-  }, [params.public_id]);
+  }, [memberPublicId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   async function impersonate() {
+    if (!memberPublicId) return;
     const token = getAccessToken() ?? undefined;
     try {
       const response = await apiFetch<{ access_token: string; default_route: string }>(
@@ -118,7 +122,7 @@ export function AdminMemberDetailClient() {
         {
           method: "POST",
           body: JSON.stringify({
-            user_public_id: params.public_id,
+            user_public_id: memberPublicId,
             reason: "Member support review",
           }),
         },

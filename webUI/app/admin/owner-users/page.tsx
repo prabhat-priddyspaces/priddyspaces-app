@@ -84,7 +84,7 @@ export default function AdminOwnerUsersPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <Link
-                    href={`/admin/owner-users/${row.user_public_id}`}
+                    href={`/admin/owner-users/_?id=${encodeURIComponent(row.user_public_id)}`}
                     className="font-semibold text-textPrimary hover:underline"
                   >
                     {row.name}
@@ -96,7 +96,7 @@ export default function AdminOwnerUsersPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/admin/owner-users/${row.user_public_id}`}
+                    href={`/admin/owner-users/_?id=${encodeURIComponent(row.user_public_id)}`}
                     className="rounded-sm border border-border px-3 py-2 text-sm text-textSecondary hover:bg-surface2"
                   >
                     View details
