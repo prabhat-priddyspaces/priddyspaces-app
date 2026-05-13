@@ -59,20 +59,6 @@ export function PublicTopbar({
             <div className="text-[11px] text-text-3 -mt-0.5">{subtitle}</div>
           </div>
         </Link>
-        <nav className="hidden md:flex items-center gap-6 text-[13px] text-text-2">
-          <Link href="/spaces" className="hover:text-text">
-            Coworking
-          </Link>
-          <Link href="/meeting-rooms" className="hover:text-text">
-            Meeting rooms
-          </Link>
-          <Link href="/private-offices" className="hover:text-text">
-            Private offices
-          </Link>
-          <Link href="/locations" className="hover:text-text">
-            Locations
-          </Link>
-        </nav>
         <div className="flex items-center gap-2">
           {auth.status === "user" ? (
             <>

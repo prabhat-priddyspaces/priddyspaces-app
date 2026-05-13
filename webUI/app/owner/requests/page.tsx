@@ -9,7 +9,6 @@ import {
   ChevronRight,
   FileText,
   Mail,
-  MoreHorizontal,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -428,12 +427,7 @@ export default function OwnerRequestsPage() {
                       <Button
                         size="sm"
                         variant="primary"
-                        onClick={() =>
-                          setPendingDecision({
-                            publicId: request.public_id,
-                            action: "approve",
-                          })
-                        }
+                        onClick={() => updateStatus(request.public_id, "approve")}
                         disabled={updating === request.public_id}
                         className="bg-success border-success hover:bg-success/90 hover:border-success/90"
                       >
@@ -443,16 +437,15 @@ export default function OwnerRequestsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        aria-label="More"
                         onClick={() =>
                           setPendingDecision({
                             publicId: request.public_id,
                             action: "reject",
                           })
                         }
-                        className="w-7 p-0 justify-center"
+                        className="w-auto px-2.5"
                       >
-                        <MoreHorizontal size={14} />
+                        Reject
                       </Button>
                     </>
                   )}
@@ -472,30 +465,28 @@ export default function OwnerRequestsPage() {
                     </Button>
                   )}
                 </div>
-                {/* Operator notes (collapsed; only show editor for actionable rows) */}
-                {(isPending || isFailed) && (
-                  <div className="md:col-span-6 mt-2 grid gap-1.5">
-                    <label
-                      className="text-[11px] text-text-3"
-                      htmlFor={`note-${request.public_id}`}
-                    >
-                      Operator notes
-                    </label>
-                    <textarea
-                      id={`note-${request.public_id}`}
-                      value={notes[request.public_id] || ""}
-                      onChange={(e) =>
-                        setNotes((current) => ({
-                          ...current,
-                          [request.public_id]: e.target.value,
-                        }))
-                      }
-                      rows={2}
-                      className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring"
-                      placeholder="Add notes for the member or your internal team"
-                    />
-                  </div>
-                )}
+                <div className="md:col-span-6 mt-2 grid gap-1.5">
+                  <label
+                    className="text-[11px] text-text-3"
+                    htmlFor={`note-${request.public_id}`}
+                  >
+                    Operator notes
+                  </label>
+                  <textarea
+                    id={`note-${request.public_id}`}
+                    value={notes[request.public_id] || ""}
+                    onChange={(e) =>
+                      setNotes((current) => ({
+                        ...current,
+                        [request.public_id]: e.target.value,
+                      }))
+                    }
+                    rows={2}
+                    disabled={!isPending && !isFailed}
+                    className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring disabled:opacity-60 disabled:cursor-not-allowed"
+                    placeholder="Add notes for the member or your internal team"
+                  />
+                </div>
                 {isFailed && request.failure_reason && (
                   <div className="md:col-span-6 mt-2 rounded-xl border border-danger/30 bg-danger-soft p-3 text-[12px] text-danger">
                     <div className="font-semibold">Payment failed</div>
