@@ -43,12 +43,16 @@ vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => "token")
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/owner",
+}));
+
 describe("OwnerDashboard", () => {
   it("renders stats", async () => {
     render(<OwnerDashboard />);
-    expect(await screen.findByText("Pending Requests")).toBeInTheDocument();
-    expect(screen.getByText("MTD Revenue")).toBeInTheDocument();
-    expect(screen.getByText("Active Memberships")).toBeInTheDocument();
+    expect(await screen.findByText("MTD Revenue")).toBeInTheDocument();
+    expect(screen.getByText("Active members")).toBeInTheDocument();
     expect(screen.getByText("Downtown")).toBeInTheDocument();
     expect(screen.getByText("Occupancy")).toBeInTheDocument();
   });

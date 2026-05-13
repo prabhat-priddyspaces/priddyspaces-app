@@ -99,30 +99,25 @@ export default function OwnerCalendarPage() {
   }, [load]);
 
   return (
-    <AppShell>
-      <div className="grid gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Calendar</h2>
-          <p className="text-textSecondary">
-            See bookings, requests, and active memberships across your locations.
-          </p>
-        </div>
-        {error ? <div className="text-sm text-error">{error}</div> : null}
-        <CalendarBoard
-          view={view}
-          setView={setView}
-          anchor={anchor}
-          setAnchor={setAnchor}
-          data={data}
-          loading={loading}
-          filters={filters}
-          setFilters={setFilters}
-          filterLocations={locations}
-          viewer="owner"
-          memberHref={(id) => `/owner/members/${id}`}
-          onChanged={load}
-        />
-      </div>
+    <AppShell title="Calendar" breadcrumb={["Owner", "Operations"]}>
+      <p className="text-[13px] text-text-3 mb-4">
+        See bookings, requests, and active memberships across your locations.
+      </p>
+      {error ? <div className="text-[13px] text-danger mb-4">{error}</div> : null}
+      <CalendarBoard
+        view={view}
+        setView={setView}
+        anchor={anchor}
+        setAnchor={setAnchor}
+        data={data}
+        loading={loading}
+        filters={filters}
+        setFilters={setFilters}
+        filterLocations={locations}
+        viewer="owner"
+        memberHref={(id) => `/owner/members/${id}`}
+        onChanged={load}
+      />
     </AppShell>
   );
 }

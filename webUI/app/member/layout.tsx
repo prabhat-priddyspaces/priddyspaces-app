@@ -4,8 +4,12 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 
-import { MemberSideNav } from "@/components/member-side-nav";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { Button } from "@/components/ui/button";
+import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { Topbar } from "@/components/shell/topbar";
+import { WorkspaceShell } from "@/components/shell/workspace-shell";
 import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { getDefaultRoute, type MeResponse } from "@/lib/me";
 import { useMe } from "@/hooks/useMe";
@@ -30,29 +34,43 @@ function Shell({
   onSignOut?: () => void;
   children: React.ReactNode;
 }) {
+  const profile = {
+    name:
+      [me.first_name, me.last_name].filter(Boolean).join(" ") ||
+      me.email ||
+      "Member",
+    email: me.email || "",
+    workspace: "Member",
+  };
+  const topbar = (
+    <Topbar
+      title="Workspace"
+      actions={
+        <>
+          <ThemeToggle />
+          {onSignOut ? (
+            <Button variant="ghost" size="sm" onClick={onSignOut}>
+              Logout
+            </Button>
+          ) : null}
+        </>
+      }
+    />
+  );
   return (
-    <div className="min-h-screen bg-background">
-      <ImpersonationBanner impersonation={me?.impersonation ?? EMPTY_IMPERSONATION} />
-      <div className="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
-        <div>
-          <div className="text-sm text-textMuted">Priddyspaces</div>
-          <h1 className="text-lg font-semibold text-textPrimary">Member Workspace</h1>
-        </div>
-        {onSignOut ? (
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="text-sm text-textSecondary hover:underline"
-          >
-            Logout
-          </button>
-        ) : null}
-      </div>
-      <div className="mx-auto flex max-w-6xl gap-6 px-6 py-8">
-        <MemberSideNav />
-        <div className="flex-1">{children}</div>
-      </div>
-    </div>
+    <WorkspaceShell
+      sidebar="customer"
+      sidebarProfile={profile}
+      topbar={topbar}
+      banner={
+        <ImpersonationBanner
+          impersonation={me?.impersonation ?? EMPTY_IMPERSONATION}
+        />
+      }
+    >
+      {children}
+      <MobileBottomNav variant="customer" />
+    </WorkspaceShell>
   );
 }
 
@@ -82,7 +100,7 @@ function ClerkMemberLayout({ children }: { children: React.ReactNode }) {
 
   if (loading || !me) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
+      <div className="flex min-h-screen items-center justify-center text-sm text-text-3">
         Loading...
       </div>
     );
@@ -100,7 +118,7 @@ function BypassMemberLayout({ children }: { children: React.ReactNode }) {
 
   if (loading || !me) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
+      <div className="flex min-h-screen items-center justify-center text-sm text-text-3">
         Loading...
       </div>
     );

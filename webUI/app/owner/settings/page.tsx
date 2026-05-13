@@ -527,16 +527,13 @@ export default function OwnerSettingsPage() {
   }, [selectedOrg]);
 
   return (
-    <AppShell>
+    <AppShell title="Settings" breadcrumb={["Owner", "Platform"]}>
       <div className="grid gap-6">
-        <div>
-          <h2 className="text-2xl font-semibold">Settings</h2>
-          <p className="text-textSecondary">
-            Pricing, promotions, tax, flags, cancellation rules, plans, and payouts.
-          </p>
-        </div>
+        <p className="text-[13px] text-text-3 max-w-xl">
+          Pricing, promotions, tax, flags, cancellation rules, plans, and payouts.
+        </p>
 
-        {message ? <div className="text-sm text-textMuted">{message}</div> : null}
+        {message ? <div className="text-[13px] text-text-3">{message}</div> : null}
 
         <Card className="grid gap-4 p-4">
           <div className="grid gap-4 md:grid-cols-3">

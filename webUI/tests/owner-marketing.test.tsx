@@ -11,6 +11,7 @@ vi.mock("../lib/auth", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/owner/marketing",
 }));
 
 vi.mock("../lib/api", () => ({

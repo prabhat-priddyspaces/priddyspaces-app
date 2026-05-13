@@ -1,47 +1,92 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode } from "react";
+import Link from "next/link";
 
-import { apiFetch } from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
+import { useMe } from "@/hooks/useMe";
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { SideNav } from "@/components/side-nav";
-import { Topbar } from "@/components/topbar";
-import type { MeResponse } from "@/lib/me";
+import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { Topbar } from "@/components/shell/topbar";
+import { WorkspaceShell } from "@/components/shell/workspace-shell";
 
-export function AppShell({ children }: { children: ReactNode }) {
-  const [me, setMe] = useState<MeResponse | null>(null);
+const EMPTY_IMPERSONATION = {
+  is_impersonating: false,
+  actor_public_id: null,
+  actor_email: null,
+  actor_platform_role: null,
+  target_public_id: null,
+  target_email: null,
+  reason: null,
+};
 
-  useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      return;
-    }
-    apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
-      .then(setMe)
-      .catch(() => null);
-  }, []);
+export interface AppShellProps {
+  children: ReactNode;
+  title?: string;
+  breadcrumb?: string[];
+}
+
+export function AppShell({
+  children,
+  title = "Workspace",
+  breadcrumb,
+}: AppShellProps) {
+  const { me } = useMe();
+  const appSignOut = useAppSignOut();
+
+  const profile = me
+    ? {
+        name:
+          [me.first_name, me.last_name].filter(Boolean).join(" ") ||
+          me.email ||
+          "Owner",
+        email: me.email || "",
+        workspace: me.company_name || "Workspace",
+      }
+    : undefined;
+
+  const topbar = (
+    <Topbar
+      title={title}
+      breadcrumb={breadcrumb}
+      actions={
+        <>
+          {me?.platform_role ? (
+            <Link href="/admin">
+              <Button variant="ghost" size="sm">
+                Platform Console
+              </Button>
+            </Link>
+          ) : null}
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void appSignOut()}
+            aria-label="Sign out"
+          >
+            Logout
+          </Button>
+        </>
+      }
+    />
+  );
 
   return (
-    <div className="min-h-screen bg-background">
-      <ImpersonationBanner
-        impersonation={
-          me?.impersonation ?? {
-            is_impersonating: false,
-            actor_public_id: null,
-            actor_email: null,
-            actor_platform_role: null,
-            target_public_id: null,
-            target_email: null,
-            reason: null,
-          }
-        }
-      />
-      <Topbar me={me} />
-      <div className="mx-auto flex max-w-6xl gap-6 px-6 py-8">
-        <SideNav />
-        <div className="flex-1">{children}</div>
-      </div>
-    </div>
+    <WorkspaceShell
+      sidebar="owner"
+      sidebarProfile={profile}
+      topbar={topbar}
+      banner={
+        <ImpersonationBanner
+          impersonation={me?.impersonation ?? EMPTY_IMPERSONATION}
+        />
+      }
+    >
+      {children}
+      <MobileBottomNav variant="owner" />
+    </WorkspaceShell>
   );
 }
