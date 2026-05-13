@@ -59,8 +59,8 @@ def _seed(db) -> tuple[User, Space]:
         space_type=SpaceType.CONFERENCE_ROOM,
         capacity=4,
         availability_status=AvailabilityStatus.AVAILABLE,
-        price_hourly=3000,
-        price_daily=20000,
+        price_hourly=30,
+        price_daily=200,
     )
     db.add(space)
     db.commit()
@@ -189,7 +189,7 @@ def test_volume_discount_applied_in_booking_estimate(db_session, client_factory)
     resp = member_client.post("/api/booking-requests", json=payload)
     assert resp.status_code == 200
     body = resp.json()
-    # 4 hrs x $30 = $120 base, 10% off = $108. estimated_amount is dollars (cents // 100).
+    # 4 hrs x $30 = $120 base, 10% off = $108.
     assert body["base_amount_cents"] == 12000
     assert body["discount_percent"] == 10
     assert body["discount_amount_cents"] == -1200

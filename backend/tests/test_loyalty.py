@@ -66,8 +66,8 @@ def _seed(db, *, space_type=SpaceType.CONFERENCE_ROOM):
         space_type=space_type,
         capacity=4,
         availability_status=AvailabilityStatus.AVAILABLE,
-        price_daily=20000,
-        price_hourly=5000,
+        price_daily=200,
+        price_hourly=50,
     )
     db.add(space)
     db.commit()

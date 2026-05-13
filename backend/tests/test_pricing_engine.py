@@ -16,7 +16,7 @@ def _window(hours: float) -> tuple[datetime, datetime]:
 
 def test_one_hour_with_hourly_only_returns_hourly_total():
     start, end = _window(1)
-    result = estimate_booking_price(start, end, price_hourly=3000)
+    result = estimate_booking_price(start, end, price_hourly=30)
     assert isinstance(result, EstimateResult)
     assert result.base_cents == 3000
     assert result.units == 1.0
@@ -29,7 +29,7 @@ def test_hourly_total_caps_to_daily_when_exceeded():
     # 10 hours x $30/hr = $300, but day rate is $200. Should be capped to $200.
     start, end = _window(10)
     result = estimate_booking_price(
-        start, end, price_hourly=3000, price_daily=20000,
+        start, end, price_hourly=30, price_daily=200,
     )
     assert result.base_cents == 20000
     assert result.rate_basis == "capped_to_daily"
@@ -41,7 +41,7 @@ def test_full_day_uses_daily_rate():
     start, end = _window(2)
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000, price_daily=20000,
+        price_hourly=30, price_daily=200,
         full_day=True,
     )
     assert result.base_cents == 20000
@@ -52,8 +52,8 @@ def test_pricing_rule_override_wins_over_space_hourly():
     start, end = _window(2)
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000,
-        rate_type="hourly", rate_amount=4000,  # PricingRule says $40/hr
+        price_hourly=30,
+        rate_type="hourly", rate_amount=40,  # PricingRule says $40/hr
     )
     assert result.base_cents == 8000
     assert result.rate_basis == "rule_hourly"
@@ -65,10 +65,22 @@ def test_granularity_30_minute_charges_partial_hours():
     end = start + timedelta(minutes=90)
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000,
+        price_hourly=30,
         granularity_minutes=30,
     )
     assert result.base_cents == 4500
+    assert result.units == 1.5
+
+
+def test_decimal_hourly_price_rounds_to_cents():
+    start = datetime(2026, 5, 1, 9, 0, tzinfo=timezone.utc)
+    end = start + timedelta(minutes=90)
+    result = estimate_booking_price(
+        start, end,
+        price_hourly="19.99",
+        granularity_minutes=30,
+    )
+    assert result.base_cents == 2999
     assert result.units == 1.5
 
 
@@ -77,7 +89,7 @@ def test_granularity_60_minute_rounds_up_to_full_hour():
     end = start + timedelta(minutes=90)  # 1.5 hours
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000,
+        price_hourly=30,
         granularity_minutes=60,
     )
     # 60-min granularity rounds 90 min up to 2 hours.
@@ -91,7 +103,7 @@ def test_volume_discount_applies_to_hourly_path():
     discounts = [VolumeDiscount(min_hours=4.0, discount_percent=10)]
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000,
+        price_hourly=30,
         volume_discounts=discounts,
     )
     assert result.base_cents == 12000
@@ -109,7 +121,7 @@ def test_volume_discount_picks_best_eligible_tier():
     ]
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000,
+        price_hourly=30,
         volume_discounts=discounts,
     )
     assert result.discount_percent == 20
@@ -124,7 +136,7 @@ def test_volume_discount_skipped_when_capped_to_daily():
     discounts = [VolumeDiscount(min_hours=4.0, discount_percent=10)]
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000, price_daily=20000,
+        price_hourly=30, price_daily=200,
         volume_discounts=discounts,
     )
     assert result.rate_basis == "capped_to_daily"
@@ -137,7 +149,7 @@ def test_volume_discount_does_not_apply_to_full_day():
     discounts = [VolumeDiscount(min_hours=1.0, discount_percent=50)]
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000, price_daily=20000,
+        price_hourly=30, price_daily=200,
         full_day=True,
         volume_discounts=discounts,
     )
@@ -151,7 +163,7 @@ def test_explicit_hourly_without_hourly_price_refuses():
     start, end = _window(1)
     result = estimate_booking_price(
         start, end,
-        price_daily=20000,
+        price_daily=200,
         booking_mode="hourly",
     )
     assert result is None
@@ -160,7 +172,7 @@ def test_explicit_hourly_without_hourly_price_refuses():
 def test_legacy_call_with_only_daily_falls_through():
     # No booking_mode signal → preserves legacy behaviour for daily-only spaces.
     start, end = _window(1)
-    result = estimate_booking_price(start, end, price_daily=20000)
+    result = estimate_booking_price(start, end, price_daily=200)
     assert result.base_cents == 20000
     assert result.rate_basis == "daily"
 
@@ -170,7 +182,7 @@ def test_tax_applied_after_discount():
     discounts = [VolumeDiscount(min_hours=4.0, discount_percent=10)]
     result = estimate_booking_price(
         start, end,
-        price_hourly=3000,
+        price_hourly=30,
         volume_discounts=discounts,
         tax_rate_percent=10,
     )
@@ -181,11 +193,11 @@ def test_tax_applied_after_discount():
 
 def test_backwards_compat_shim_returns_int():
     start, end = _window(1)
-    total = estimate_booking_amount(start, end, None, None, price_hourly=3000)
+    total = estimate_booking_amount(start, end, None, None, price_hourly=30)
     assert total == 3000
 
 
 def test_zero_or_negative_duration_returns_none():
     start = datetime(2026, 5, 1, 9, 0, tzinfo=timezone.utc)
-    assert estimate_booking_price(start, start, price_hourly=3000) is None
-    assert estimate_booking_price(start, start - timedelta(minutes=5), price_hourly=3000) is None
+    assert estimate_booking_price(start, start, price_hourly=30) is None
+    assert estimate_booking_price(start, start - timedelta(minutes=5), price_hourly=30) is None

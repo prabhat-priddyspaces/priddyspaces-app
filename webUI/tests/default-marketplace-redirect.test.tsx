@@ -65,4 +65,19 @@ describe("DefaultMarketplaceRedirect", () => {
     expect(defaultMarketplaceFallbackHref("/admin/members", "")).toBeNull();
     expect(defaultMarketplaceFallbackHref("/member/requests", "")).toBeNull();
   });
+
+  it("recovers legacy owner space media URLs for static export", () => {
+    expect(
+      defaultMarketplaceFallbackHref(
+        "/owner/spaces/space_1/media",
+        "?locationId=location_1",
+      ),
+    ).toBe("/owner/spaces/media.html?locationId=location_1&spaceId=space_1");
+  });
+
+  it("recovers legacy owner space edit URLs for static export", () => {
+    expect(defaultMarketplaceFallbackHref("/owner/spaces/space_1/edit", "")).toBe(
+      "/owner/spaces/edit.html?spaceId=space_1",
+    );
+  });
 });

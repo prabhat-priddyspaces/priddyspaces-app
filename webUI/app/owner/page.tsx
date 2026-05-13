@@ -7,10 +7,11 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { moneyToNumber, type MoneyValue } from "@/lib/money";
 
 interface BookingRequest {
   status: string;
-  estimated_amount: number | null;
+  estimated_amount: MoneyValue | null;
 }
 
 interface Payment {
@@ -159,7 +160,7 @@ export default function OwnerDashboard() {
     const approvedRequests = requests.filter((request) => request.status === "approved").length;
     const openRequestValue = requests
       .filter((request) => request.status === "requested")
-      .reduce((sum, request) => sum + (request.estimated_amount || 0), 0);
+      .reduce((sum, request) => sum + (moneyToNumber(request.estimated_amount) ?? 0), 0);
     const monthRevenue = payments
       .filter((payment) => {
         const createdAt = new Date(payment.created_at);

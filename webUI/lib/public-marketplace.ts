@@ -1,4 +1,5 @@
 import type { PublicWorkingHour } from "@/lib/working-hours";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 
 export type PublicMarketplaceRoute = "spaces" | "private-offices" | "meeting-rooms";
 export type PublicMarketplaceApiCategory = "coworking" | "private_office" | "meeting_room";
@@ -32,9 +33,9 @@ export interface MarketplaceLocationSummary {
   location_amenities: string[];
   matching_space_count: number;
   featured_space_public_id: string | null;
-  starting_day_pass_price: number | null;
-  starting_monthly_price: number | null;
-  starting_hourly_price: number | null;
+  starting_day_pass_price: MoneyValue | null;
+  starting_monthly_price: MoneyValue | null;
+  starting_hourly_price: MoneyValue | null;
   starting_membership_price: number | null;
   distance_miles: number | null;
   public_working_hours_enabled?: boolean;
@@ -61,9 +62,9 @@ export interface MarketplaceLocationSpace {
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
-  price_daily: number | null;
-  price_monthly: number | null;
-  hourly_price: number | null;
+  price_daily: MoneyValue | null;
+  price_monthly: MoneyValue | null;
+  hourly_price: MoneyValue | null;
   membership_price: number | null;
   amenities: string[];
   image_url: string | null;
@@ -95,9 +96,9 @@ export interface MarketplaceSpaceDetailSpace {
   availability_end_time: string | null;
   buffer_before_minutes: number;
   buffer_after_minutes: number;
-  price_daily: number | null;
-  price_monthly: number | null;
-  hourly_price: number | null;
+  price_daily: MoneyValue | null;
+  price_monthly: MoneyValue | null;
+  hourly_price: MoneyValue | null;
   membership_price: number | null;
   amenities: string[];
   volume_discounts?: MarketplaceVolumeDiscountTier[];
@@ -166,8 +167,8 @@ export interface SpaceAvailabilityResponse {
   availability_end_time: string | null;
   buffer_before_minutes: number;
   buffer_after_minutes: number;
-  hourly_price: number | null;
-  daily_price: number | null;
+  hourly_price: MoneyValue | null;
+  daily_price: MoneyValue | null;
   days: SpaceAvailabilityDay[];
 }
 
@@ -395,24 +396,23 @@ export function getLocationPriceChips(
 ) {
   const chips: Array<{ label: string; value: string }> = [];
 
-  const formatCurrency = (value: number, suffix: string) => `$${value}${suffix}`;
   if (config.routeKey === "spaces") {
     if (location.starting_day_pass_price != null) {
-      chips.push({ label: "Day Pass", value: formatCurrency(location.starting_day_pass_price, "/day") });
+      chips.push({ label: "Day Pass", value: formatUsd(location.starting_day_pass_price, "/day") });
     }
     if (location.starting_membership_price != null) {
-      chips.push({ label: "Membership", value: formatCurrency(location.starting_membership_price, "/mo") });
+      chips.push({ label: "Membership", value: formatUsd(location.starting_membership_price, "/mo") });
     }
   } else if (config.routeKey === "private-offices") {
     if (location.starting_monthly_price != null) {
-      chips.push({ label: "Private Office", value: formatCurrency(location.starting_monthly_price, "/mo") });
+      chips.push({ label: "Private Office", value: formatUsd(location.starting_monthly_price, "/mo") });
     }
   } else {
     if (location.starting_hourly_price != null) {
-      chips.push({ label: "Hourly", value: formatCurrency(location.starting_hourly_price, "/hr") });
+      chips.push({ label: "Hourly", value: formatUsd(location.starting_hourly_price, "/hr") });
     }
     if (location.starting_day_pass_price != null) {
-      chips.push({ label: "Day Rate", value: formatCurrency(location.starting_day_pass_price, "/day") });
+      chips.push({ label: "Day Rate", value: formatUsd(location.starting_day_pass_price, "/day") });
     }
   }
 
@@ -425,17 +425,17 @@ export function getSpacePriceChips(
 ) {
   const chips: string[] = [];
   if (config.routeKey === "spaces") {
-    if (space.price_daily != null) chips.push(`Day Pass $${space.price_daily}/day`);
+    if (space.price_daily != null) chips.push(`Day Pass ${formatUsd(space.price_daily, "/day")}`);
     if (space.membership_price != null) chips.push(`Membership $${space.membership_price}/mo`);
   } else if (config.routeKey === "private-offices") {
-    if (space.price_monthly != null) chips.push(`Private Office $${space.price_monthly}/mo`);
+    if (space.price_monthly != null) chips.push(`Private Office ${formatUsd(space.price_monthly, "/mo")}`);
   } else {
     // Meeting rooms: lead with hourly (the new default), keep daily as the alt rate.
     if (space.hourly_price != null) {
-      chips.push(`From $${space.hourly_price}/hr`);
-      if (space.price_daily != null) chips.push(`or $${space.price_daily}/day`);
+      chips.push(`From ${formatUsd(space.hourly_price, "/hr")}`);
+      if (space.price_daily != null) chips.push(`or ${formatUsd(space.price_daily, "/day")}`);
     } else if (space.price_daily != null) {
-      chips.push(`Day Rate $${space.price_daily}/day`);
+      chips.push(`Day Rate ${formatUsd(space.price_daily, "/day")}`);
     }
   }
   return chips;

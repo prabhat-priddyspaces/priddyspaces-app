@@ -32,6 +32,7 @@ from app.services.public_marketplace import (
     get_public_location_detail,
     search_public_locations,
 )
+from app.services.money import CENT, to_money_decimal
 from app.services.space_availability import get_space_availability
 
 router = APIRouter()
@@ -347,7 +348,7 @@ def get_marketplace_space_availability(
 
     now = datetime.now(timezone.utc)
     hourly_prices = [
-        rule.rate_amount
+        to_money_decimal(rule.rate_amount).quantize(CENT)
         for rule in db.query(PricingRule)
         .filter(PricingRule.space_id == space.id, PricingRule.rate_type == "hourly")
         .all()

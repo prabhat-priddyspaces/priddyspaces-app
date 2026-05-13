@@ -6,6 +6,7 @@ import { Calendar, Tag, TriangleAlert } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 import { buildLoginHref } from "@/lib/auth-redirect";
 import {
   computeMonthlySavingsPercent,
@@ -31,7 +32,7 @@ export interface LeaseBookingWidgetProps {
   spaceType: "private_office" | "suite";
   spaceCapacity: number;
   bookingMode: LeaseBookingMode;
-  spaceMonthlyPrice: number | null;
+  spaceMonthlyPrice: MoneyValue | null;
   buildLoginNextHref: (params: { planPublicId: string | null; moveInDate: string }) => string;
   initialPlanPublicId?: string;
   initialMoveInDate?: string;
@@ -180,7 +181,7 @@ export function LeaseBookingWidget({
   }
 
   if (plans.length === 0) {
-    const fallback = spaceMonthlyPrice != null ? `$${spaceMonthlyPrice}/mo` : "Contact for pricing";
+    const fallback = spaceMonthlyPrice != null ? formatUsd(spaceMonthlyPrice, "/mo") : "Contact for pricing";
     return (
       <div className="rounded-[24px] border border-slate-200 p-5">
         <div className="text-center text-3xl font-semibold text-slate-900">{fallback}</div>

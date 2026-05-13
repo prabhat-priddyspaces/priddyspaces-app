@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.enums import BookingRequestKind, BookingRequestStatus
+from app.schemas.money import MoneyAmount
 
 
 class BookingRecurrenceCreate(BaseModel):
@@ -42,7 +43,7 @@ class GuestBookingRequestOut(BaseModel):
     start_datetime: datetime
     end_datetime: datetime
     space_public_id: str | None = None
-    estimated_amount: int | None = None
+    estimated_amount: MoneyAmount | None = None
     message: str = "Your request has been submitted. The owner will review it and get back to you."
 
     model_config = ConfigDict(from_attributes=True)
@@ -133,10 +134,10 @@ class BookingRequestOut(BaseModel):
     recurrence_until_date: date | None = None
     payment_breakdown: dict | None = None
     refund_policy_snapshot: dict | None = None
-    price_daily: int | None = None
-    price_monthly: int | None = None
-    price_hourly: int | None = None
-    estimated_amount: int | None = None
+    price_daily: MoneyAmount | None = None
+    price_monthly: MoneyAmount | None = None
+    price_hourly: MoneyAmount | None = None
+    estimated_amount: MoneyAmount | None = None
     # Pricing breakdown for the booking widget and approval email.
     base_amount_cents: int | None = None
     discount_percent: int = 0

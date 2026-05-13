@@ -90,7 +90,7 @@ def _seed(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFICE):
         tenant_id=org.id,
         space_type=space_type,
         capacity=4,
-        price_monthly=200000,
+        price_monthly=2000,
     )
     db.add(space)
     db.commit()
@@ -212,7 +212,7 @@ def test_membership_purchase_request_create_and_approve(
     assert data["membership_plan_public_id"] == plan.public_id
     assert data["status"] == BookingRequestStatus.REQUESTED.value
     assert data["commitment_months_snapshot"] == 12
-    assert data["estimated_amount"] == plan.price_cents // 100
+    assert data["estimated_amount"] == "2000.00"
 
     req_public_id = data["public_id"]
 

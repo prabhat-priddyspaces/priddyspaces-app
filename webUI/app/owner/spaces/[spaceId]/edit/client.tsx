@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,16 @@ import { LeaseTermsManager } from "@/components/lease-terms-manager";
 import { VolumeDiscountManager } from "@/components/volume-discount-manager";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import type { MoneyValue } from "@/lib/money";
 
 interface Space {
   public_id: string;
   name: string;
   space_type: string;
   capacity: number;
-  price_monthly: number | null;
-  price_daily: number | null;
-  price_hourly: number | null;
+  price_monthly: MoneyValue | null;
+  price_daily: MoneyValue | null;
+  price_hourly: MoneyValue | null;
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
@@ -32,8 +33,10 @@ interface Space {
 
 export function EditSpaceClient() {
   const params = useParams<{ spaceId: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const spaceId = params?.spaceId || "";
+  const routeSpaceId = params?.spaceId || "";
+  const spaceId = searchParams.get("spaceId") || (routeSpaceId === "_" ? "" : routeSpaceId);
   const [form, setForm] = useState({
     name: "",
     space_type: "conference_room",
@@ -76,6 +79,11 @@ export function EditSpaceClient() {
       .finally(() => setLoading(false));
   }, [spaceId]);
 
+  function moneyPayload(value: string) {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
   async function handleSave() {
     try {
       const token = getAccessToken() ?? undefined;
@@ -87,9 +95,9 @@ export function EditSpaceClient() {
             name: form.name,
             space_type: form.space_type,
             capacity: Number(form.capacity || 1),
-            price_monthly: form.price_monthly ? Number(form.price_monthly) : null,
-            price_daily: form.price_daily ? Number(form.price_daily) : null,
-            price_hourly: form.price_hourly ? Number(form.price_hourly) : null,
+            price_monthly: moneyPayload(form.price_monthly),
+            price_daily: moneyPayload(form.price_daily),
+            price_hourly: moneyPayload(form.price_hourly),
             availability_status: form.availability_status,
             availability_start_time: form.availability_start_time || null,
             availability_end_time: form.availability_end_time || null,
@@ -158,36 +166,48 @@ export function EditSpaceClient() {
             </div>
             <div className="grid gap-2 md:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="hourly">Hourly price (cents)</Label>
+                <Label htmlFor="hourly">Hourly price (USD)</Label>
                 <Input
                   id="hourly"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
                   value={form.price_hourly}
                   onChange={(e) => setForm({ ...form, price_hourly: e.target.value })}
-                  placeholder="3000"
+                  placeholder="30"
                 />
                 <div className="text-xs text-textMuted">
-                  Required for hourly meeting-room bookings (3000 = $30/hr).
+                  Required for hourly meeting-room bookings. Enter a dollar amount, such as 19.99.
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="daily">Daily price (cents)</Label>
+                <Label htmlFor="daily">Daily price (USD)</Label>
                 <Input
                   id="daily"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
                   value={form.price_daily}
                   onChange={(e) => setForm({ ...form, price_daily: e.target.value })}
-                  placeholder="20000"
+                  placeholder="200"
                 />
                 <div className="text-xs text-textMuted">
                   Used for "Full day". Hourly bookings auto-cap to this amount.
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="monthly">Monthly price (cents)</Label>
+                <Label htmlFor="monthly">Monthly price (USD)</Label>
                 <Input
                   id="monthly"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
                   value={form.price_monthly}
                   onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
-                  placeholder="120000"
+                  placeholder="1200"
                 />
               </div>
             </div>

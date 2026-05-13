@@ -1,4 +1,5 @@
 from datetime import time
+from decimal import Decimal
 
 from app.models.enums import UserAppRole, UserRole, SpaceType
 from app.models.user import User
@@ -65,7 +66,10 @@ def test_space_availability_hours(db_session, client_factory):
             "availability_start_time": time(9, 0).isoformat(),
             "availability_end_time": time(18, 0).isoformat(),
             "visibility": "public",
-            "amenities": "WiFi, Whiteboard"
+            "amenities": "WiFi, Whiteboard",
+            "price_hourly": "19.99",
+            "price_daily": "200",
+            "price_monthly": "3000.99",
         }
     )
     assert created.status_code == 200
@@ -75,11 +79,20 @@ def test_space_availability_hours(db_session, client_factory):
     assert data["availability_end_time"] == "18:00:00"
     assert data["visibility"] == "public"
     assert data["amenities"] == "WiFi, Whiteboard"
+    assert data["price_hourly"] == "19.99"
+    assert data["price_daily"] == "200.00"
+    assert data["price_monthly"] == "3000.99"
+
+    space = db_session.query(Space).filter(Space.public_id == data["public_id"]).first()
+    assert space.price_hourly == Decimal("19.99")
+    assert space.price_daily == Decimal("200.00")
+    assert space.price_monthly == Decimal("3000.99")
 
     fetched = client.get(f"/api/spaces/{data['public_id']}")
     assert fetched.status_code == 200
     assert fetched.json()["name"] == "Conference Room"
     assert fetched.json()["availability_start_time"] == "09:00:00"
+    assert fetched.json()["price_hourly"] == "19.99"
 
 
 def test_space_visibility_enum_uses_database_values():

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, Integer, Float, Time, String
+from sqlalchemy import Column, Enum, Float, Integer, Numeric, String, Time
 
 from app.models.base import Base
 from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility, enum_values
@@ -17,9 +17,9 @@ class Space(PublicIdMixin, TimestampMixin, Base):
     )
     size_sqft = Column(Float, nullable=True)
     capacity = Column(Integer, default=1)
-    price_monthly = Column(Integer, nullable=True)
-    price_daily = Column(Integer, nullable=True)
-    price_hourly = Column(Integer, nullable=True)
+    price_monthly = Column(Numeric(12, 2), nullable=True)
+    price_daily = Column(Numeric(12, 2), nullable=True)
+    price_hourly = Column(Numeric(12, 2), nullable=True)
     availability_status = Column(
         Enum(AvailabilityStatus, values_callable=enum_values),
         default=AvailabilityStatus.AVAILABLE,

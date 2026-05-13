@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.money import MoneyAmount
 from app.schemas.working_hours import PublicWorkingHour
 
 
@@ -7,8 +8,8 @@ class MarketplaceSpaceOut(BaseModel):
     space_public_id: str
     space_type: str
     capacity: int
-    price_daily: int | None
-    price_monthly: int | None
+    price_daily: MoneyAmount | None
+    price_monthly: MoneyAmount | None
     availability_status: str
     availability_start_time: str | None = None
     availability_end_time: str | None = None
@@ -47,9 +48,9 @@ class MarketplaceLocationSummaryOut(BaseModel):
     location_amenities: list[str]
     matching_space_count: int
     featured_space_public_id: str | None = None
-    starting_day_pass_price: int | None = None
-    starting_monthly_price: int | None = None
-    starting_hourly_price: int | None = None
+    starting_day_pass_price: MoneyAmount | None = None
+    starting_monthly_price: MoneyAmount | None = None
+    starting_hourly_price: MoneyAmount | None = None
     starting_membership_price: int | None = None
     distance_miles: float | None = None
     public_working_hours_enabled: bool = False
@@ -69,9 +70,9 @@ class MarketplaceLocationSpaceOut(BaseModel):
     availability_status: str
     availability_start_time: str | None = None
     availability_end_time: str | None = None
-    price_daily: int | None = None
-    price_monthly: int | None = None
-    hourly_price: int | None = None
+    price_daily: MoneyAmount | None = None
+    price_monthly: MoneyAmount | None = None
+    hourly_price: MoneyAmount | None = None
     membership_price: int | None = None
     amenities: list[str]
     image_url: str | None = None
@@ -103,9 +104,9 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
     availability_end_time: str | None = None
     buffer_before_minutes: int = 0
     buffer_after_minutes: int = 0
-    price_daily: int | None = None
-    price_monthly: int | None = None
-    hourly_price: int | None = None
+    price_daily: MoneyAmount | None = None
+    price_monthly: MoneyAmount | None = None
+    hourly_price: MoneyAmount | None = None
     membership_price: int | None = None
     amenities: list[str]
     volume_discounts: list[MarketplaceVolumeDiscountTierOut] = []
@@ -171,6 +172,6 @@ class SpaceAvailabilityOut(BaseModel):
     availability_end_time: str | None
     buffer_before_minutes: int = 0
     buffer_after_minutes: int = 0
-    hourly_price: int | None
-    daily_price: int | None
+    hourly_price: MoneyAmount | None
+    daily_price: MoneyAmount | None
     days: list[SpaceAvailabilityDayOut]

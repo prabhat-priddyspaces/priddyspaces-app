@@ -339,7 +339,7 @@ def test_explicit_instant_booking_confirms_and_blocks_overlap(db_session, client
     })
     summary = owner_client.get(f"/api/owner/payout-summary?organization_public_id={org.public_id}")
     assert summary.status_code == 200
-    assert summary.json()["gross_cents"] == 100
+    assert summary.json()["gross_cents"] == 10000
 
     overlap = member_client.post("/api/booking-requests", json=payload)
     assert overlap.status_code == 409, overlap.text

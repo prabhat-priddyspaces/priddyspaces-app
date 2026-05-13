@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface Location {
   public_id: string;
@@ -24,8 +25,8 @@ interface Space {
   public_id: string;
   space_type: string;
   capacity: number;
-  price_monthly: number | null;
-  price_daily: number | null;
+  price_monthly: MoneyValue | null;
+  price_daily: MoneyValue | null;
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
@@ -217,8 +218,8 @@ export default function MemberLocationsPage() {
                       </div>
                     ) : null}
                     <div className="mt-1 text-sm text-textMuted">
-                      {space.price_monthly != null && `$${space.price_monthly}/mo `}
-                      {space.price_daily != null && `$${space.price_daily}/day`}
+                      {space.price_monthly != null && `${formatUsd(space.price_monthly, "/mo")} `}
+                      {space.price_daily != null && formatUsd(space.price_daily, "/day")}
                     </div>
                   </div>
                   <div className="min-w-[200px]">

@@ -7,14 +7,15 @@ import { getAccessToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
+import type { MoneyValue } from "@/lib/money";
 
 interface Space {
   public_id: string;
   name: string;
   space_type: string;
   capacity: number;
-  price_monthly?: number | null;
-  price_daily?: number | null;
+  price_monthly?: MoneyValue | null;
+  price_daily?: MoneyValue | null;
   availability_status: string;
 }
 
@@ -43,8 +44,8 @@ export function SpaceList({ locationPublicId }: { locationPublicId: string }) {
       {
         method: "PATCH",
         body: JSON.stringify({
-          price_monthly: monthly ? Number(monthly) : null,
-          price_daily: daily ? Number(daily) : null,
+          price_daily: daily ? daily : null,
+          price_monthly: monthly ? monthly : null,
           reason
         })
       },
@@ -61,7 +62,12 @@ export function SpaceList({ locationPublicId }: { locationPublicId: string }) {
         <div className="text-sm text-textMuted">No spaces yet.</div>
       ) : (
         spaces.map((space) => (
-          <SpaceRow key={space.public_id} space={space} onSave={overridePrice} />
+          <SpaceRow
+            key={space.public_id}
+            space={space}
+            locationPublicId={locationPublicId}
+            onSave={overridePrice}
+          />
         ))
       )}
     </div>
@@ -70,9 +76,11 @@ export function SpaceList({ locationPublicId }: { locationPublicId: string }) {
 
 function SpaceRow({
   space,
+  locationPublicId,
   onSave
 }: {
   space: Space;
+  locationPublicId: string;
   onSave: (space: Space, monthly: string, daily: string, reason: string) => void;
 }) {
   const [monthly, setMonthly] = useState(space.price_monthly?.toString() || "");
@@ -87,8 +95,24 @@ function SpaceRow({
         Capacity {space.capacity} • {space.availability_status}
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
-        <Input value={monthly} onChange={(e) => setMonthly(e.target.value)} placeholder="Monthly" />
-        <Input value={daily} onChange={(e) => setDaily(e.target.value)} placeholder="Daily" />
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          value={monthly}
+          onChange={(e) => setMonthly(e.target.value)}
+          placeholder="Monthly USD"
+        />
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          value={daily}
+          onChange={(e) => setDaily(e.target.value)}
+          placeholder="Daily USD"
+        />
         <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" />
       </div>
       <div className="mt-3">
@@ -96,12 +120,14 @@ function SpaceRow({
           <Button size="sm" onClick={() => onSave(space, monthly, daily, reason)}>
             Save Override
           </Button>
-          <Link href={`/owner/spaces/${space.public_id}/media`}>
+          <Link
+            href={`/owner/spaces/media?spaceId=${encodeURIComponent(space.public_id)}&locationId=${encodeURIComponent(locationPublicId)}`}
+          >
             <Button size="sm" variant="secondary">
               Images
             </Button>
           </Link>
-          <Link href={`/owner/spaces/${space.public_id}/edit`}>
+          <Link href={`/owner/spaces/edit?spaceId=${encodeURIComponent(space.public_id)}`}>
             <Button size="sm" variant="ghost">
               Edit
             </Button>

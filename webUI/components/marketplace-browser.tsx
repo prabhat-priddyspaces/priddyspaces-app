@@ -8,13 +8,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface MarketplaceSpace {
   space_public_id: string;
   space_type: string;
   capacity: number;
-  price_daily: number | null;
-  price_monthly: number | null;
+  price_daily: MoneyValue | null;
+  price_monthly: MoneyValue | null;
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
@@ -219,8 +220,8 @@ export function MarketplaceBrowser({
                     </div>
                   ) : null}
                   <div className="mt-1 text-sm text-textMuted">
-                    {space.price_monthly != null && `$${space.price_monthly}/mo `}
-                    {space.price_daily != null && `$${space.price_daily}/day`}
+                    {space.price_monthly != null && `${formatUsd(space.price_monthly, "/mo")} `}
+                    {space.price_daily != null && formatUsd(space.price_daily, "/day")}
                   </div>
                   <div className="mt-4">
                     <Link href={`${detailHrefBase}/${space.space_public_id}`}>

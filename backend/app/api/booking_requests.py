@@ -71,6 +71,7 @@ from app.services.pricing import (
     VolumeDiscount,
     estimate_booking_price,
 )
+from app.services.money import cents_to_money
 from app.services.loyalty import attach_lock_to_booking_request, release_redemption_for_request
 from app.services.notifications import (
     send_email,
@@ -167,7 +168,7 @@ def _to_out(
         plan = db.query(MembershipPlan).filter(MembershipPlan.id == req.membership_plan_id).first()
         if plan:
             membership_plan_public_id = plan.public_id
-            estimated = plan.price_cents // 100
+            estimated = cents_to_money(plan.price_cents)
     if space and not is_membership:
         rate_type = None
         rate_amount = None
@@ -205,7 +206,7 @@ def _to_out(
             granularity_minutes=granularity_minutes,
             tax_rate_percent=tax_rate,
         )
-        estimated = estimate.total_cents // 100 if estimate else None
+        estimated = cents_to_money(estimate.total_cents) if estimate else None
     payment_method_public_id = None
     booking_series_public_id = None
     if db and req.booking_series_id:
@@ -621,7 +622,7 @@ def create_guest_booking_request(
             granularity_minutes=granularity_minutes,
             tax_rate_percent=tax_rate,
         )
-        estimated = est.total_cents // 100 if est else None
+        estimated = cents_to_money(est.total_cents) if est else None
     except Exception:
         pass
 

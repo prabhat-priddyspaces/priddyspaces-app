@@ -481,7 +481,7 @@ def test_public_location_search_aggregates_locations_and_filters_inventory(db_se
     location = payload["results"][0]
     assert location["location_public_id"] == seeded["coworking_location"].public_id
     assert location["matching_space_count"] == 2
-    assert location["starting_day_pass_price"] == 69
+    assert location["starting_day_pass_price"] == "69.00"
     assert location["starting_membership_price"] == 299
     assert location["starting_monthly_price"] is None
     assert location["featured_image_url"] == "https://images.example.com/brickell.jpg"
@@ -500,7 +500,7 @@ def test_public_location_search_derives_private_office_pricing(db_session, clien
 
     assert payload["meta"]["total_locations"] == 1
     assert payload["results"][0]["location_public_id"] == seeded["coworking_location"].public_id
-    assert payload["results"][0]["starting_monthly_price"] == 1800
+    assert payload["results"][0]["starting_monthly_price"] == "1800.00"
 
     capped = client.get("/api/marketplace/locations?category=private_office&max_price=1700")
     assert capped.status_code == 200
@@ -519,7 +519,7 @@ def test_public_location_search_includes_locations_without_coordinates(db_sessio
     assert payload["results"][0]["location_public_id"] == seeded["no_geo_location"].public_id
     assert payload["results"][0]["lat"] is None
     assert payload["results"][0]["lng"] is None
-    assert payload["results"][0]["starting_monthly_price"] == 2100
+    assert payload["results"][0]["starting_monthly_price"] == "2100.00"
 
 
 def test_public_location_search_matches_combined_city_state_query(db_session, client_factory):
@@ -598,7 +598,7 @@ def test_public_location_detail_supports_meeting_room_filters_and_time_validatio
     assert len(body["spaces"]) == 1
     assert body["spaces"][0]["public_id"] == seeded["meeting_room"].public_id
     assert body["spaces"][0]["name"] == "Conference 14-B"
-    assert body["spaces"][0]["hourly_price"] == 60
+    assert body["spaces"][0]["hourly_price"] == "60.00"
     assert body["spaces"][0]["availability_start_time"] == "09:00:00"
     assert body["public_working_hours_enabled"] is True
     assert next(row for row in body["public_working_hours"] if row["day"] == "monday") == {
@@ -625,7 +625,7 @@ def test_public_marketplace_space_detail_returns_listing_content(db_session, cli
 
     assert body["space"]["public_id"] == seeded["meeting_room"].public_id
     assert body["space"]["name"] == "Conference 14-B"
-    assert body["space"]["hourly_price"] == 60
+    assert body["space"]["hourly_price"] == "60.00"
     assert body["images"][0]["image_url"] == "https://images.example.com/conference-primary.jpg"
     assert body["images"][1]["image_url"] == "https://images.example.com/conference-secondary.jpg"
     assert body["location"]["public_phone"] == "(954) 906-7565"

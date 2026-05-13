@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { buildLoginHref } from "@/lib/auth-redirect";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,8 +19,8 @@ interface Space {
   public_id: string;
   space_type: string;
   capacity: number;
-  price_monthly: number | null;
-  price_daily: number | null;
+  price_monthly: MoneyValue | null;
+  price_daily: MoneyValue | null;
   availability_status: string;
   availability_start_time: string | null;
   availability_end_time: string | null;
@@ -234,8 +235,8 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
                   <p className="mt-1 text-sm text-textMuted">Amenities: {space.amenities}</p>
                 ) : null}
                 <p className="mt-2 text-sm text-textMuted">
-                  {space.price_monthly != null && `$${space.price_monthly}/mo `}
-                  {space.price_daily != null && `$${space.price_daily}/day`}
+                  {space.price_monthly != null && `${formatUsd(space.price_monthly, "/mo")} `}
+                  {space.price_daily != null && formatUsd(space.price_daily, "/day")}
                 </p>
               </div>
               {error ? <div className="text-sm text-error">{error}</div> : null}

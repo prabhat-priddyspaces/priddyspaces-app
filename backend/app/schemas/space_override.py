@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 
+from app.schemas.money import MoneyAmount
+
 
 class SpacePriceOverride(BaseModel):
-    price_monthly: int | None = None
-    price_daily: int | None = None
+    price_monthly: MoneyAmount | None = None
+    price_daily: MoneyAmount | None = None
     reason: str

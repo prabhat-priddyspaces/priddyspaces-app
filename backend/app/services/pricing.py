@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from math import ceil
 from typing import Iterable, Optional
+
+from app.services.money import money_to_cents
 
 
 @dataclass(frozen=True)
@@ -48,11 +51,11 @@ def estimate_booking_price(
     start_dt: datetime,
     end_dt: datetime,
     *,
-    price_hourly: int | None = None,
-    price_daily: int | None = None,
-    price_monthly: int | None = None,
+    price_hourly: Decimal | int | str | None = None,
+    price_daily: Decimal | int | str | None = None,
+    price_monthly: Decimal | int | str | None = None,
     rate_type: str | None = None,            # PricingRule override: 'hourly' | 'daily'
-    rate_amount: int | None = None,           # PricingRule override (cents)
+    rate_amount: Decimal | int | str | None = None,  # PricingRule override (USD)
     booking_mode: str | None = None,          # 'hourly' | 'day_pass' (informational)
     full_day: bool = False,                   # explicit "Full day" toggle
     volume_discounts: Iterable[VolumeDiscount] | None = None,
@@ -85,33 +88,34 @@ def estimate_booking_price(
     # Rule 1: PricingRule override
     if rate_type and rate_amount:
         if rate_type == "hourly":
-            base_cents = int(rate_amount * hours)
+            base_cents = money_to_cents(rate_amount, multiplier=hours)
             units = hours
             rate_basis = "rule_hourly"
             discount_eligible = True
         elif rate_type == "daily":
-            base_cents = rate_amount * days
+            base_cents = money_to_cents(rate_amount, multiplier=days)
             units = days
             rate_basis = "rule_daily"
 
     # Rule 2: explicit day pass / full day
     elif full_day or booking_mode == "day_pass":
         if price_daily is not None:
-            base_cents = price_daily
+            base_cents = money_to_cents(price_daily)
             units = 1.0
             rate_basis = "daily"
         elif price_hourly is not None:
             # Day-pass with no daily rate set: charge the hourly span (rare config).
             day_hours = max(1.0, duration / 3600.0)
-            base_cents = int(price_hourly * day_hours)
+            base_cents = money_to_cents(price_hourly, multiplier=day_hours)
             units = day_hours
             rate_basis = "daily"
 
     # Rule 3: hourly path (with auto-cap to daily)
     elif price_hourly is not None:
-        hourly_total = int(price_hourly * hours)
-        if price_daily is not None and hourly_total > price_daily:
-            base_cents = price_daily
+        hourly_total = money_to_cents(price_hourly, multiplier=hours)
+        daily_cents = money_to_cents(price_daily) if price_daily is not None else None
+        if daily_cents is not None and hourly_total > daily_cents:
+            base_cents = daily_cents
             units = 1.0
             rate_basis = "capped_to_daily"
             # Once capped to the day rate, the member is effectively on the day rate;
@@ -131,11 +135,11 @@ def estimate_booking_price(
     # per day (this preserves behaviour for daily-only spaces; meeting-room widgets
     # should always send booking_mode/full_day explicitly).
     elif price_daily is not None:
-        base_cents = price_daily * days
+        base_cents = money_to_cents(price_daily, multiplier=days)
         units = days
         rate_basis = "daily"
     elif price_monthly is not None:
-        daily_rate = max(1, int(price_monthly / 30))
+        daily_rate = max(1, int(money_to_cents(price_monthly) / 30))
         base_cents = daily_rate * days
         units = days
         rate_basis = "monthly_fallback"
@@ -170,13 +174,13 @@ def estimate_booking_price(
 def estimate_booking_amount(
     start_dt: datetime,
     end_dt: datetime,
-    price_daily: int | None,
-    price_monthly: int | None,
+    price_daily: Decimal | int | str | None,
+    price_monthly: Decimal | int | str | None,
     rate_type: str | None = None,
-    rate_amount: int | None = None,
+    rate_amount: Decimal | int | str | None = None,
     tax_rate_percent: float | None = None,
     *,
-    price_hourly: int | None = None,
+    price_hourly: Decimal | int | str | None = None,
     booking_mode: str | None = None,
     full_day: bool = False,
     volume_discounts: Iterable[VolumeDiscount] | None = None,

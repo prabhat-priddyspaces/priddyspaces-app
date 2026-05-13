@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface BookingRequest {
   public_id: string;
@@ -18,7 +19,7 @@ interface BookingRequest {
   payment_status: string | null;
   payment_provider: string | null;
   cancellation_deadline_at: string | null;
-  estimated_amount: number | null;
+  estimated_amount: MoneyValue | null;
   operator_notes: string | null;
   failure_reason: string | null;
   is_guest_checkout: boolean;
@@ -196,7 +197,7 @@ export default function OwnerRequestsPage() {
                       ) : null}
                       {request.estimated_amount != null ? (
                         <div className="mt-1 text-textMuted">
-                          Estimated amount: ${request.estimated_amount}
+                          Estimated amount: {formatUsd(request.estimated_amount)}
                         </div>
                       ) : null}
                       {request.booking_public_id ? (

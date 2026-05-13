@@ -29,11 +29,14 @@ let tempDir: string | null = null;
 function makeOutDir() {
   tempDir = mkdtempSync(path.join(tmpdir(), "priddy-static-routes-"));
   mkdirSync(path.join(tempDir, "owner", "locations"), { recursive: true });
+  mkdirSync(path.join(tempDir, "owner", "spaces"), { recursive: true });
   mkdirSync(path.join(tempDir, "member", "requests"), { recursive: true });
   writeFileSync(path.join(tempDir, "index.html"), "<html>root</html>");
   writeFileSync(path.join(tempDir, "404.html"), "<html>missing</html>");
   writeFileSync(path.join(tempDir, "owner.html"), "<html>owner</html>");
   writeFileSync(path.join(tempDir, "owner", "locations", "new.html"), "<html>new</html>");
+  writeFileSync(path.join(tempDir, "owner", "spaces", "edit.html"), "<html>edit</html>");
+  writeFileSync(path.join(tempDir, "owner", "spaces", "media.html"), "<html>media</html>");
   writeFileSync(path.join(tempDir, "member", "requests", "index.html"), "<html>requests</html>");
   return tempDir;
 }
@@ -51,6 +54,8 @@ describe("static route aliases", () => {
       "member/requests",
       "owner",
       "owner/locations/new",
+      "owner/spaces/edit",
+      "owner/spaces/media",
     ]);
   });
 

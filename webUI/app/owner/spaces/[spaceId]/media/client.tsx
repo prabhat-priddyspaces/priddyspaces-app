@@ -33,7 +33,8 @@ interface MediaPresignOut {
 export function SpaceMediaClient() {
   const params = useParams<{ spaceId: string }>();
   const searchParams = useSearchParams();
-  const spaceId = params?.spaceId || "";
+  const routeSpaceId = params?.spaceId || "";
+  const spaceId = searchParams.get("spaceId") || (routeSpaceId === "_" ? "" : routeSpaceId);
   const locationId = useMemo(() => searchParams.get("locationId") || "", [searchParams]);
 
   const [space, setSpace] = useState<Space | null>(null);

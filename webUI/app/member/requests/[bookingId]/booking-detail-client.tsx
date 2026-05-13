@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -31,7 +32,7 @@ interface BookingRequest {
   cancelled_at: string | null;
   approved_at: string | null;
   operator_notes: string | null;
-  estimated_amount: number | null;
+  estimated_amount: MoneyValue | null;
   payment_attempt_count: number | null;
   failure_reason: string | null;
   last_payment: PaymentSummary | null;
@@ -165,7 +166,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
               </div>
               {booking.estimated_amount != null ? (
                 <div className="mt-2 text-sm text-textSecondary">
-                  Estimated amount: ${booking.estimated_amount}
+                  Estimated amount: {formatUsd(booking.estimated_amount)}
                 </div>
               ) : null}
               {booking.operator_notes ? (

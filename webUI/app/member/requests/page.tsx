@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface BookingRequest {
   public_id: string;
   booking_id: number | null;
   booking_public_id: string | null;
-  estimated_amount: number | null;
+  estimated_amount: MoneyValue | null;
   start_datetime: string;
   end_datetime: string;
   status: string;
@@ -121,7 +122,7 @@ export default function MemberRequestsPage() {
                     ) : null}
                     {b.estimated_amount != null ? (
                       <div className="mt-1 text-textMuted">
-                        Estimated: ${b.estimated_amount}
+                        Estimated: {formatUsd(b.estimated_amount)}
                       </div>
                     ) : null}
                   </div>

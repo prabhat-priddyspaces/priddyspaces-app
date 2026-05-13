@@ -19,6 +19,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { buildLoginHref } from "@/lib/auth-redirect";
+import { formatUsd, moneyToNumber } from "@/lib/money";
 import {
   formatLocationAddress,
   formatSpaceTypeLabel,
@@ -107,10 +108,10 @@ function buildInitials(name: string) {
 
 function getPriceRows(space: MarketplaceSpaceDetailResponse["space"]) {
   const rows: Array<{ label: string; value: string }> = [];
-  if (space.hourly_price != null) rows.push({ label: "Hourly", value: `$${space.hourly_price}/hour` });
-  if (space.price_daily != null) rows.push({ label: "Day Rate", value: `$${space.price_daily}/day` });
-  if (space.price_monthly != null) rows.push({ label: "Monthly", value: `$${space.price_monthly}/month` });
-  if (space.membership_price != null) rows.push({ label: "Membership", value: `$${space.membership_price}/month` });
+  if (space.hourly_price != null) rows.push({ label: "Hourly", value: formatUsd(space.hourly_price, "/hour") });
+  if (space.price_daily != null) rows.push({ label: "Day Rate", value: formatUsd(space.price_daily, "/day") });
+  if (space.price_monthly != null) rows.push({ label: "Monthly", value: formatUsd(space.price_monthly, "/month") });
+  if (space.membership_price != null) rows.push({ label: "Membership", value: formatUsd(space.membership_price, "/month") });
   return rows;
 }
 
@@ -290,6 +291,8 @@ export function PublicSpaceDetailView({
     availability?.hourly_price ?? detail?.space.hourly_price ?? null;
   const dailyPrice =
     availability?.daily_price ?? detail?.space.price_daily ?? null;
+  const hourlyAmount = moneyToNumber(hourlyPrice);
+  const dailyAmount = moneyToNumber(dailyPrice);
 
   const dayOpenSpan = useMemo(() => {
     if (!selectedDay) return null;
@@ -328,31 +331,31 @@ export function PublicSpaceDetailView({
   const breakdown = useMemo(() => {
     if (allDay) {
       // Full-day: flat day rate, no volume discount.
-      if (dailyPrice != null) {
+      if (dailyAmount != null) {
         return {
-          base: dailyPrice,
+          base: dailyAmount,
           discountPercent: 0,
           discountAmount: 0,
-          total: dailyPrice,
+          total: dailyAmount,
           basis: "daily" as const,
           units: 1,
         };
       }
-      if (hourlyPrice != null && dayOpenSpan != null) {
-        const base = hourlyPrice * dayOpenSpan;
+      if (hourlyAmount != null && dayOpenSpan != null) {
+        const base = hourlyAmount * dayOpenSpan;
         return { base, discountPercent: 0, discountAmount: 0, total: base, basis: "hourly_day_span" as const, units: dayOpenSpan };
       }
       return null;
     }
-    if (hourlyPrice == null || hours <= 0) return null;
-    const baseHourly = hourlyPrice * hours;
+    if (hourlyAmount == null || hours <= 0) return null;
+    const baseHourly = hourlyAmount * hours;
     // Auto-cap to daily.
-    if (dailyPrice != null && baseHourly > dailyPrice) {
+    if (dailyAmount != null && baseHourly > dailyAmount) {
       return {
-        base: dailyPrice,
+        base: dailyAmount,
         discountPercent: 0,
         discountAmount: 0,
-        total: dailyPrice,
+        total: dailyAmount,
         basis: "capped_to_daily" as const,
         units: 1,
       };
@@ -375,7 +378,7 @@ export function PublicSpaceDetailView({
       basis: "hourly" as const,
       units: hours,
     };
-  }, [allDay, dailyPrice, hourlyPrice, dayOpenSpan, hours, volumeDiscounts]);
+  }, [allDay, dailyAmount, hourlyAmount, dayOpenSpan, hours, volumeDiscounts]);
 
   const subtotal = breakdown?.total ?? null;
   const bufferBefore = availability?.buffer_before_minutes ?? detail?.space.buffer_before_minutes ?? 0;
@@ -935,7 +938,7 @@ export function PublicSpaceDetailView({
                     <button
                       type="button"
                       onClick={() => setAllDay(false)}
-                      disabled={hourlyPrice == null}
+                      disabled={hourlyAmount == null}
                       className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         !allDay
                           ? "border-slate-900 bg-slate-900 text-white"
@@ -947,7 +950,7 @@ export function PublicSpaceDetailView({
                     <button
                       type="button"
                       onClick={() => setAllDay(true)}
-                      disabled={allDayDisabled || dailyPrice == null}
+                      disabled={allDayDisabled || dailyAmount == null}
                       className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         allDay
                           ? "border-slate-900 bg-slate-900 text-white"
@@ -1079,41 +1082,41 @@ export function PublicSpaceDetailView({
                     {breakdown.basis === "daily" ? (
                       <div className="flex items-center justify-between">
                         <span>Day rate</span>
-                        <span>${breakdown.base.toLocaleString()}</span>
+                        <span>{formatUsd(breakdown.base)}</span>
                       </div>
                     ) : breakdown.basis === "capped_to_daily" ? (
                       <>
                         <div className="flex items-center justify-between text-slate-500 line-through">
                           <span>
-                            ${hourlyPrice} x {hours} hrs
+                            {formatUsd(hourlyPrice)} x {hours} hrs
                           </span>
-                          <span>${(hourlyPrice! * hours).toLocaleString()}</span>
+                          <span>{formatUsd((hourlyAmount ?? 0) * hours)}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Capped at day rate</span>
-                          <span>${breakdown.base.toLocaleString()}</span>
+                          <span>{formatUsd(breakdown.base)}</span>
                         </div>
                       </>
                     ) : breakdown.basis === "hourly" ? (
                       <div className="flex items-center justify-between">
                         <span>
-                          ${hourlyPrice} x {hours} {hours === 1 ? "hour" : "hours"}
+                          {formatUsd(hourlyPrice)} x {hours} {hours === 1 ? "hour" : "hours"}
                         </span>
-                        <span>${breakdown.base.toLocaleString()}</span>
+                        <span>{formatUsd(breakdown.base)}</span>
                       </div>
                     ) : breakdown.basis === "hourly_day_span" ? (
                       <div className="flex items-center justify-between">
                         <span>
-                          ${hourlyPrice} x {breakdown.units} hours
+                          {formatUsd(hourlyPrice)} x {breakdown.units} hours
                         </span>
-                        <span>${breakdown.base.toLocaleString()}</span>
+                        <span>{formatUsd(breakdown.base)}</span>
                       </div>
                     ) : null}
 
                     {breakdown.discountPercent > 0 ? (
                       <div className="flex items-center justify-between text-emerald-700">
                         <span>Volume discount ({breakdown.discountPercent}%)</span>
-                        <span>−${breakdown.discountAmount.toLocaleString()}</span>
+                        <span>-{formatUsd(breakdown.discountAmount)}</span>
                       </div>
                     ) : null}
 
@@ -1127,7 +1130,7 @@ export function PublicSpaceDetailView({
                     <div className="border-t border-slate-200" />
                     <div className="flex items-center justify-between font-semibold text-slate-900">
                       <span>Estimated due on approval</span>
-                      <span>{formatCents(Math.max(0, breakdown.total * 100 - loyaltyDiscountCents))}</span>
+                      <span>{formatCents(Math.max(0, Math.round(breakdown.total * 100) - loyaltyDiscountCents))}</span>
                     </div>
                   </div>
                 ) : (

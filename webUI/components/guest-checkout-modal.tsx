@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, CheckCircle2, User, Mail, Phone, Building2, MessageSquare } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -20,7 +21,7 @@ interface GuestBookingOut {
   start_datetime: string;
   end_datetime: string;
   space_public_id: string | null;
-  estimated_amount: number | null;
+  estimated_amount: MoneyValue | null;
   message: string;
 }
 
@@ -292,7 +293,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn }: GuestCheckout
               </div>
               {result.estimated_amount != null ? (
                 <div className="mt-3 text-sm text-slate-600">
-                  Estimated amount: <span className="font-semibold text-slate-900">${result.estimated_amount}</span>
+                  Estimated amount: <span className="font-semibold text-slate-900">{formatUsd(result.estimated_amount)}</span>
                 </div>
               ) : null}
             </div>

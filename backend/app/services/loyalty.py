@@ -453,9 +453,7 @@ def calculate_booking_subtotal_cents(
     )
     if result is None:
         raise HTTPException(status_code=400, detail="Unable to calculate booking amount")
-    # Current app booking prices are persisted and charged as whole-dollar integers;
-    # convert that boundary value to cents for loyalty accounting.
-    return max(0, int(result.total_cents) * 100)
+    return max(0, int(result.total_cents))
 
 
 def preview_redemption(

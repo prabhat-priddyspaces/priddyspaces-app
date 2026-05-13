@@ -44,7 +44,28 @@ function staticExportHtmlHref(pathname: string, search: string) {
   return `${targetPath}.html${search}`;
 }
 
+export function legacyOwnerSpaceHref(pathname: string, search: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  if (
+    segments.length !== 4 ||
+    segments[0] !== "owner" ||
+    segments[1] !== "spaces" ||
+    !["media", "edit"].includes(segments[3])
+  ) {
+    return null;
+  }
+
+  const spaceId = segments[2];
+  if (!spaceId || spaceId === "_" || spaceId === "_.html") return null;
+
+  const next = new URLSearchParams(search);
+  next.set("spaceId", decodeURIComponent(spaceId));
+  return `/owner/spaces/${segments[3]}.html?${next.toString()}`;
+}
+
 export function defaultMarketplaceFallbackHref(pathname: string, search: string) {
+  const ownerSpaceHref = legacyOwnerSpaceHref(pathname, search);
+  if (ownerSpaceHref) return ownerSpaceHref;
   const legacyHref = legacyStaticDetailHref(pathname, search);
   if (legacyHref) return legacyHref;
   if (pathname === "/" || pathname === "") return "/spaces";

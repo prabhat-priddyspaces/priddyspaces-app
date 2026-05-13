@@ -2,6 +2,7 @@ from datetime import time
 from pydantic import BaseModel, ConfigDict
 
 from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility
+from app.schemas.money import MoneyAmount
 
 
 class SpaceCreate(BaseModel):
@@ -9,9 +10,9 @@ class SpaceCreate(BaseModel):
     name: str | None = None
     space_type: SpaceType
     capacity: int = 1
-    price_monthly: int | None = None
-    price_daily: int | None = None
-    price_hourly: int | None = None
+    price_monthly: MoneyAmount | None = None
+    price_daily: MoneyAmount | None = None
+    price_hourly: MoneyAmount | None = None
     availability_start_time: time | None = None
     availability_end_time: time | None = None
     buffer_before_minutes: int = 0
@@ -25,9 +26,9 @@ class SpaceOut(BaseModel):
     name: str
     space_type: SpaceType
     capacity: int
-    price_monthly: int | None
-    price_daily: int | None
-    price_hourly: int | None = None
+    price_monthly: MoneyAmount | None
+    price_daily: MoneyAmount | None
+    price_hourly: MoneyAmount | None = None
     availability_status: AvailabilityStatus
     availability_start_time: time | None
     availability_end_time: time | None
@@ -42,9 +43,9 @@ class SpaceUpdate(BaseModel):
     name: str | None = None
     space_type: SpaceType | None = None
     capacity: int | None = None
-    price_monthly: int | None = None
-    price_daily: int | None = None
-    price_hourly: int | None = None
+    price_monthly: MoneyAmount | None = None
+    price_daily: MoneyAmount | None = None
+    price_hourly: MoneyAmount | None = None
     availability_status: AvailabilityStatus | None = None
     availability_start_time: time | None = None
     availability_end_time: time | None = None

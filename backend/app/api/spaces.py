@@ -53,6 +53,10 @@ def _serialize_space(
     )
 
 
+def _audit_money(value):
+    return str(value) if value is not None else None
+
+
 def _space_publicly_visible(
     space: Space,
     location: Location | None,
@@ -245,8 +249,8 @@ def override_space_price(
     require_pricing_override(member)
 
     before = {
-        "price_monthly": space.price_monthly,
-        "price_daily": space.price_daily
+        "price_monthly": _audit_money(space.price_monthly),
+        "price_daily": _audit_money(space.price_daily)
     }
     if payload.price_monthly is not None:
         space.price_monthly = payload.price_monthly
@@ -265,7 +269,10 @@ def override_space_price(
         entity_type="space",
         entity_public_id=space.public_id,
         before_state=before,
-        after_state={"price_monthly": space.price_monthly, "price_daily": space.price_daily},
+        after_state={
+            "price_monthly": _audit_money(space.price_monthly),
+            "price_daily": _audit_money(space.price_daily),
+        },
         acting_as_user_id=acting_as_user_id,
         context=context,
     )

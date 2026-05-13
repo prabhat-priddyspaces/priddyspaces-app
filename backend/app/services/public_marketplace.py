@@ -21,6 +21,7 @@ from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.schemas.working_hours import effective_public_working_hours
 from app.services.amenities import get_location_amenities_map
+from app.services.money import CENT, to_money_decimal
 
 
 CATEGORY_SPACE_TYPES = {
@@ -343,7 +344,7 @@ def _active_hourly_pricing_map(db: Session, space_ids: list[int]) -> dict[int, l
             continue
         if row.active_to and row.active_to.replace(tzinfo=timezone.utc) < now:
             continue
-        prices[row.space_id].append(row.rate_amount)
+        prices[row.space_id].append(to_money_decimal(row.rate_amount).quantize(CENT))
     return dict(prices)
 
 
