@@ -1,6 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Building2,
+  Calendar,
+  DollarSign,
+  Repeat,
+  Users,
+  XCircle,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import {
@@ -9,12 +17,14 @@ import {
   DateRange,
   Heatmap,
   HorizontalBar,
-  KPICard,
   LineTimeSeries,
   formatCents,
   formatNumber,
 } from "@/components/charts";
+import { StatCard } from "@/components/charts/stat-card";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
@@ -182,63 +192,98 @@ export default function OwnerAnalyticsPage() {
   }
 
   return (
-    <AppShell>
-      <div className="space-y-6">
+    <AppShell title="Analytics" breadcrumb={["Owner", "Growth"]}>
+      <div className="space-y-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-textPrimary">Analytics</h2>
-            <p className="text-textSecondary">Occupancy, revenue, retention, and peak hours across your portfolio.</p>
-          </div>
+          <p className="text-[13px] text-text-3 max-w-xl">
+            Occupancy, revenue, retention, and peak hours across your portfolio.
+          </p>
           <DateRange startDate={startDate} endDate={endDate} onChange={(s, e) => { setStartDate(s); setEndDate(e); }} />
         </div>
 
-        <div className="flex flex-wrap gap-2 border-b border-border">
-          {(["overview", "occupancy", "revenue", "members", "heatmap"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`-mb-px border-b-2 px-3 py-2 text-sm capitalize ${
-                tab === t
-                  ? "border-accent text-accent"
-                  : "border-transparent text-textSecondary hover:text-textPrimary"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1 border-b border-line">
+          {(["overview", "occupancy", "revenue", "members", "heatmap"] as Tab[]).map((t) => {
+            const active = tab === t;
+            const label = t === "heatmap" ? "Peak hours" : t.charAt(0).toUpperCase() + t.slice(1);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={cn(
+                  "-mb-px px-3.5 py-2.5 text-[13px] border-b-2 transition-colors",
+                  active
+                    ? "border-brand text-text font-semibold"
+                    : "border-transparent text-text-3 font-medium hover:text-text-2"
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
 
-        {error ? <div className="text-sm text-error">{error}</div> : null}
+        {error ? <div className="text-[13px] text-danger">{error}</div> : null}
 
         {tab === "overview" && overview ? (
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <KPICard
+          <div className="space-y-5">
+            <div className="grid gap-3.5 grid-cols-2 lg:grid-cols-4">
+              <StatCard
                 label="Revenue (owner net)"
                 value={formatCents(overview.kpis.revenue.current)}
-                deltaPct={overview.kpis.revenue.delta_pct}
-                hint="vs. prior period"
+                icon={DollarSign}
+                accent="violet"
+                delta={overview.kpis.revenue.delta_pct != null ? `${overview.kpis.revenue.delta_pct >= 0 ? "+" : ""}${overview.kpis.revenue.delta_pct.toFixed(1)}%` : undefined}
+                deltaPositive={(overview.kpis.revenue.delta_pct ?? 0) >= 0}
+                sub="vs. prior period"
               />
-              <KPICard
+              <StatCard
                 label="Bookings"
                 value={formatNumber(overview.kpis.bookings.current)}
-                deltaPct={overview.kpis.bookings.delta_pct}
-                hint="vs. prior period"
+                icon={Calendar}
+                accent="violet"
+                delta={overview.kpis.bookings.delta_pct != null ? `${overview.kpis.bookings.delta_pct >= 0 ? "+" : ""}${overview.kpis.bookings.delta_pct.toFixed(1)}%` : undefined}
+                deltaPositive={(overview.kpis.bookings.delta_pct ?? 0) >= 0}
+                sub="vs. prior period"
               />
-              <KPICard label="Avg booking value" value={formatCents(overview.kpis.avg_booking_value)} />
-              <KPICard label="Active memberships" value={formatNumber(overview.kpis.active_memberships)} />
-              <KPICard label="Occupancy" value={`${overview.kpis.occupancy_pct}%`} hint="period avg" />
-              <KPICard label="Retention" value={`${overview.kpis.retention_pct}%`} hint="returning vs prior window" />
-              <KPICard label="No-show rate" value={`${overview.kpis.no_show_rate_pct}%`} hint="confirmed with no check-in" />
-              <KPICard
+              <StatCard
+                label="Occupancy"
+                value={`${overview.kpis.occupancy_pct}%`}
+                icon={Building2}
+                accent="mint"
+                sub="period avg"
+              />
+              <StatCard
+                label="Active members"
+                value={formatNumber(overview.kpis.active_memberships)}
+                icon={Users}
+                sub={`${overview.kpis.total_locations} locations · ${overview.kpis.total_spaces} spaces`}
+              />
+              <StatCard
+                label="Avg booking value"
+                value={formatCents(overview.kpis.avg_booking_value)}
+                icon={DollarSign}
+              />
+              <StatCard
+                label="Retention"
+                value={`${overview.kpis.retention_pct}%`}
+                icon={Repeat}
+                sub="returning vs prior window"
+              />
+              <StatCard
+                label="No-show rate"
+                value={`${overview.kpis.no_show_rate_pct}%`}
+                icon={XCircle}
+                sub="confirmed with no check-in"
+              />
+              <StatCard
                 label="Cancellations"
                 value={formatNumber(overview.kpis.cancellations.current)}
-                hint={`${overview.kpis.total_locations} locations · ${overview.kpis.total_spaces} spaces`}
+                icon={XCircle}
               />
             </div>
-            <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Daily revenue</div>
+            <Card padded={false} className="p-5">
+              <div className="mb-3 text-[15px] font-semibold tracking-[-0.01em]">Daily revenue</div>
               <LineTimeSeries
                 data={(revenue?.rows ?? []) as Array<Record<string, string | number> & { bucket: string }>}
                 keys={revenue?.groups ?? ["revenue"]}
