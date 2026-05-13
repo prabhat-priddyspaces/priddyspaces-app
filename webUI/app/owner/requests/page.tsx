@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getAccessToken } from "@/lib/auth";
+import { useApiToken } from "@/hooks/useApiToken";
 import { apiFetch } from "@/lib/api";
 import { formatUsd, type MoneyValue } from "@/lib/money";
 
@@ -45,6 +45,7 @@ const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
 
 export default function OwnerRequestsPage() {
   const searchParams = useSearchParams();
+  const { getApiToken, isAuthReady } = useApiToken();
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,9 +71,15 @@ export default function OwnerRequestsPage() {
     return byStatus;
   }, [bookings]);
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (!isAuthReady) return;
     try {
-      const token = getAccessToken() ?? undefined;
+      const token = (await getApiToken()) ?? undefined;
+      if (!token) {
+        setError("Sign in to review booking requests.");
+        return;
+      }
+      setError(null);
       const list = await apiFetch<BookingRequest[]>(
         "/api/booking-requests",
         { method: "GET" },
@@ -87,11 +94,12 @@ export default function OwnerRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [getApiToken, isAuthReady]);
 
   useEffect(() => {
+    if (!isAuthReady) return;
     load().catch(() => null);
-  }, []);
+  }, [isAuthReady, load]);
 
   useEffect(() => {
     const publicId = searchParams.get("request");
@@ -115,10 +123,14 @@ export default function OwnerRequestsPage() {
   }, [bookings, searchParams]);
 
   async function updateStatus(publicId: string, action: "approve" | "reject") {
-    const token = getAccessToken() ?? undefined;
-    if (!token) return;
+    const token = (await getApiToken()) ?? undefined;
+    if (!token) {
+      setError("Sign in to update booking requests.");
+      return;
+    }
     setUpdating(publicId);
     try {
+      setError(null);
       await apiFetch(
         `/api/booking-requests/${publicId}/${action}`,
         {
@@ -136,10 +148,14 @@ export default function OwnerRequestsPage() {
   }
 
   async function retryPayment(publicId: string) {
-    const token = getAccessToken() ?? undefined;
-    if (!token) return;
+    const token = (await getApiToken()) ?? undefined;
+    if (!token) {
+      setError("Sign in to retry booking request payments.");
+      return;
+    }
     setUpdating(publicId);
     try {
+      setError(null);
       await apiFetch(
         `/api/booking-requests/${publicId}/retry-payment`,
         {
