@@ -94,6 +94,18 @@ const ownerSections: SidebarSection[] = [
       { href: "/owner/invoices", icon: FileText, label: "Invoices" },
     ],
   },
+  {
+    label: "Settings",
+    items: [
+      { href: "/owner/settings", icon: Settings, label: "Workspace" },
+      { href: "/owner/settings/payments", icon: CreditCard, label: "Payments setup" },
+      {
+        href: "/owner/settings/assistant-policies",
+        icon: Sparkles,
+        label: "Assistant policies",
+      },
+    ],
+  },
 ];
 
 const customerSections: SidebarSection[] = [

@@ -3,15 +3,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  Building2,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileText,
   Mail,
+  MessageSquare,
+  Phone,
   SlidersHorizontal,
   X,
 } from "lucide-react";
+
+const FAILURE_FALLBACK =
+  "Approval was saved as payment failed because the saved card could not be charged.";
+
+function formatDeadline(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return null;
+  }
+}
 
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/ui/avatar";
@@ -386,6 +406,14 @@ export default function OwnerRequestsPage() {
                   <div className="text-[12px] font-medium">{range || "—"}</div>
                   <div className="text-[11px] text-text-3">
                     {ageOf(request)}
+                    {formatDeadline(request.cancellation_deadline_at) ? (
+                      <>
+                        {" · "}
+                        <span title="Cancellation deadline">
+                          cancel by {formatDeadline(request.cancellation_deadline_at)}
+                        </span>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="text-[12px] text-text-2 leading-snug min-w-0 truncate">
@@ -466,6 +494,77 @@ export default function OwnerRequestsPage() {
                   )}
                 </div>
                 <div className="md:col-span-6 mt-2 grid gap-1.5">
+                  {request.is_guest_checkout &&
+                    (request.guest_email ||
+                      request.guest_full_name ||
+                      request.guest_phone ||
+                      request.guest_company_name ||
+                      request.guest_notes) && (
+                      <div className="rounded-xl border border-warning/30 bg-warning-soft px-3 py-2 text-[12px] text-warning">
+                        <div className="text-[10px] uppercase tracking-[0.06em] font-semibold mb-1">
+                          Guest contact
+                        </div>
+                        <div className="grid gap-1 text-text">
+                          {request.guest_full_name ? (
+                            <div className="flex items-start gap-2">
+                              <Building2
+                                size={12}
+                                className="mt-0.5 text-text-3 flex-none"
+                              />
+                              <span>{request.guest_full_name}</span>
+                            </div>
+                          ) : null}
+                          {request.guest_email ? (
+                            <div className="flex items-start gap-2">
+                              <Mail
+                                size={12}
+                                className="mt-0.5 text-text-3 flex-none"
+                              />
+                              <a
+                                href={`mailto:${request.guest_email}`}
+                                className="underline hover:no-underline"
+                              >
+                                {request.guest_email}
+                              </a>
+                            </div>
+                          ) : null}
+                          {request.guest_phone ? (
+                            <div className="flex items-start gap-2">
+                              <Phone
+                                size={12}
+                                className="mt-0.5 text-text-3 flex-none"
+                              />
+                              <a
+                                href={`tel:${request.guest_phone}`}
+                                className="underline hover:no-underline"
+                              >
+                                {request.guest_phone}
+                              </a>
+                            </div>
+                          ) : null}
+                          {request.guest_company_name ? (
+                            <div className="flex items-start gap-2">
+                              <Building2
+                                size={12}
+                                className="mt-0.5 text-text-3 flex-none"
+                              />
+                              <span>{request.guest_company_name}</span>
+                            </div>
+                          ) : null}
+                          {request.guest_notes ? (
+                            <div className="flex items-start gap-2">
+                              <MessageSquare
+                                size={12}
+                                className="mt-0.5 text-text-3 flex-none"
+                              />
+                              <span className="whitespace-pre-line">
+                                {request.guest_notes}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
                   <label
                     className="text-[11px] text-text-3"
                     htmlFor={`note-${request.public_id}`}
@@ -487,10 +586,12 @@ export default function OwnerRequestsPage() {
                     placeholder="Add notes for the member or your internal team"
                   />
                 </div>
-                {isFailed && request.failure_reason && (
+                {isFailed && (
                   <div className="md:col-span-6 mt-2 rounded-xl border border-danger/30 bg-danger-soft p-3 text-[12px] text-danger">
                     <div className="font-semibold">Payment failed</div>
-                    <div className="mt-1">{request.failure_reason}</div>
+                    <div className="mt-1">
+                      {request.failure_reason || FAILURE_FALLBACK}
+                    </div>
                   </div>
                 )}
               </div>
