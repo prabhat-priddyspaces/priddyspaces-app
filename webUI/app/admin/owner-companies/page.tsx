@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import type { MeResponse } from "@/lib/me";
@@ -25,8 +26,34 @@ interface OwnerCompany {
   };
   review_history: Array<{
     action: string;
+    actor_email: string | null;
+    actor_name: string | null;
+    before_state: Record<string, unknown> | null;
+    after_state: Record<string, unknown> | null;
     created_at: string | null;
   }>;
+}
+
+function formatHistoryValue(value: unknown) {
+  if (value === null || typeof value === "undefined" || value === "") return "—";
+  if (typeof value === "number") return `${value}`;
+  return formatAdminLabel(String(value));
+}
+
+function reviewHistorySummary(
+  beforeState: Record<string, unknown> | null,
+  afterState: Record<string, unknown> | null
+) {
+  if (!afterState) return "No detail captured";
+  const fields = [
+    ["review_status", "Review status"],
+    ["review_notes", "Notes"],
+    ["commission_override_pct", "Commission override"],
+  ] as const;
+  const changes = fields
+    .filter(([key]) => beforeState?.[key] !== afterState[key])
+    .map(([key, label]) => `${label}: ${formatHistoryValue(beforeState?.[key])} to ${formatHistoryValue(afterState[key])}`);
+  return changes.length ? changes.join(" • ") : "Saved without field changes";
 }
 
 export default function AdminOwnerCompaniesPage() {
@@ -102,7 +129,7 @@ export default function AdminOwnerCompaniesPage() {
                 <div>
                   <div className="font-semibold text-textPrimary">{company.name}</div>
                   <div className="text-sm text-textMuted">
-                    {company.owner.name || company.owner.email} • {company.review_status} • {company.locations} locations • {company.listings} listings
+                    {company.owner.name || company.owner.email} • {formatAdminLabel(company.review_status)} • {company.locations} locations • {company.listings} listings
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -122,8 +149,8 @@ export default function AdminOwnerCompaniesPage() {
                   />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={!canEdit} onClick={() => updateCompany(company.public_id, "approved").catch((err) => setMessage(String(err)))}>
-                    Approve
+                  <Button type="button" disabled={!canEdit || company.review_status === "approved"} onClick={() => updateCompany(company.public_id, "approved").catch((err) => setMessage(String(err)))}>
+                    {company.review_status === "approved" ? "Already approved" : "Approve"}
                   </Button>
                   <Button type="button" variant="secondary" disabled={!canEdit} onClick={() => updateCompany(company.public_id, "rejected").catch((err) => setMessage(String(err)))}>
                     Reject
@@ -133,9 +160,24 @@ export default function AdminOwnerCompaniesPage() {
                   </Button>
                 </div>
                 {company.review_history.length ? (
-                  <div className="text-xs text-textMuted">
-                    Latest history: {company.review_history[0].action} • {company.review_history[0].created_at}
-                  </div>
+                  <details className="rounded-md border border-border bg-surface2/40 p-3 text-xs">
+                    <summary className="cursor-pointer font-medium text-textPrimary">
+                      Review history ({company.review_history.length})
+                    </summary>
+                    <div className="mt-3 grid gap-2">
+                      {company.review_history.map((history, index) => (
+                        <div key={`${history.created_at}-${index}`} className="rounded-sm border border-border bg-surface p-2">
+                          <div className="font-medium text-textPrimary">{formatAdminLabel(history.action)}</div>
+                          <div className="mt-1 text-textMuted">
+                            {(history.actor_name || history.actor_email || "System")} • {formatAdminDateTime(history.created_at)}
+                          </div>
+                          <div className="mt-1 text-textSecondary">
+                            {reviewHistorySummary(history.before_state, history.after_state)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 ) : null}
               </div>
             </Card>
