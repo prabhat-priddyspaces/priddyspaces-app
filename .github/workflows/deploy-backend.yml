@@ -108,6 +108,7 @@ jobs:
               .requiresAttributes,
               .compatibilities,
               .registeredAt,
+              .deregisteredAt,
               .registeredBy
             )
             | .containerDefinitions |= map(
