@@ -1,6 +1,6 @@
 """owner booking email preferences
 
-Revision ID: 0039_owner_booking_email_preferences
+Revision ID: 0039_booking_email_prefs
 Revises: 0038_space_price_decimals
 Create Date: 2026-05-13
 """
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0039_owner_booking_email_preferences"
+revision = "0039_booking_email_prefs"
 down_revision = "0038_space_price_decimals"
 branch_labels = None
 depends_on = None
