@@ -8,6 +8,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, setAccessToken } from "@/lib/auth";
 
@@ -91,7 +92,7 @@ export default function AdminOwnerUsersPage() {
                   </Link>
                   <div className="text-sm text-textMuted">{row.email}</div>
                   <div className="text-sm text-textMuted">
-                    {row.organization_name} • {row.role} • {row.assigned_locations} assigned locations • {row.organization_review_status}
+                    {row.organization_name} • {formatAdminLabel(row.role)} • {row.assigned_locations} assigned locations • {formatAdminLabel(row.organization_review_status)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

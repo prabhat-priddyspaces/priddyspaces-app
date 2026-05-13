@@ -8,6 +8,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { formatCents } from "@/components/charts";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, setAccessToken } from "@/lib/auth";
 import { formatCurrency } from "@/lib/calendar";
@@ -70,8 +71,10 @@ interface MemberDetail {
   audit_logs: Array<{
     public_id: string;
     action: string;
+    action_label?: string;
     entity_type: string;
     entity_public_id: string;
+    entity_label?: string;
     actor_email: string | null;
     created_at: string | null;
   }>;
@@ -331,10 +334,10 @@ export function AdminMemberDetailClient() {
               <div className="grid gap-2">
                 {data.audit_logs.map((log) => (
                   <div key={log.public_id} className="rounded-sm border border-border p-2 text-xs">
-                    <div className="text-textPrimary">{log.action}</div>
+                    <div className="text-textPrimary">{log.action_label || formatAdminLabel(log.action)}</div>
                     <div className="text-textMuted">
-                      {log.entity_type} · {log.entity_public_id} · {log.actor_email ?? "system"} ·{" "}
-                      {log.created_at?.replace("T", " ").slice(0, 19) ?? "—"}
+                      {formatAdminLabel(log.entity_type)} · {log.entity_label || log.entity_public_id} · {log.actor_email ?? "system"} ·{" "}
+                      {formatAdminDateTime(log.created_at)}
                     </div>
                   </div>
                 ))}

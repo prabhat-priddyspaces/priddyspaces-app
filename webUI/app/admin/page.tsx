@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
 import { Card } from "@/components/ui/card";
+import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
@@ -12,8 +13,11 @@ interface DashboardResponse {
   recent_activity: Array<{
     public_id: string;
     action: string;
+    action_label?: string;
     entity_type: string;
     entity_public_id: string;
+    entity_label?: string;
+    actor_name: string | null;
     actor_email: string | null;
     created_at: string | null;
   }>;
@@ -65,9 +69,10 @@ export default function AdminDashboardPage() {
             {data?.recent_activity.length ? (
               data.recent_activity.map((item) => (
                 <div key={item.public_id} className="rounded-md border border-border p-3 text-sm">
-                  <div className="font-medium text-textPrimary">{item.action}</div>
+                  <div className="font-medium text-textPrimary">{item.action_label || formatAdminLabel(item.action)}</div>
+                  <div className="text-textSecondary">{item.entity_label || item.entity_public_id}</div>
                   <div className="text-textMuted">
-                    {item.entity_type} • {item.entity_public_id} • {item.actor_email || "system"}
+                    {formatAdminLabel(item.entity_type)} • {item.actor_name || item.actor_email || "System"} • {formatAdminDateTime(item.created_at)}
                   </div>
                 </div>
               ))
