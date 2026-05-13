@@ -112,11 +112,11 @@ export default function AdminPlatformTeamPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Platform Team</h2>
-          <p className="text-textSecondary">Invite and manage superadmin, admin, and support accounts.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Platform Team</h2>
+          <p className="text-text-2">Invite and manage superadmin, admin, and support accounts.</p>
         </div>
         {!isSuperadmin ? (
-          <Card className="p-4 text-sm text-textMuted">Only superadmins can manage platform team accounts.</Card>
+          <Card className="p-4 text-sm text-text-3">Only superadmins can manage platform team accounts.</Card>
         ) : (
           <>
             <Card className="p-4">
@@ -125,7 +125,7 @@ export default function AdminPlatformTeamPage() {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                  className="h-10 rounded-md border border-line bg-surface px-3 text-sm text-text"
                 >
                   <option value="support">Support</option>
                   <option value="admin">Admin</option>
@@ -136,15 +136,15 @@ export default function AdminPlatformTeamPage() {
                 </Button>
               </div>
             </Card>
-            {message ? <div className="text-sm text-error">{message}</div> : null}
+            {message ? <div className="text-sm text-danger">{message}</div> : null}
             <div className="grid gap-3">
               {members.map((member) => (
                 <Card key={member.public_id} className="p-4">
                   <div className="grid gap-4">
                     <div>
-                      <div className="font-semibold text-textPrimary">{member.name}</div>
-                      <div className="text-sm text-textMuted">{member.email}</div>
-                      <div className="text-sm text-textMuted">
+                      <div className="font-semibold text-text">{member.name}</div>
+                      <div className="text-sm text-text-3">{member.email}</div>
+                      <div className="text-sm text-text-3">
                         {member.role} • {member.is_active ? "active" : "inactive"}
                       </div>
                     </div>
@@ -162,18 +162,18 @@ export default function AdminPlatformTeamPage() {
                       <select
                         value={drafts[member.public_id]?.role ?? member.role}
                         onChange={(e) => updateDraft(member.public_id, { role: e.target.value })}
-                        className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                        className="h-10 rounded-md border border-line bg-surface px-3 text-sm text-text"
                       >
                         <option value="support">Support</option>
                         <option value="admin">Admin</option>
                         <option value="superadmin">Superadmin</option>
                       </select>
-                      <label className="flex items-center gap-2 text-sm text-textSecondary">
+                      <label className="flex items-center gap-2 text-sm text-text-2">
                         <input
                           type="checkbox"
                           checked={drafts[member.public_id]?.is_active ?? member.is_active}
                           onChange={(e) => updateDraft(member.public_id, { is_active: e.target.checked })}
-                          className="rounded border-border"
+                          className="rounded border-line"
                         />
                         Active
                       </label>

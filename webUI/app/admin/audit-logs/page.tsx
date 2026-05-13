@@ -44,48 +44,48 @@ export default function AdminAuditLogsPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Audit Logs</h2>
-          <p className="text-textSecondary">Track platform role changes, impersonation, approvals, and settings updates.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Audit Logs</h2>
+          <p className="text-text-2">Track platform role changes, impersonation, approvals, and settings updates.</p>
         </div>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-3">
           {logs.map((log) => (
             <Card key={log.public_id} className="p-4">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <div className="font-semibold text-textPrimary">{log.action_label || formatAdminLabel(log.action)}</div>
-                  <div className="text-sm text-textSecondary">{log.entity_label || log.entity_public_id}</div>
-                  <div className="text-sm text-textMuted">
+                  <div className="font-semibold text-text">{log.action_label || formatAdminLabel(log.action)}</div>
+                  <div className="text-sm text-text-2">{log.entity_label || log.entity_public_id}</div>
+                  <div className="text-sm text-text-3">
                     {formatAdminLabel(log.entity_type)} • Actor {log.actor_name || log.actor_email || "System"}
                     {log.acting_as_name || log.acting_as_email
                       ? ` • Acting as ${log.acting_as_name || log.acting_as_email}`
                       : ""}
                   </div>
                 </div>
-                <div className="text-xs text-textMuted">{formatAdminDateTime(log.created_at)}</div>
+                <div className="text-xs text-text-3">{formatAdminDateTime(log.created_at)}</div>
               </div>
-              <details className="mt-3 text-xs text-textMuted">
-                <summary className="cursor-pointer text-textSecondary">Raw details</summary>
-                <div className="mt-2 grid gap-2 rounded-sm bg-surface2 p-3">
+              <details className="mt-3 text-xs text-text-3">
+                <summary className="cursor-pointer text-text-2">Raw details</summary>
+                <div className="mt-2 grid gap-2 rounded-sm bg-surface-2 p-3">
                   <div>ID {log.public_id}</div>
                   <div>Entity ID {log.entity_public_id}</div>
                   <div>
-                    <div className="font-medium text-textSecondary">Before</div>
+                    <div className="font-medium text-text-2">Before</div>
                     <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">{formatJson(log.before_state)}</pre>
                   </div>
                   <div>
-                    <div className="font-medium text-textSecondary">After</div>
+                    <div className="font-medium text-text-2">After</div>
                     <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">{formatJson(log.after_state)}</pre>
                   </div>
                   <div>
-                    <div className="font-medium text-textSecondary">Context</div>
+                    <div className="font-medium text-text-2">Context</div>
                     <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">{formatJson(log.context)}</pre>
                   </div>
                 </div>
               </details>
             </Card>
           ))}
-          {logs.length === 0 ? <Card className="p-4 text-sm text-textMuted">No audit logs found.</Card> : null}
+          {logs.length === 0 ? <Card className="p-4 text-sm text-text-3">No audit logs found.</Card> : null}
         </div>
       </div>
     </AdminShell>

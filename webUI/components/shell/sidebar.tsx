@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Box,
+  Building2,
   Calendar,
   ChevronDown,
   CreditCard,
@@ -15,8 +16,11 @@ import {
   type LucideIcon,
   MapPin,
   Megaphone,
+  ScrollText,
   Search,
   Settings,
+  ShieldCheck,
+  Sparkles,
   Star,
   User,
   Users,
@@ -27,7 +31,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/kbd";
 import { Logo } from "@/components/shell/logo";
 
-export type SidebarVariant = "owner" | "customer";
+export type SidebarVariant = "owner" | "customer" | "admin";
 
 export interface SidebarItem {
   href: string;
@@ -53,6 +57,8 @@ export interface SidebarProps {
   profile?: SidebarProfile;
   onSearchClick?: () => void;
   onProfileClick?: () => void;
+  /** When `variant === "admin"`, controls whether platform-only items are shown. */
+  isSuperadmin?: boolean;
 }
 
 const ownerSections: SidebarSection[] = [
@@ -110,8 +116,53 @@ const customerSections: SidebarSection[] = [
   },
 ];
 
+const adminBaseSections: SidebarSection[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/admin", icon: Home, label: "Dashboard" },
+      { href: "/admin/calendar", icon: Calendar, label: "Calendar" },
+      { href: "/admin/analytics", icon: LineChart, label: "Analytics" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/admin/bookings", icon: Inbox, label: "Bookings" },
+      { href: "/admin/listings", icon: Box, label: "Listings" },
+      { href: "/admin/audit-logs", icon: ScrollText, label: "Audit logs" },
+      { href: "/admin/assistant-quality", icon: Sparkles, label: "Assistant quality" },
+    ],
+  },
+  {
+    label: "Accounts",
+    items: [
+      { href: "/admin/members", icon: Users, label: "Members" },
+      { href: "/admin/owner-companies", icon: Building2, label: "Owner companies" },
+      { href: "/admin/owner-users", icon: User, label: "Owner users" },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { href: "/admin/payments", icon: CreditCard, label: "Payments" },
+    ],
+  },
+];
+
+const adminSuperSections: SidebarSection[] = [
+  {
+    label: "Platform",
+    items: [
+      { href: "/admin/platform-team", icon: ShieldCheck, label: "Platform team" },
+      { href: "/admin/settings", icon: Settings, label: "Settings" },
+    ],
+  },
+];
+
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/owner" || href === "/member") return pathname === href;
+  if (href === "/owner" || href === "/member" || href === "/admin")
+    return pathname === href;
   return pathname === href || pathname.startsWith(href + "/");
 }
 
@@ -120,12 +171,24 @@ export function Sidebar({
   profile,
   onSearchClick,
   onProfileClick,
+  isSuperadmin = false,
 }: SidebarProps) {
   const pathname = usePathname() ?? "";
-  const sections = variant === "customer" ? customerSections : ownerSections;
+  const sections =
+    variant === "customer"
+      ? customerSections
+      : variant === "admin"
+      ? isSuperadmin
+        ? [...adminBaseSections, ...adminSuperSections]
+        : adminBaseSections
+      : ownerSections;
   const workspaceLabel =
     profile?.workspace ??
-    (variant === "customer" ? "Member" : "Workspace");
+    (variant === "customer"
+      ? "Member"
+      : variant === "admin"
+      ? "Platform"
+      : "Workspace");
 
   return (
     <aside className="hidden lg:flex flex-col gap-1 border-r border-line bg-bg px-3 py-3.5 w-[232px] flex-none overflow-hidden">

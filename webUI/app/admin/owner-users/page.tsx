@@ -67,8 +67,8 @@ export default function AdminOwnerUsersPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Owner Users</h2>
-          <p className="text-textSecondary">Review owner-side accounts and impersonate for operational support.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Owner Users</h2>
+          <p className="text-text-2">Review owner-side accounts and impersonate for operational support.</p>
         </div>
         <Card className="p-4">
           <div className="flex gap-3">
@@ -78,7 +78,7 @@ export default function AdminOwnerUsersPage() {
             </Button>
           </div>
         </Card>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-3">
           {rows.map((row) => (
             <Card key={row.membership_public_id} className="p-4">
@@ -86,19 +86,19 @@ export default function AdminOwnerUsersPage() {
                 <div>
                   <Link
                     href={`/admin/owner-users/_?id=${encodeURIComponent(row.user_public_id)}`}
-                    className="font-semibold text-textPrimary hover:underline"
+                    className="font-semibold text-text hover:underline"
                   >
                     {row.name}
                   </Link>
-                  <div className="text-sm text-textMuted">{row.email}</div>
-                  <div className="text-sm text-textMuted">
+                  <div className="text-sm text-text-3">{row.email}</div>
+                  <div className="text-sm text-text-3">
                     {row.organization_name} • {formatAdminLabel(row.role)} • {row.assigned_locations} assigned locations • {formatAdminLabel(row.organization_review_status)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
                     href={`/admin/owner-users/_?id=${encodeURIComponent(row.user_public_id)}`}
-                    className="rounded-sm border border-border px-3 py-2 text-sm text-textSecondary hover:bg-surface2"
+                    className="rounded-sm border border-line px-3 py-2 text-sm text-text-2 hover:bg-surface-2"
                   >
                     View details
                   </Link>
@@ -109,7 +109,7 @@ export default function AdminOwnerUsersPage() {
               </div>
             </Card>
           ))}
-          {rows.length === 0 ? <Card className="p-4 text-sm text-textMuted">No owner users found.</Card> : null}
+          {rows.length === 0 ? <Card className="p-4 text-sm text-text-3">No owner users found.</Card> : null}
         </div>
       </div>
     </AdminShell>

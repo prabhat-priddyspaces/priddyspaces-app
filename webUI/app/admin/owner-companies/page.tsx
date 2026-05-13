@@ -110,8 +110,8 @@ export default function AdminOwnerCompaniesPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Owner Companies</h2>
-          <p className="text-textSecondary">Approve, reject, and manage marketplace commission overrides.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Owner Companies</h2>
+          <p className="text-text-2">Approve, reject, and manage marketplace commission overrides.</p>
         </div>
         <Card className="p-4">
           <div className="flex gap-3">
@@ -121,14 +121,14 @@ export default function AdminOwnerCompaniesPage() {
             </Button>
           </div>
         </Card>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-4">
           {companies.map((company) => (
             <Card key={company.public_id} className="p-4">
               <div className="space-y-3">
                 <div>
-                  <div className="font-semibold text-textPrimary">{company.name}</div>
-                  <div className="text-sm text-textMuted">
+                  <div className="font-semibold text-text">{company.name}</div>
+                  <div className="text-sm text-text-3">
                     {company.owner.name || company.owner.email} • {formatAdminLabel(company.review_status)} • {company.locations} locations • {company.listings} listings
                   </div>
                 </div>
@@ -160,18 +160,18 @@ export default function AdminOwnerCompaniesPage() {
                   </Button>
                 </div>
                 {company.review_history.length ? (
-                  <details className="rounded-md border border-border bg-surface2/40 p-3 text-xs">
-                    <summary className="cursor-pointer font-medium text-textPrimary">
+                  <details className="rounded-md border border-line bg-surface-2/40 p-3 text-xs">
+                    <summary className="cursor-pointer font-medium text-text">
                       Review history ({company.review_history.length})
                     </summary>
                     <div className="mt-3 grid gap-2">
                       {company.review_history.map((history, index) => (
-                        <div key={`${history.created_at}-${index}`} className="rounded-sm border border-border bg-surface p-2">
-                          <div className="font-medium text-textPrimary">{formatAdminLabel(history.action)}</div>
-                          <div className="mt-1 text-textMuted">
+                        <div key={`${history.created_at}-${index}`} className="rounded-sm border border-line bg-surface p-2">
+                          <div className="font-medium text-text">{formatAdminLabel(history.action)}</div>
+                          <div className="mt-1 text-text-3">
                             {(history.actor_name || history.actor_email || "System")} • {formatAdminDateTime(history.created_at)}
                           </div>
-                          <div className="mt-1 text-textSecondary">
+                          <div className="mt-1 text-text-2">
                             {reviewHistorySummary(history.before_state, history.after_state)}
                           </div>
                         </div>
@@ -182,7 +182,7 @@ export default function AdminOwnerCompaniesPage() {
               </div>
             </Card>
           ))}
-          {companies.length === 0 ? <Card className="p-4 text-sm text-textMuted">No owner companies found.</Card> : null}
+          {companies.length === 0 ? <Card className="p-4 text-sm text-text-3">No owner companies found.</Card> : null}
         </div>
       </div>
     </AdminShell>

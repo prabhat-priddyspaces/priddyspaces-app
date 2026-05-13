@@ -142,19 +142,19 @@ export function AdminMemberDetailClient() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <Link href="/admin/members" className="text-xs text-accent hover:underline">
+          <Link href="/admin/members" className="text-xs text-brand hover:underline">
             ← Back to members
           </Link>
         </div>
-        {error ? <div className="text-sm text-error">{error}</div> : null}
+        {error ? <div className="text-sm text-danger">{error}</div> : null}
         {data ? (
           <>
             <Card className="p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-textPrimary">{data.profile.name}</h2>
-                  <div className="text-sm text-textSecondary">{data.profile.email}</div>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-textMuted">
+                  <h2 className="text-xl font-semibold text-text">{data.profile.name}</h2>
+                  <div className="text-sm text-text-2">{data.profile.email}</div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-3">
                     <span>Active: {data.profile.is_active ? "yes" : "no"}</span>
                     <span>Verified: {data.profile.email_verified ? "yes" : "no"}</span>
                     <span>Created: {data.profile.created_at?.slice(0, 10) ?? "—"}</span>
@@ -169,19 +169,19 @@ export function AdminMemberDetailClient() {
 
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold text-textPrimary">
+                <div className="text-sm font-semibold text-text">
                   Cross-org activity ({orgActivity.length})
                 </div>
-                <div className="text-xs text-textMuted">
+                <div className="text-xs text-text-3">
                   Per-org relationships and stats — useful for support across multiple owners.
                 </div>
               </div>
               {orgActivity.length === 0 ? (
-                <div className="text-xs text-textMuted">No org activity for this member.</div>
+                <div className="text-xs text-text-3">No org activity for this member.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-xs">
-                    <thead className="text-left text-textMuted">
+                    <thead className="text-left text-text-3">
                       <tr>
                         <th className="p-2">Organization</th>
                         <th className="p-2">CRM status</th>
@@ -195,21 +195,21 @@ export function AdminMemberDetailClient() {
                       {orgActivity.map((item) => (
                         <tr
                           key={item.organization_public_id}
-                          className="border-t border-border"
+                          className="border-t border-line"
                         >
-                          <td className="p-2 text-textPrimary">{item.name}</td>
-                          <td className="p-2 text-textSecondary capitalize">{item.status}</td>
-                          <td className="p-2 text-right text-textPrimary">
+                          <td className="p-2 text-text">{item.name}</td>
+                          <td className="p-2 text-text-2 capitalize">{item.status}</td>
+                          <td className="p-2 text-right text-text">
                             <div>{item.stats.confirmed_bookings} confirmed</div>
-                            <div className="text-textMuted">{item.stats.total_bookings} total</div>
+                            <div className="text-text-3">{item.stats.total_bookings} total</div>
                           </td>
-                          <td className="p-2 text-right text-textPrimary">
+                          <td className="p-2 text-right text-text">
                             {formatCurrency(item.stats.total_revenue_cents)}
                           </td>
-                          <td className="p-2 text-right text-textPrimary">
+                          <td className="p-2 text-right text-text">
                             {item.stats.active_subscriptions}
                           </td>
-                          <td className="p-2 text-textMuted">
+                          <td className="p-2 text-text-3">
                             {item.stats.last_booking_at?.slice(0, 10) ?? "—"}
                           </td>
                         </tr>
@@ -221,10 +221,10 @@ export function AdminMemberDetailClient() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Bookings ({data.bookings.length})</div>
+              <div className="mb-3 text-sm font-semibold text-text">Bookings ({data.bookings.length})</div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
-                  <thead className="text-left text-textMuted">
+                  <thead className="text-left text-text-3">
                     <tr>
                       <th className="p-2">Status</th>
                       <th className="p-2">Start</th>
@@ -236,20 +236,20 @@ export function AdminMemberDetailClient() {
                   </thead>
                   <tbody>
                     {data.bookings.map((b) => (
-                      <tr key={b.public_id} className="border-t border-border">
-                        <td className="p-2 text-textPrimary">{b.status}</td>
-                        <td className="p-2 text-textSecondary">{b.start_datetime.slice(0, 16).replace("T", " ")}</td>
-                        <td className="p-2 text-textSecondary">{b.end_datetime.slice(0, 16).replace("T", " ")}</td>
-                        <td className="p-2 text-textSecondary">{b.checked_in_at?.slice(0, 16).replace("T", " ") ?? "—"}</td>
-                        <td className="p-2 text-textSecondary">{b.checked_out_at?.slice(0, 16).replace("T", " ") ?? "—"}</td>
+                      <tr key={b.public_id} className="border-t border-line">
+                        <td className="p-2 text-text">{b.status}</td>
+                        <td className="p-2 text-text-2">{b.start_datetime.slice(0, 16).replace("T", " ")}</td>
+                        <td className="p-2 text-text-2">{b.end_datetime.slice(0, 16).replace("T", " ")}</td>
+                        <td className="p-2 text-text-2">{b.checked_in_at?.slice(0, 16).replace("T", " ") ?? "—"}</td>
+                        <td className="p-2 text-text-2">{b.checked_out_at?.slice(0, 16).replace("T", " ") ?? "—"}</td>
                         <td className="p-2">
-                          {b.no_show ? <span className="text-error">yes</span> : <span className="text-textMuted">no</span>}
+                          {b.no_show ? <span className="text-danger">yes</span> : <span className="text-text-3">no</span>}
                         </td>
                       </tr>
                     ))}
                     {data.bookings.length === 0 ? (
                       <tr>
-                        <td className="p-2 text-textMuted" colSpan={6}>
+                        <td className="p-2 text-text-3" colSpan={6}>
                           No bookings.
                         </td>
                       </tr>
@@ -260,10 +260,10 @@ export function AdminMemberDetailClient() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Payments ({data.payments.length})</div>
+              <div className="mb-3 text-sm font-semibold text-text">Payments ({data.payments.length})</div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
-                  <thead className="text-left text-textMuted">
+                  <thead className="text-left text-text-3">
                     <tr>
                       <th className="p-2">Date</th>
                       <th className="p-2">Status</th>
@@ -273,18 +273,18 @@ export function AdminMemberDetailClient() {
                   </thead>
                   <tbody>
                     {data.payments.map((p) => (
-                      <tr key={p.public_id} className="border-t border-border">
-                        <td className="p-2 text-textSecondary">{p.created_at?.slice(0, 10) ?? "—"}</td>
-                        <td className="p-2 text-textPrimary">{p.status}</td>
-                        <td className="p-2 text-right text-textPrimary">{formatCents(p.amount)}</td>
-                        <td className="p-2 font-mono text-[10px] text-textSecondary">
+                      <tr key={p.public_id} className="border-t border-line">
+                        <td className="p-2 text-text-2">{p.created_at?.slice(0, 10) ?? "—"}</td>
+                        <td className="p-2 text-text">{p.status}</td>
+                        <td className="p-2 text-right text-text">{formatCents(p.amount)}</td>
+                        <td className="p-2 font-mono text-[10px] text-text-2">
                           {p.stripe_payment_intent_id ?? "—"}
                         </td>
                       </tr>
                     ))}
                     {data.payments.length === 0 ? (
                       <tr>
-                        <td className="p-2 text-textMuted" colSpan={4}>
+                        <td className="p-2 text-text-3" colSpan={4}>
                           No payments.
                         </td>
                       </tr>
@@ -295,10 +295,10 @@ export function AdminMemberDetailClient() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Subscriptions ({data.subscriptions.length})</div>
+              <div className="mb-3 text-sm font-semibold text-text">Subscriptions ({data.subscriptions.length})</div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
-                  <thead className="text-left text-textMuted">
+                  <thead className="text-left text-text-3">
                     <tr>
                       <th className="p-2">Status</th>
                       <th className="p-2">Start</th>
@@ -308,18 +308,18 @@ export function AdminMemberDetailClient() {
                   </thead>
                   <tbody>
                     {data.subscriptions.map((s) => (
-                      <tr key={s.public_id} className="border-t border-border">
-                        <td className="p-2 text-textPrimary">{s.status}</td>
-                        <td className="p-2 text-textSecondary">{s.start_date ?? "—"}</td>
-                        <td className="p-2 text-textSecondary">{s.end_date ?? "—"}</td>
-                        <td className="p-2 font-mono text-[10px] text-textSecondary">
+                      <tr key={s.public_id} className="border-t border-line">
+                        <td className="p-2 text-text">{s.status}</td>
+                        <td className="p-2 text-text-2">{s.start_date ?? "—"}</td>
+                        <td className="p-2 text-text-2">{s.end_date ?? "—"}</td>
+                        <td className="p-2 font-mono text-[10px] text-text-2">
                           {s.stripe_subscription_id ?? "—"}
                         </td>
                       </tr>
                     ))}
                     {data.subscriptions.length === 0 ? (
                       <tr>
-                        <td className="p-2 text-textMuted" colSpan={4}>
+                        <td className="p-2 text-text-3" colSpan={4}>
                           No subscriptions.
                         </td>
                       </tr>
@@ -330,19 +330,19 @@ export function AdminMemberDetailClient() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Audit trail ({data.audit_logs.length})</div>
+              <div className="mb-3 text-sm font-semibold text-text">Audit trail ({data.audit_logs.length})</div>
               <div className="grid gap-2">
                 {data.audit_logs.map((log) => (
-                  <div key={log.public_id} className="rounded-sm border border-border p-2 text-xs">
-                    <div className="text-textPrimary">{log.action_label || formatAdminLabel(log.action)}</div>
-                    <div className="text-textMuted">
+                  <div key={log.public_id} className="rounded-sm border border-line p-2 text-xs">
+                    <div className="text-text">{log.action_label || formatAdminLabel(log.action)}</div>
+                    <div className="text-text-3">
                       {formatAdminLabel(log.entity_type)} · {log.entity_label || log.entity_public_id} · {log.actor_email ?? "system"} ·{" "}
                       {formatAdminDateTime(log.created_at)}
                     </div>
                   </div>
                 ))}
                 {data.audit_logs.length === 0 ? (
-                  <div className="text-xs text-textMuted">No audit entries.</div>
+                  <div className="text-xs text-text-3">No audit entries.</div>
                 ) : null}
               </div>
             </Card>

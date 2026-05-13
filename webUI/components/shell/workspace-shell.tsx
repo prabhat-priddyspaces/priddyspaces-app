@@ -8,6 +8,7 @@ import { Sidebar, type SidebarProps } from "@/components/shell/sidebar";
 export interface WorkspaceShellProps {
   sidebar?: SidebarProps["variant"];
   sidebarProfile?: SidebarProps["profile"];
+  isSuperadmin?: boolean;
   topbar?: React.ReactNode;
   banner?: React.ReactNode;
   children: React.ReactNode;
@@ -19,6 +20,7 @@ export interface WorkspaceShellProps {
 export function WorkspaceShell({
   sidebar = "owner",
   sidebarProfile,
+  isSuperadmin,
   topbar,
   banner,
   children,
@@ -33,6 +35,7 @@ export function WorkspaceShell({
         <Sidebar
           variant={sidebar}
           profile={sidebarProfile}
+          isSuperadmin={isSuperadmin}
           onSearchClick={onSearchClick}
         />
         <div className="flex flex-col flex-1 min-w-0">
