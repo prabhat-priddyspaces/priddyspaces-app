@@ -50,15 +50,17 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
   await page.goto("/owner/requests");
 
   await expect(page.getByRole("heading", { name: "Requests" })).toBeVisible();
-  await expect(page.getByText("Estimated amount: $180")).toBeVisible();
+  await expect(page.getByText("$180").first()).toBeVisible();
 
   const notes = page.locator("textarea").first();
   await notes.fill("Approved for the afternoon block");
   await page.getByRole("button", { name: "Approve", exact: true }).click();
 
-  await expect(page.getByText("Status: approved")).toBeVisible();
-  await expect(page.getByText("Payment: succeeded • stripe")).toBeVisible();
-  await expect(page.getByText("Booking created: book_approved_1")).toBeVisible();
+  // After approval the redesign flips the status badge, updates the
+  // payment cell, and shows the booking id in the requester sub line.
+  await expect(page.getByText("Confirmed")).toBeVisible();
+  await expect(page.getByText(/succeeded.*stripe/i)).toBeVisible();
+  await expect(page.getByText("Booking book_approved_1")).toBeVisible();
   await expect(notes).toHaveValue("Approved for the afternoon block");
 });
 
@@ -116,8 +118,10 @@ test("owner request email deep link opens approve confirmation", async ({ page }
 
   await expect(page.getByRole("heading", { name: "Requests" })).toBeVisible();
   await expect(page.getByText("Approve request")).toBeVisible();
+  // Deep-link opens the confirmation modal — its Approve button is the
+  // last "Approve" on the page (after the row's inline Approve).
   await page.getByRole("button", { name: "Approve", exact: true }).last().click();
 
-  await expect(page.getByText("Status: approved")).toBeVisible();
-  await expect(page.getByText("Booking created: book_email_1")).toBeVisible();
+  await expect(page.getByText("Confirmed")).toBeVisible();
+  await expect(page.getByText("Booking book_email_1")).toBeVisible();
 });
