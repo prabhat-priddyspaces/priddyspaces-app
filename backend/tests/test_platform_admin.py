@@ -175,6 +175,48 @@ def test_superadmin_can_update_settings_profile_and_password(db_session, client_
     assert wrong_current.status_code == 400
 
 
+def test_superadmin_can_update_and_remove_platform_team_access(db_session, client_factory):
+    superadmin = _create_platform_member(db_session, email="team-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    support = _create_platform_member(db_session, email="support-update@example.com", role=PlatformTeamRole.SUPPORT)
+    client = client_factory({
+        "sub": str(superadmin.public_id),
+        "email": superadmin.email,
+        "email_verified": True,
+    })
+    support_member = db_session.query(PlatformTeamMember).filter(PlatformTeamMember.user_id == support.id).one()
+
+    update = client.patch(
+        f"/api/admin/platform-team/{support_member.public_id}",
+        json={
+            "first_name": "Sam",
+            "last_name": "Support",
+            "role": "admin",
+            "is_active": True,
+        },
+    )
+    assert update.status_code == 200
+    assert update.json()["name"] == "Sam Support"
+    assert update.json()["role"] == "admin"
+
+    delete = client.delete(f"/api/admin/platform-team/{support_member.public_id}")
+    assert delete.status_code == 200
+    assert db_session.query(PlatformTeamMember).filter(PlatformTeamMember.user_id == support.id).first() is None
+    assert db_session.query(User).filter(User.id == support.id).first() is not None
+
+
+def test_superadmin_cannot_remove_own_platform_access(db_session, client_factory):
+    superadmin = _create_platform_member(db_session, email="team-self@example.com", role=PlatformTeamRole.SUPERADMIN)
+    client = client_factory({
+        "sub": str(superadmin.public_id),
+        "email": superadmin.email,
+        "email_verified": True,
+    })
+    member = db_session.query(PlatformTeamMember).filter(PlatformTeamMember.user_id == superadmin.id).one()
+
+    response = client.delete(f"/api/admin/platform-team/{member.public_id}")
+    assert response.status_code == 400
+
+
 def test_pending_org_hidden_from_marketplace_and_member_access(db_session, client_factory):
     _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
     location = Location(

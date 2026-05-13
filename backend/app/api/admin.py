@@ -83,6 +83,25 @@ def _humanize_label(value: str | None) -> str:
     return cleaned[:1].upper() + cleaned[1:] if cleaned else "Unknown"
 
 
+def _active_superadmin_count(db: Session) -> int:
+    return (
+        db.query(PlatformTeamMember)
+        .filter(
+            PlatformTeamMember.role == PlatformTeamRole.SUPERADMIN,
+            PlatformTeamMember.is_active.is_(True),
+        )
+        .count()
+    )
+
+
+def _would_remove_last_superadmin(member: PlatformTeamMember, payload: PlatformTeamUpdateIn, db: Session) -> bool:
+    if member.role != PlatformTeamRole.SUPERADMIN or not member.is_active:
+        return False
+    demoting = payload.role is not None and payload.role != PlatformTeamRole.SUPERADMIN
+    deactivating = payload.is_active is False
+    return (demoting or deactivating) and _active_superadmin_count(db) <= 1
+
+
 def _build_metrics(db: Session) -> dict[str, int | float]:
     tenant_count = db.query(Organization).count()
     user_count = db.query(User).count()
@@ -900,6 +919,8 @@ def list_platform_team(
             "public_id": member.public_id,
             "email": user.email,
             "name": _user_label(user),
+            "first_name": user.first_name,
+            "last_name": user.last_name,
             "role": member.role.value,
             "is_active": member.is_active,
             "invited_at": member.invited_at.isoformat() if member.invited_at else None,
@@ -967,6 +988,9 @@ def invite_platform_team_member(
     return {
         "public_id": platform_member.public_id,
         "email": user.email,
+        "name": _user_label(user),
+        "first_name": user.first_name,
+        "last_name": user.last_name,
         "role": platform_member.role.value,
         "is_active": platform_member.is_active,
     }
@@ -983,14 +1007,33 @@ def update_platform_team_member(
     platform_member = db.query(PlatformTeamMember).filter(PlatformTeamMember.public_id == public_id).first()
     if not platform_member:
         raise HTTPException(status_code=404, detail="Platform team member not found")
-    before = {"role": platform_member.role.value, "is_active": platform_member.is_active}
+    user = db.query(User).filter(User.id == platform_member.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Platform team member not found")
+    if _would_remove_last_superadmin(platform_member, payload, db):
+        raise HTTPException(status_code=400, detail="At least one active superadmin is required")
+    before = {
+        "role": platform_member.role.value,
+        "is_active": platform_member.is_active,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "full_name": user.full_name,
+    }
     if payload.role is not None:
         platform_member.role = payload.role
     if payload.is_active is not None:
         platform_member.is_active = payload.is_active
+    if payload.first_name is not None:
+        user.first_name = payload.first_name.strip() or None
+    if payload.last_name is not None:
+        user.last_name = payload.last_name.strip() or None
+    if payload.first_name is not None or payload.last_name is not None:
+        user.full_name = " ".join(part for part in [user.first_name, user.last_name] if part).strip() or None
     db.add(platform_member)
+    db.add(user)
     db.commit()
     db.refresh(platform_member)
+    db.refresh(user)
     write_audit_log(
         db=db,
         actor_id=actor.id,
@@ -998,13 +1041,62 @@ def update_platform_team_member(
         entity_type="platform_team_member",
         entity_public_id=platform_member.public_id,
         before_state=before,
-        after_state={"role": platform_member.role.value, "is_active": platform_member.is_active},
+        after_state={
+            "role": platform_member.role.value,
+            "is_active": platform_member.is_active,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "full_name": user.full_name,
+        },
     )
     return {
         "public_id": platform_member.public_id,
+        "email": user.email,
+        "name": _user_label(user),
+        "first_name": user.first_name,
+        "last_name": user.last_name,
         "role": platform_member.role.value,
         "is_active": platform_member.is_active,
     }
+
+
+@router.delete("/admin/platform-team/{public_id}")
+def delete_platform_team_member(
+    public_id: str,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    actor, _member = require_superadmin(db, token)
+    platform_member = db.query(PlatformTeamMember).filter(PlatformTeamMember.public_id == public_id).first()
+    if not platform_member:
+        raise HTTPException(status_code=404, detail="Platform team member not found")
+    if platform_member.user_id == actor.id:
+        raise HTTPException(status_code=400, detail="You cannot remove your own platform access")
+    if (
+        platform_member.role == PlatformTeamRole.SUPERADMIN
+        and platform_member.is_active
+        and _active_superadmin_count(db) <= 1
+    ):
+        raise HTTPException(status_code=400, detail="At least one active superadmin is required")
+    user = db.query(User).filter(User.id == platform_member.user_id).first()
+    before = {
+        "role": platform_member.role.value,
+        "is_active": platform_member.is_active,
+        "email": user.email if user else None,
+    }
+    entity_public_id = platform_member.public_id
+    db.delete(platform_member)
+    db.commit()
+    write_audit_log(
+        db=db,
+        actor_id=actor.id,
+        action="platform_team_member_removed",
+        entity_type="platform_team_member",
+        entity_public_id=entity_public_id,
+        before_state=before,
+        after_state=None,
+    )
+    return {"ok": True}
 
 
 @router.get("/admin/settings")
