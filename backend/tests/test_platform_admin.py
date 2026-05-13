@@ -140,6 +140,41 @@ def test_superadmin_can_invite_platform_team_member_but_admin_cannot(db_session,
     assert forbidden.status_code == 403
 
 
+def test_superadmin_can_update_settings_profile_and_password(db_session, client_factory):
+    superadmin = _create_platform_member(db_session, email="settings-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    client = client_factory({
+        "sub": str(superadmin.public_id),
+        "email": superadmin.email,
+        "email_verified": True,
+    })
+
+    settings = client.get("/api/admin/settings")
+    assert settings.status_code == 200
+    assert settings.json()["current_admin"]["email"] == superadmin.email
+    assert settings.json()["current_admin"]["created_at"] is not None
+
+    profile = client.patch(
+        "/api/admin/settings/profile",
+        json={"first_name": "Ada", "last_name": "Admin"},
+    )
+    assert profile.status_code == 200
+    assert profile.json()["name"] == "Ada Admin"
+
+    password = client.patch(
+        "/api/admin/settings/password",
+        json={"new_password": "NewPass123!"},
+    )
+    assert password.status_code == 200
+    db_session.refresh(superadmin)
+    assert verify_password("NewPass123!", superadmin.password_hash)
+
+    wrong_current = client.patch(
+        "/api/admin/settings/password",
+        json={"current_password": "wrong", "new_password": "AnotherPass123!"},
+    )
+    assert wrong_current.status_code == 400
+
+
 def test_pending_org_hidden_from_marketplace_and_member_access(db_session, client_factory):
     _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
     location = Location(
