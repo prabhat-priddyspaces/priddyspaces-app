@@ -3,9 +3,24 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { CalendarDays, Clock3, Compass, Search, SlidersHorizontal, Users } from "lucide-react";
+import {
+  Building2,
+  Calendar as CalendarIcon,
+  ChevronDown,
+  Clock3,
+  Compass,
+  MapPin,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Users,
+} from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { PublicTopbar } from "@/components/public-topbar";
 import { PublicImageWithFallback } from "@/components/public-image-with-fallback";
 import {
@@ -28,6 +43,7 @@ import {
   reverseGeocode,
   useAddressAutocomplete,
 } from "@/components/use-address-autocomplete";
+import { cn } from "@/lib/utils";
 
 interface PublicMarketplaceBrowserProps {
   routeKey: PublicMarketplaceRoute;
@@ -45,6 +61,15 @@ const DEFAULT_FORM = {
   lat: "",
   lng: "",
   radius_miles: "",
+};
+
+// Sub-label for each marketplace tab — matches the prototype's
+// "Coworking · Day passes" two-line pill, rendered without changing the
+// canonical tab `label` (which the e2e suite asserts on).
+const TAB_SUBLABELS: Record<PublicMarketplaceRoute, string> = {
+  spaces: "Day passes",
+  "meeting-rooms": "Hourly",
+  "private-offices": "Monthly",
 };
 
 export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserProps) {
@@ -255,50 +280,62 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
     }
   }
 
-  const activeLocation = results.find((result) => result.location_public_id === selectedLocationId) || null;
-
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.14),_transparent_34%),linear-gradient(180deg,_#f8fafc_0%,_#eef6f8_100%)] pb-10">
+    <main className="min-h-screen bg-bg text-text">
       <PublicTopbar />
 
-      <section className="mx-auto max-w-[1440px] px-6 pt-8">
-        <div className="rounded-[32px] border border-white/80 bg-white/90 p-6 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]">
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-2xl">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{config.title}</h1>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{config.subtitle}</p>
-              </div>
-              {activeLocation ? (
-                <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
-                  <div className="font-semibold">{activeLocation.name}</div>
-                  <div className="mt-1 text-xs text-teal-700">{formatLocationAddress(activeLocation)}</div>
-                </div>
-              ) : null}
-            </div>
+      <section className="mx-auto max-w-[1440px] px-6 pt-6 lg:pt-8">
+        <div className="flex flex-col gap-1.5 mb-4">
+          <h1 className="text-[28px] lg:text-[32px] font-semibold tracking-[-0.02em] text-text">
+            {config.title}
+          </h1>
+          <p className="text-[13px] text-text-3 max-w-2xl">{config.subtitle}</p>
+        </div>
 
-            <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-              {PUBLIC_MARKETPLACE_TABS.map((tab) => {
-                const active = tab.routeKey === routeKey;
-                return (
-                  <Link
-                    key={tab.routeKey}
-                    href={buildTabHref(tab.routeKey, searchParams)}
-                    className={
-                      active
-                        ? "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                        : "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                    }
-                  >
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </div>
+        {/* Tab pills — labels are the canonical PUBLIC_MARKETPLACE_TABS values
+            (so the e2e role-by-name lookups still match). Sub-labels add the
+            prototype's two-line treatment. */}
+        <div className="flex flex-wrap gap-2 mb-3.5">
+          {PUBLIC_MARKETPLACE_TABS.map((tab) => {
+            const active = tab.routeKey === routeKey;
+            return (
+              <Link
+                key={tab.routeKey}
+                href={buildTabHref(tab.routeKey, searchParams)}
+                className={cn(
+                  "flex flex-col items-start gap-0 px-4 py-2 rounded-xl border text-left transition-colors",
+                  active
+                    ? "bg-brand text-white border-brand shadow-sm"
+                    : "bg-surface text-text-2 border-line hover:border-line-strong"
+                )}
+              >
+                <span className="text-[13px] font-semibold leading-tight">
+                  {tab.label}
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px] leading-tight mt-0.5",
+                    active ? "text-white/80" : "text-text-3"
+                  )}
+                >
+                  {TAB_SUBLABELS[tab.routeKey]}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
 
-            <form onSubmit={handleSubmit} className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.8fr))_auto]">
-              <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                <Search className="h-4 w-4 text-slate-500" />
+        {/* Search bar — divided horizontal card */}
+        <Card padded={false} className="overflow-hidden mb-3">
+          <form
+            onSubmit={handleSubmit}
+            className="grid gap-0 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] divide-y lg:divide-y-0 lg:divide-x divide-line"
+          >
+            <SearchField
+              icon={<MapPin size={13} className="text-brand" />}
+              label="Where"
+            >
+              <div className="flex items-center gap-2">
                 <input
                   ref={searchInputRef}
                   value={form.q}
@@ -307,190 +344,217 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                     setForm((current) => ({
                       ...current,
                       q: value,
-                      // Free-text edits invalidate any geocoded coordinates; clear
-                      // them so the next search uses keyword matching.
+                      // Free-text edits invalidate any geocoded coordinates.
                       lat: "",
                       lng: "",
                     }));
                   }}
                   placeholder={config.queryPlaceholder}
                   autoComplete="off"
-                  className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
+                  className="flex-1 min-w-0 bg-transparent text-[13px] font-medium text-text outline-none placeholder:text-text-4"
                 />
                 <button
                   type="button"
                   onClick={handleUseMyLocation}
                   disabled={locating}
                   title="Use my current location"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-teal-500 hover:text-teal-700 disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-text-3 transition hover:border-brand hover:text-brand disabled:cursor-wait disabled:opacity-60"
                 >
-                  <Compass className="h-3.5 w-3.5" />
-                  {locating ? "Locating…" : "Use my location"}
+                  <Compass className="h-3 w-3" />
+                  {locating ? "Locating…" : "Locate me"}
                 </button>
-              </label>
-              {routeKey !== "private-offices" ? (
-                <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                  <CalendarDays className="h-4 w-4 text-slate-500" />
+              </div>
+            </SearchField>
+
+            {routeKey !== "private-offices" ? (
+              <SearchField
+                icon={<CalendarIcon size={13} className="text-text-3" />}
+                label="When"
+              >
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+                  className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
+                />
+              </SearchField>
+            ) : (
+              <SearchField
+                icon={<Users size={13} className="text-text-3" />}
+                label="Capacity"
+              >
+                <input
+                  type="number"
+                  min="1"
+                  value={form.capacity}
+                  onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))}
+                  placeholder="Min capacity"
+                  className="bg-transparent text-[13px] font-medium text-text outline-none w-full placeholder:text-text-4"
+                />
+              </SearchField>
+            )}
+
+            {routeKey === "meeting-rooms" ? (
+              <>
+                <SearchField
+                  icon={<Clock3 size={13} className="text-text-3" />}
+                  label="Start"
+                >
                   <input
-                    type="date"
-                    value={form.date}
-                    onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
-                    className="w-full bg-transparent text-sm text-slate-900 outline-none"
+                    type="time"
+                    value={form.start_time}
+                    onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))}
+                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
                   />
-                </label>
-              ) : (
-                <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                  <Users className="h-4 w-4 text-slate-500" />
+                </SearchField>
+                <SearchField
+                  icon={<Clock3 size={13} className="text-text-3" />}
+                  label="End"
+                >
+                  <input
+                    type="time"
+                    value={form.end_time}
+                    onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))}
+                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
+                  />
+                </SearchField>
+              </>
+            ) : (
+              <>
+                <SearchField
+                  icon={<Users size={13} className="text-text-3" />}
+                  label="Capacity"
+                >
                   <input
                     type="number"
                     min="1"
                     value={form.capacity}
                     onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))}
                     placeholder="Min capacity"
-                    className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
+                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full placeholder:text-text-4"
                   />
-                </label>
-              )}
-              {routeKey === "meeting-rooms" ? (
-                <>
-                  <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                    <Clock3 className="h-4 w-4 text-slate-500" />
-                    <input
-                      type="time"
-                      value={form.start_time}
-                      onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))}
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none"
-                    />
-                  </label>
-                  <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                    <Clock3 className="h-4 w-4 text-slate-500" />
-                    <input
-                      type="time"
-                      value={form.end_time}
-                      onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))}
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none"
-                    />
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                    <Users className="h-4 w-4 text-slate-500" />
-                    <input
-                      type="number"
-                      min="1"
-                      value={form.capacity}
-                      onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))}
-                      placeholder="Min capacity"
-                      className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
-                    />
-                  </label>
-                  <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                    <SlidersHorizontal className="h-4 w-4 text-slate-500" />
-                    <input
-                    type="number"
-                    min="0"
-                    value={config.priceParamKey === "max_price_monthly" ? form.max_price_monthly : form.max_price}
-                    onChange={(event) => updatePriceValue(event.target.value)}
-                    placeholder={config.priceLabel}
-                    className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
-                  />
-                  </label>
-                </>
-              )}
-              {routeKey === "meeting-rooms" ? (
-                <label className="flex min-h-14 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-                  <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+                </SearchField>
+                <SearchField
+                  icon={<SlidersHorizontal size={13} className="text-text-3" />}
+                  label={config.priceLabel}
+                >
                   <input
                     type="number"
                     min="0"
-                    value={form.max_price}
-                    onChange={(event) => setForm((current) => ({ ...current, max_price: event.target.value }))}
-                    placeholder={config.priceLabel}
-                    className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-500"
+                    value={
+                      config.priceParamKey === "max_price_monthly"
+                        ? form.max_price_monthly
+                        : form.max_price
+                    }
+                    onChange={(event) => updatePriceValue(event.target.value)}
+                    placeholder="Any"
+                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full placeholder:text-text-4"
                   />
-                </label>
-              ) : null}
-              <button
-                type="submit"
-                className="inline-flex min-h-14 items-center justify-center rounded-2xl bg-slate-900 px-6 text-sm font-semibold text-white transition hover:bg-slate-700"
-              >
-                Search
-              </button>
-            </form>
-            {autocompleteWarning && (
-              <p className="text-xs text-slate-500">{autocompleteWarning}</p>
-            )}
-            {locationNotice && (
-              <p className="text-xs text-slate-500">{locationNotice}</p>
+                </SearchField>
+              </>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 md:max-w-[280px]">
-                <Compass className="h-4 w-4 text-slate-500" />
-                <span className="whitespace-nowrap text-xs uppercase tracking-[0.16em] text-slate-500">Within</span>
-                <input
-                  type="number"
-                  min="1"
-                  max={MAX_RADIUS_MILES}
-                  step="1"
-                  value={form.radius_miles}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    if (raw === "") {
-                      setForm((current) => ({ ...current, radius_miles: "" }));
-                      return;
-                    }
-                    const parsed = Number(raw);
-                    if (Number.isNaN(parsed)) return;
-                    const clamped = Math.max(1, Math.min(MAX_RADIUS_MILES, Math.floor(parsed)));
-                    setForm((current) => ({ ...current, radius_miles: String(clamped) }));
-                  }}
-                  placeholder={String(DEFAULT_RADIUS_MILES)}
-                  disabled={!form.lat || !form.lng}
-                  className="w-16 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-                <span className="whitespace-nowrap text-xs text-slate-500">miles</span>
-                {!form.lat || !form.lng ? (
-                  <span className="ml-auto text-[11px] text-slate-400">Pick a place to enable</span>
-                ) : null}
-              </label>
-              <select
-                value={form.sort}
-                onChange={(event) => setForm((current) => ({ ...current, sort: event.target.value }))}
-                className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none md:max-w-[220px]"
+            <div className="p-2 flex items-stretch">
+              <button
+                type="submit"
+                className="inline-flex h-11 lg:h-auto items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-white transition hover:bg-brand-hover lg:min-w-[120px]"
               >
-                <option value="">Default sort</option>
-                <option value="relevance">Relevance</option>
-                <option value="distance">Distance</option>
-                <option value="price_asc">Lowest price</option>
-                <option value="price_desc">Highest price</option>
-                <option value="name">Location name</option>
-              </select>
+                <Search size={14} strokeWidth={2.5} />
+                Search
+              </button>
             </div>
+          </form>
+        </Card>
+
+        {/* Helper / radius / sort row */}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-3 h-9 text-[12px] text-text-3">
+            <Compass className="h-3.5 w-3.5" />
+            <span className="uppercase tracking-[0.06em] text-[10px] text-text-3 font-semibold">Within</span>
+            <input
+              type="number"
+              min="1"
+              max={MAX_RADIUS_MILES}
+              step="1"
+              value={form.radius_miles}
+              onChange={(event) => {
+                const raw = event.target.value;
+                if (raw === "") {
+                  setForm((current) => ({ ...current, radius_miles: "" }));
+                  return;
+                }
+                const parsed = Number(raw);
+                if (Number.isNaN(parsed)) return;
+                const clamped = Math.max(1, Math.min(MAX_RADIUS_MILES, Math.floor(parsed)));
+                setForm((current) => ({ ...current, radius_miles: String(clamped) }));
+              }}
+              placeholder={String(DEFAULT_RADIUS_MILES)}
+              disabled={!form.lat || !form.lng}
+              className="w-12 bg-transparent text-text outline-none placeholder:text-text-4 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <span className="text-[12px] text-text-3">mi</span>
+            {!form.lat || !form.lng ? (
+              <span className="text-[10px] text-text-4">Pick a place</span>
+            ) : null}
+          </label>
+          <div className="relative">
+            <select
+              value={form.sort}
+              onChange={(event) => setForm((current) => ({ ...current, sort: event.target.value }))}
+              className="h-9 appearance-none rounded-xl border border-line bg-surface pl-3 pr-8 text-[13px] text-text outline-none"
+            >
+              <option value="">Default sort</option>
+              <option value="relevance">Relevance</option>
+              <option value="distance">Distance</option>
+              <option value="price_asc">Lowest price</option>
+              <option value="price_desc">Highest price</option>
+              <option value="name">Location name</option>
+            </select>
+            <ChevronDown
+              size={12}
+              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-3"
+            />
           </div>
+          {autocompleteWarning && (
+            <p className="text-[11px] text-text-4">{autocompleteWarning}</p>
+          )}
+          {locationNotice && (
+            <p className="text-[11px] text-text-4">{locationNotice}</p>
+          )}
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1440px] px-6 pt-6">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+      <section className="mx-auto max-w-[1440px] px-6 pb-12">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
+          <div className="space-y-3.5">
+            <div className="flex items-end justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-slate-900">Showing {totalLocations} locations</div>
-                <div className="text-xs text-slate-500">Results stay in the URL, so you can refresh or share this search.</div>
+                <div className="text-[14px] text-text-2">
+                  <strong className="text-text">Showing {totalLocations} locations</strong>
+                </div>
+                <div className="text-[11px] text-text-3 mt-0.5">
+                  Results stay in the URL, so you can refresh or share this search.
+                </div>
               </div>
             </div>
 
-            {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-            {loading ? <div className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-sm text-slate-500">Loading marketplace locations…</div> : null}
+            {error ? (
+              <Card padded={false} className="px-4 py-3 border-danger/30 bg-danger-soft text-[13px] text-danger">
+                {error}
+              </Card>
+            ) : null}
+            {loading ? (
+              <Card padded={false} className="px-4 py-12 text-[13px] text-text-3 text-center">
+                Loading marketplace locations…
+              </Card>
+            ) : null}
             {!loading && results.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-sm text-slate-500">
+              <Card padded={false} className="px-4 py-12 text-[13px] text-text-3 text-center">
                 No locations matched this search. Try widening the price cap or removing a date or capacity filter.
-              </div>
+              </Card>
             ) : null}
 
-            {results.map((location) => {
+            {results.map((location, index) => {
               const chips = getLocationPriceChips(config, location);
               const active = location.location_public_id === selectedLocationId;
               const locationHref = buildMarketplaceLocationHref(
@@ -501,6 +565,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               const primaryHref = location.featured_space_public_id
                 ? buildMarketplaceSpaceHref(location.featured_space_public_id, routeKey, currentSearch)
                 : locationHref;
+              const featured = index === 0;
 
               function handleCardActivate() {
                 handleSelectLocation(location.location_public_id);
@@ -526,95 +591,130 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       handleCardActivate();
                     }
                   }}
-                  className={
+                  className={cn(
+                    "rounded-2xl bg-surface border p-3 cursor-pointer transition-all outline-none focus-visible:shadow-ring",
                     active
-                      ? "cursor-pointer rounded-[28px] border border-teal-300 bg-white p-4 shadow-[0_20px_50px_-30px_rgba(15,118,110,0.5)] outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-teal-600"
-                      : "cursor-pointer rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+                      ? "border-brand"
+                      : "border-line hover:border-line-strong shadow-xs dark:shadow-none"
+                  )}
+                  style={
+                    active
+                      ? { boxShadow: "0 0 0 3px var(--brand-soft)" }
+                      : undefined
                   }
                 >
-                  <div className="flex gap-4">
-                    <div className="h-36 w-36 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
+                  <div className="flex gap-3">
+                    <div
+                      className="relative w-32 h-28 rounded-xl overflow-hidden flex-none"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, var(--ps-violet-100), var(--ps-mint-100))",
+                      }}
+                    >
                       <PublicImageWithFallback
                         src={location.featured_image_url}
                         alt={location.name}
                         className="h-full w-full object-cover"
-                        fallbackClassName="flex h-full items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-xs font-semibold uppercase tracking-[0.24em] text-slate-600"
+                        fallbackClassName="absolute inset-0 grid place-items-center text-brand opacity-50"
                       />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h2 className="text-2xl font-semibold text-slate-900">{location.name}</h2>
-                          <p className="mt-1 text-sm text-slate-600">{formatLocationAddress(location)}</p>
-                          {location.neighborhood ? (
-                            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-teal-700">{location.neighborhood}</p>
-                          ) : null}
+                      {featured ? (
+                        <Badge
+                          variant="violet"
+                          className="absolute top-2 right-2 h-[18px] text-[10px] px-1.5 bg-brand text-white"
+                        >
+                          <Sparkles size={10} strokeWidth={2.5} />
+                          Featured
+                        </Badge>
+                      ) : null}
+                      {!location.featured_image_url ? (
+                        <div className="absolute inset-0 grid place-items-center text-brand opacity-40 pointer-events-none">
+                          <Building2 size={28} />
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
+                      ) : null}
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h2 className="text-[15px] font-semibold tracking-[-0.01em] truncate">
+                              {location.name}
+                            </h2>
+                            <div className="text-[11px] text-text-3 mt-0.5 truncate">
+                              {formatLocationAddress(location)}
+                            </div>
+                          </div>
                           {location.distance_miles != null ? (
-                            <div className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                            <Badge variant="default" className="shrink-0">
                               {location.distance_miles < 0.1
                                 ? "<0.1 mi"
                                 : `${location.distance_miles.toFixed(1)} mi`}
-                            </div>
+                            </Badge>
                           ) : null}
-                          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {location.matching_space_count} matching {location.matching_space_count === 1 ? "space" : "spaces"}
+                        </div>
+                        {location.location_amenities.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {location.location_amenities.slice(0, 5).map((amenity) => (
+                              <span
+                                key={amenity}
+                                className="inline-flex items-center h-[20px] px-1.5 text-[10px] font-medium rounded-full bg-surface-2 text-text-3"
+                              >
+                                {amenity}
+                              </span>
+                            ))}
+                            {location.location_amenities.length > 5 ? (
+                              <span className="text-[10px] text-text-3 self-center">
+                                +{location.location_amenities.length - 5} more
+                              </span>
+                            ) : null}
                           </div>
-                        </div>
+                        ) : null}
                       </div>
-
-                      {location.location_amenities.length > 0 ? (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {location.location_amenities.slice(0, 6).map((amenity) => (
-                            <span
-                              key={amenity}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
-                            >
-                              {amenity}
+                      <div className="flex items-end justify-between gap-2 mt-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-1 text-[11px] text-text-3">
+                            <Star
+                              size={11}
+                              className="fill-warning text-warning"
+                            />
+                            <strong className="text-text font-mono" style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {location.matching_space_count}
+                            </strong>
+                            <span>
+                              {location.matching_space_count === 1
+                                ? "matching space"
+                                : "matching spaces"}
                             </span>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {chips.length > 0 ? (
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          {chips.map((chip) => (
-                            <div
-                              key={`${location.location_public_id}-${chip.label}`}
-                              className="rounded-full border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-900"
+                          </div>
+                          {chips[0] ? (
+                            <span
+                              className="font-mono text-[14px] font-semibold tracking-[-0.01em] truncate"
+                              style={{ fontVariantNumeric: "tabular-nums" }}
                             >
-                              <span className="mr-2 text-teal-700">{chip.label}</span>
-                              {chip.value}
-                            </div>
-                          ))}
+                              {chips[0].value}
+                              <span className="text-[10px] text-text-3 font-sans font-medium ml-1">
+                                {chips[0].label.toLowerCase()}
+                              </span>
+                            </span>
+                          ) : null}
                         </div>
-                      ) : null}
-
-                      <div className="mt-5 flex flex-wrap gap-3">
-                        <Link
-                          href={primaryHref}
-                          onClick={(event) => event.stopPropagation()}
-                          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
-                        >
-                          Open listing
-                        </Link>
-                        <Link
-                          href={locationHref}
-                          onClick={(event) => event.stopPropagation()}
-                          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
-                        >
-                          View location
-                        </Link>
-                        {location.featured_space_public_id ? (
+                        <div className="flex gap-1.5 flex-none">
+                          <Link
+                            href={locationHref}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Button variant="ghost" size="sm">
+                              View location
+                            </Button>
+                          </Link>
                           <Link
                             href={primaryHref}
                             onClick={(event) => event.stopPropagation()}
-                            className="text-sm font-medium text-teal-700 transition hover:text-teal-900"
                           >
-                            Featured space
+                            <Button variant="primary" size="sm">
+                              Open listing
+                            </Button>
                           </Link>
-                        ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -624,14 +724,38 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
           </div>
 
           <div className="lg:sticky lg:top-6 lg:self-start">
-            <PublicMarketplaceMap
-              locations={results}
-              selectedLocationId={selectedLocationId}
-              onSelect={handleSelectLocation}
-            />
+            <Card padded={false} className="overflow-hidden">
+              <PublicMarketplaceMap
+                locations={results}
+                selectedLocationId={selectedLocationId}
+                onSelect={handleSelectLocation}
+              />
+            </Card>
           </div>
         </div>
       </section>
     </main>
+  );
+}
+
+function SearchField({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block px-4 py-3">
+      <div className="text-[10px] uppercase tracking-[0.06em] font-semibold text-text-3 mb-1">
+        {label}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="flex-none">{icon}</span>
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
+    </label>
   );
 }

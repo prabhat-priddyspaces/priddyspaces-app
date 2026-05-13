@@ -31,14 +31,14 @@ export function PublicWorkingHours({
   }
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-      <div className="text-sm font-semibold text-slate-900">Hours</div>
-      <div className="mt-4 space-y-3 text-sm text-slate-600">
+    <div className="rounded-2xl border border-line bg-surface p-5">
+      <div className="text-sm font-semibold text-text">Hours</div>
+      <div className="mt-4 space-y-3 text-sm text-text-2">
         {rows.map((row) => (
           <div key={row.day} className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Clock3 className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="font-medium text-slate-900">{workingDayLabel(row.day)}</span>
+              <Clock3 className="h-4 w-4 shrink-0 text-text-4" />
+              <span className="font-medium text-text">{workingDayLabel(row.day)}</span>
             </div>
             <span>{formatWorkingHourTime(row.start_time)}</span>
             <span>to {formatWorkingHourTime(row.end_time)}</span>
@@ -46,7 +46,7 @@ export function PublicWorkingHours({
         ))}
         {legacyRows.map((row) => (
           <div key={row} className="flex items-start gap-3">
-            <Clock3 className="mt-0.5 h-4 w-4 text-slate-400" />
+            <Clock3 className="mt-0.5 h-4 w-4 text-text-4" />
             <span>{row}</span>
           </div>
         ))}

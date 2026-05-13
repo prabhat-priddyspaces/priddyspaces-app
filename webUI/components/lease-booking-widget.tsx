@@ -174,7 +174,7 @@ export function LeaseBookingWidget({
 
   if (loading) {
     return (
-      <div className="rounded-[24px] border border-slate-200 p-5 text-sm text-slate-500">
+      <div className="rounded-2xl border border-line p-5 text-sm text-text-3">
         Loading lease terms…
       </div>
     );
@@ -183,15 +183,15 @@ export function LeaseBookingWidget({
   if (plans.length === 0) {
     const fallback = spaceMonthlyPrice != null ? formatUsd(spaceMonthlyPrice, "/mo") : "Contact for pricing";
     return (
-      <div className="rounded-[24px] border border-slate-200 p-5">
-        <div className="text-center text-3xl font-semibold text-slate-900">{fallback}</div>
-        <p className="mt-3 text-sm text-slate-600">
+      <div className="rounded-2xl border border-line p-5">
+        <div className="text-center text-3xl font-semibold text-text">{fallback}</div>
+        <p className="mt-3 text-sm text-text-2">
           Lease terms haven’t been published yet for this {seatNoun}.
         </p>
         <button
           type="button"
           disabled
-          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-slate-200 px-6 text-sm font-semibold text-slate-500"
+          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-full bg-surface-3 px-6 text-sm font-semibold text-text-3"
         >
           Contact owner for pricing
         </button>
@@ -200,14 +200,14 @@ export function LeaseBookingWidget({
   }
 
   return (
-    <div className="rounded-[24px] border border-slate-200 p-5">
+    <div className="rounded-2xl border border-line p-5">
       {isFullyLeased ? (
         <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700">
           <TriangleAlert className="h-4 w-4" />
           Currently leased ({spaceCapacity}-seat {seatNoun})
         </div>
       ) : (
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-sm font-medium text-success">
           Available ({spaceCapacity}-seat {seatNoun})
         </div>
       )}
@@ -215,11 +215,11 @@ export function LeaseBookingWidget({
       <label className="mb-3 grid gap-1">
         <span className="sr-only">Term</span>
         <div className="relative">
-          <Tag className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Tag className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <select
             value={selectedPlanId}
             onChange={(event) => setSelectedPlanId(event.target.value)}
-            className="h-12 w-full appearance-none rounded-full border border-slate-200 bg-white pl-11 pr-10 text-sm font-semibold text-slate-900 outline-none"
+            className="h-12 w-full appearance-none rounded-full border border-line bg-surface pl-11 pr-10 text-sm font-semibold text-text outline-none"
           >
             {plans.map((plan) => (
               <option key={plan.public_id} value={plan.public_id}>
@@ -233,39 +233,39 @@ export function LeaseBookingWidget({
       <label className="mb-4 grid gap-1">
         <span className="sr-only">Move-in date</span>
         <div className="relative">
-          <Calendar className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Calendar className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <input
             type="date"
             value={moveInDate}
             min={DATE_INPUT_FALLBACK()}
             onChange={(event) => setMoveInDate(event.target.value)}
-            className="h-12 w-full rounded-full border border-slate-200 bg-white pl-11 pr-4 text-sm font-semibold text-slate-900 outline-none"
+            className="h-12 w-full rounded-full border border-line bg-surface pl-11 pr-4 text-sm font-semibold text-text outline-none"
           />
         </div>
       </label>
 
       {selectedPlan ? (
-        <div className="mb-5 rounded-[20px] border border-slate-100 bg-white px-4 py-3">
+        <div className="mb-5 rounded-xl border border-line bg-surface px-4 py-3">
           <div className="flex items-baseline justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-semibold text-slate-900">Monthly price</span>
+                <span className="text-base font-semibold text-text">Monthly price</span>
                 {savingsPercent != null ? (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                  <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
                     Save {savingsPercent}%
                   </span>
                 ) : null}
               </div>
               {savingsPercent != null && baselinePlan ? (
-                <div className="mt-1 text-xs text-slate-500">Month-to-month price</div>
+                <div className="mt-1 text-xs text-text-3">Month-to-month price</div>
               ) : null}
             </div>
             <div className="text-right">
-              <div className="text-2xl font-semibold text-slate-900">
+              <div className="text-2xl font-semibold text-text">
                 {formatLeasePrice(selectedPlan.price_cents, selectedPlan.billing_cycle)}
               </div>
               {savingsPercent != null && baselinePlan ? (
-                <div className="mt-1 text-sm text-slate-400 line-through">
+                <div className="mt-1 text-sm text-text-4 line-through">
                   {formatLeasePrice(baselinePlan.price_cents, baselinePlan.billing_cycle)}
                 </div>
               ) : null}
@@ -274,13 +274,13 @@ export function LeaseBookingWidget({
         </div>
       ) : null}
 
-      {error ? <div className="mb-3 text-sm text-red-600">{error}</div> : null}
+      {error ? <div className="mb-3 text-sm text-danger">{error}</div> : null}
 
       <button
         type="button"
         onClick={handleContinue}
         disabled={submitting || !selectedPlan || isFullyLeased}
-        className="inline-flex h-12 w-full items-center justify-center rounded-full bg-teal-900 px-6 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting
           ? "Submitting…"
