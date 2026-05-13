@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
@@ -60,10 +61,10 @@ export default function AdminListingsPage() {
             <Card key={row.space_public_id} className="p-4">
               <div className="font-semibold text-textPrimary">{row.space_name}</div>
               <div className="text-sm text-textMuted">
-                {row.organization_name} • {row.location_name} • {row.space_type} • {row.visibility}
+                {row.organization_name} • {row.location_name} • {formatAdminLabel(row.space_type)} • {formatAdminLabel(row.visibility)}
               </div>
               <div className="text-sm text-textMuted">
-                Approval {row.organization_review_status} • Bookings {row.bookings} • Requests {row.booking_requests}
+                Approval {formatAdminLabel(row.organization_review_status)} • Bookings {row.bookings} • Requests {row.booking_requests}
               </div>
             </Card>
           ))}

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
 import { Card } from "@/components/ui/card";
+import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
@@ -30,8 +31,10 @@ interface OwnerUserDetail {
   audit_logs: Array<{
     public_id: string;
     action: string;
+    action_label?: string;
     entity_type: string;
     entity_public_id: string;
+    entity_label?: string;
     actor_email: string | null;
     created_at: string | null;
   }>;
@@ -78,7 +81,7 @@ export function AdminOwnerUserDetailClient() {
               <h2 className="text-xl font-semibold text-textPrimary">{data.profile.name}</h2>
               <div className="text-sm text-textSecondary">{data.profile.email}</div>
               <div className="mt-2 flex flex-wrap gap-3 text-xs text-textMuted">
-                <span>Role: {data.profile.role ?? "—"}</span>
+                <span>Role: {formatAdminLabel(data.profile.role)}</span>
                 <span>Active: {data.profile.is_active ? "yes" : "no"}</span>
                 <span>Created: {data.profile.created_at?.slice(0, 10) ?? "—"}</span>
               </div>
@@ -101,8 +104,8 @@ export function AdminOwnerUserDetailClient() {
                     {data.organizations.map((o) => (
                       <tr key={o.organization_public_id} className="border-t border-border">
                         <td className="p-2 text-textPrimary">{o.organization_name}</td>
-                        <td className="p-2 text-textSecondary">{o.review_status}</td>
-                        <td className="p-2 text-textSecondary">{o.role}</td>
+                        <td className="p-2 text-textSecondary">{formatAdminLabel(o.review_status)}</td>
+                        <td className="p-2 text-textSecondary">{formatAdminLabel(o.role)}</td>
                         <td className="p-2 text-textSecondary">{o.can_override_pricing ? "yes" : "no"}</td>
                         <td className="p-2 text-textSecondary">{o.is_active ? "yes" : "no"}</td>
                       </tr>
@@ -124,10 +127,10 @@ export function AdminOwnerUserDetailClient() {
               <div className="grid gap-2">
                 {data.audit_logs.map((log) => (
                   <div key={log.public_id} className="rounded-sm border border-border p-2 text-xs">
-                    <div className="text-textPrimary">{log.action}</div>
+                    <div className="text-textPrimary">{log.action_label || formatAdminLabel(log.action)}</div>
                     <div className="text-textMuted">
-                      {log.entity_type} · {log.entity_public_id} · {log.actor_email ?? "system"} ·{" "}
-                      {log.created_at?.replace("T", " ").slice(0, 19) ?? "—"}
+                      {formatAdminLabel(log.entity_type)} · {log.entity_label || log.entity_public_id} · {log.actor_email ?? "system"} ·{" "}
+                      {formatAdminDateTime(log.created_at)}
                     </div>
                   </div>
                 ))}
