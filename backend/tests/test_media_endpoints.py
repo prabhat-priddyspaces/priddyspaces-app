@@ -205,3 +205,30 @@ def test_media_responses_use_configured_public_base_url(db_session, client_facto
     listing = client.get(f"/api/spaces/{space.public_id}/media")
     assert listing.status_code == 200
     assert listing.json()[0]["image_url"] == "https://assets.example.com/spaces/legacy.jpg"
+
+
+def test_media_public_urls_encode_storage_key(db_session, client_factory, monkeypatch):
+    owner, space = _seed_owner_space(db_session)
+    monkeypatch.setattr(settings, "S3_PUBLIC_BASE_URL", "https://assets.example.com")
+
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True
+    })
+
+    create = client.post(
+        "/api/media",
+        json={
+            "space_public_id": space.public_id,
+            "storage_key": "spaces/Screenshot 2026-05-07 at 11.40.21 AM.png",
+            "image_url": "https://bucket.s3.us-east-1.amazonaws.com/spaces/raw.png",
+            "is_primary": True,
+            "sort_order": 0
+        }
+    )
+    assert create.status_code == 200
+    assert (
+        create.json()["image_url"]
+        == "https://assets.example.com/spaces/Screenshot%202026-05-07%20at%2011.40.21%20AM.png"
+    )

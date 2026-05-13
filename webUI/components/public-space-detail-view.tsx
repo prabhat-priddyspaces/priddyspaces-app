@@ -28,6 +28,7 @@ import {
   SpaceAvailabilityResponse,
 } from "@/lib/public-marketplace";
 import { LeaseBookingWidget } from "@/components/lease-booking-widget";
+import { PublicImageWithFallback } from "@/components/public-image-with-fallback";
 import { PublicTopbar } from "@/components/public-topbar";
 import {
   DEFAULT_GRANULARITY_MINUTES,
@@ -634,19 +635,23 @@ export function PublicSpaceDetailView({
             <section className="rounded-[30px] border border-white/70 bg-white p-4 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]">
               <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                 <div className="overflow-hidden rounded-[24px] bg-slate-100">
-                  {heroImage ? (
-                    <img src={heroImage.image_url} alt={detail.space.name} className="h-full min-h-[340px] w-full object-cover" />
-                  ) : (
-                    <div className="flex min-h-[340px] items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-sm font-semibold uppercase tracking-[0.24em] text-slate-600">
-                      Priddyspaces
-                    </div>
-                  )}
+                  <PublicImageWithFallback
+                    src={heroImage?.image_url}
+                    alt={detail.space.name}
+                    className="h-full min-h-[340px] w-full object-cover"
+                    fallbackClassName="flex min-h-[340px] items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-sm font-semibold uppercase tracking-[0.24em] text-slate-600"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {galleryImages.length > 0 ? (
                     galleryImages.map((image) => (
                       <div key={image.public_id} className="overflow-hidden rounded-[20px] bg-slate-100">
-                        <img src={image.image_url} alt={detail.space.name} className="h-full min-h-[164px] w-full object-cover" />
+                        <PublicImageWithFallback
+                          src={image.image_url}
+                          alt={detail.space.name}
+                          className="h-full min-h-[164px] w-full object-cover"
+                          fallbackClassName="flex min-h-[164px] items-center justify-center bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500"
+                        />
                       </div>
                     ))
                   ) : (

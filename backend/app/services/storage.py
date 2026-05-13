@@ -1,4 +1,5 @@
 import uuid
+from urllib.parse import quote
 
 import boto3
 from fastapi import HTTPException
@@ -6,13 +7,17 @@ from fastapi import HTTPException
 from app.core.config import settings
 
 
+def _encoded_storage_key(key: str) -> str:
+    return quote(key.lstrip("/"), safe="/")
+
+
 def public_space_image_url(key: str, fallback_url: str | None = None) -> str:
     public_base_url = settings.S3_PUBLIC_BASE_URL.strip().rstrip("/")
     if public_base_url and key.startswith("spaces/"):
-        return f"{public_base_url}/{key.lstrip('/')}"
+        return f"{public_base_url}/{_encoded_storage_key(key)}"
     if fallback_url:
         return fallback_url
-    return f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{key}"
+    return f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{_encoded_storage_key(key)}"
 
 
 def presign_floor_plan_upload(filename: str) -> dict:
