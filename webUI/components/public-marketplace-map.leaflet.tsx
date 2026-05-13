@@ -136,10 +136,10 @@ export function PublicMarketplaceMap({
   }, [locations, mapReady, mappableLocations, onSelect, selectedLocationId]);
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100 shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-sm">
       <div ref={containerRef} className="h-[380px] w-full lg:h-[calc(100vh-13rem)]" />
       {missingCoordinateCount > 0 ? (
-        <div className="border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+        <div className="border-t border-line bg-surface px-4 py-3 text-xs text-text-2">
           {missingCoordinateCount} {missingCoordinateCount === 1 ? "location is" : "locations are"} listed without a map pin because latitude and longitude are missing.
         </div>
       ) : null}

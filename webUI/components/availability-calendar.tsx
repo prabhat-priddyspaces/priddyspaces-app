@@ -98,42 +98,42 @@ export function AvailabilityCalendar({
       <button
         type="button"
         onClick={() => setOpenPopover((prev) => !prev)}
-        className="flex h-12 w-full items-center justify-between gap-3 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 transition hover:border-slate-300"
+        className="flex h-12 w-full items-center justify-between gap-3 rounded-full border border-line bg-surface px-4 text-sm font-medium text-text transition hover:border-line-strong"
       >
         <span className="inline-flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-slate-500" />
+          <CalendarDays className="h-4 w-4 text-text-3" />
           {value ? formatDateLong(value) : "Select a date"}
         </span>
         <ChevronDown
-          className={`h-4 w-4 text-slate-500 transition-transform ${openPopover ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-text-3 transition-transform ${openPopover ? "rotate-180" : ""}`}
         />
       </button>
 
       {openPopover ? (
-        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45)]">
+        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-line bg-surface p-4 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45)]">
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setViewMonth((prev) => shiftMonth(prev, -1))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-text-3 transition hover:bg-surface-2"
               aria-label="Previous month"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="text-sm font-semibold text-slate-900">
+            <div className="text-sm font-semibold text-text">
               {formatMonthHeading(viewMonth)}
             </div>
             <button
               type="button"
               onClick={() => setViewMonth((prev) => shiftMonth(prev, 1))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-text-3 transition hover:bg-surface-2"
               aria-label="Next month"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-7 text-center text-xs font-medium text-slate-400">
+          <div className="mt-3 grid grid-cols-7 text-center text-xs font-medium text-text-4">
             {WEEKDAY_LABELS.map((label, idx) => (
               <div key={`${label}-${idx}`} className="py-1">
                 {label}
@@ -156,9 +156,9 @@ export function AvailabilityCalendar({
                 return (
                   <div
                     key={iso}
-                    className="flex h-9 items-center justify-center rounded-full text-sm text-slate-300"
+                    className="flex h-9 items-center justify-center rounded-full text-sm text-text-4"
                   >
-                    <span className="line-through decoration-slate-200">{dayNum}</span>
+                    <span className="line-through decoration-line">{dayNum}</span>
                   </div>
                 );
               }
@@ -173,8 +173,8 @@ export function AvailabilityCalendar({
                   }}
                   className={`h-9 rounded-full text-sm font-medium transition ${
                     isSelected
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-900 hover:bg-slate-100"
+                      ? "bg-brand text-white"
+                      : "text-text hover:bg-surface-2"
                   }`}
                 >
                   {dayNum}
@@ -183,9 +183,9 @@ export function AvailabilityCalendar({
             })}
           </div>
 
-          <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-3 flex items-center justify-between text-xs text-text-3">
             <span className="inline-flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-slate-200" />
+              <span className="h-2 w-2 rounded-full bg-surface-3" />
               Unavailable
             </span>
             <button
@@ -196,7 +196,7 @@ export function AvailabilityCalendar({
                   setViewMonth(startOfMonthIso(today));
                 }
               }}
-              className="font-medium text-slate-600 hover:text-slate-900"
+              className="font-medium text-text-2 hover:text-text"
             >
               Today
             </button>

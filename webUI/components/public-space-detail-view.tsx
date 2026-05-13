@@ -595,23 +595,23 @@ export function PublicSpaceDetailView({
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)]">
+      <main className="min-h-screen bg-bg">
         <PublicTopbar />
-        <div className="mx-auto max-w-[1320px] px-6 py-8 text-sm text-slate-500">Loading listing…</div>
+        <div className="mx-auto max-w-[1320px] px-6 py-8 text-sm text-text-3">Loading listing…</div>
       </main>
     );
   }
 
   if (error && !detail) {
     return (
-      <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)]">
+      <main className="min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-[1320px] px-6 py-8">
-          <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 hover:underline">
+          <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
             <ChevronLeft className="h-4 w-4" />
             Back to search
           </Link>
-          <div className="mt-6 rounded-[24px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>
+          <div className="mt-6 rounded-2xl border border-danger/30 bg-danger-soft px-5 py-4 text-sm text-danger">{error}</div>
         </div>
       </main>
     );
@@ -622,35 +622,35 @@ export function PublicSpaceDetailView({
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#edf5f7_100%)]">
+    <main className="min-h-screen bg-bg">
       <PublicTopbar />
       <div className="mx-auto max-w-[1320px] px-6 py-8">
-        <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-teal-700 hover:underline">
+        <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
           <ChevronLeft className="h-4 w-4" />
           Back to search
         </Link>
 
         <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-8">
-            <section className="rounded-[30px] border border-white/70 bg-white p-4 shadow-[0_24px_60px_-28px_rgba(15,23,42,0.35)]">
+            <section className="rounded-2xl border border-line bg-surface p-4 shadow-pop">
               <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                <div className="overflow-hidden rounded-[24px] bg-slate-100">
+                <div className="overflow-hidden rounded-2xl bg-surface-2">
                   <PublicImageWithFallback
                     src={heroImage?.image_url}
                     alt={detail.space.name}
                     className="h-full min-h-[340px] w-full object-cover"
-                    fallbackClassName="flex min-h-[340px] items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-sm font-semibold uppercase tracking-[0.24em] text-slate-600"
+                    fallbackClassName="flex min-h-[340px] items-center justify-center bg-[linear-gradient(135deg,var(--ps-violet-100),var(--ps-mint-100))] text-sm font-semibold uppercase tracking-[0.24em] text-text-2"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {galleryImages.length > 0 ? (
                     galleryImages.map((image) => (
-                      <div key={image.public_id} className="overflow-hidden rounded-[20px] bg-slate-100">
+                      <div key={image.public_id} className="overflow-hidden rounded-xl bg-surface-2">
                         <PublicImageWithFallback
                           src={image.image_url}
                           alt={detail.space.name}
                           className="h-full min-h-[164px] w-full object-cover"
-                          fallbackClassName="flex min-h-[164px] items-center justify-center bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500"
+                          fallbackClassName="flex min-h-[164px] items-center justify-center bg-surface-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-text-3"
                         />
                       </div>
                     ))
@@ -658,7 +658,7 @@ export function PublicSpaceDetailView({
                     Array.from({ length: 4 }).map((_, index) => (
                       <div
                         key={`placeholder-${index}`}
-                        className="flex min-h-[164px] items-center justify-center rounded-[20px] bg-slate-100 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400"
+                        className="flex min-h-[164px] items-center justify-center rounded-xl bg-surface-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-4"
                       >
                         Gallery
                       </div>
@@ -668,38 +668,38 @@ export function PublicSpaceDetailView({
               </div>
             </section>
 
-            <section className="border-b border-slate-200 pb-8">
+            <section className="border-b border-line pb-8">
               <div className="flex flex-wrap items-start justify-between gap-6">
                 <div>
-                  <h1 className="text-4xl font-semibold tracking-tight text-slate-900">{detail.space.name}</h1>
+                  <h1 className="text-[28px] font-semibold tracking-[-0.02em] text-text">{detail.space.name}</h1>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-                      <Users className="h-4 w-4 text-slate-500" />
+                    <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2">
+                      <Users className="h-4 w-4 text-text-3" />
                       {detail.space.capacity} seats
                     </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
-                      <CheckCircle2 className="h-4 w-4 text-slate-500" />
+                    <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2">
+                      <CheckCircle2 className="h-4 w-4 text-text-3" />
                       {formatSpaceTypeLabel(detail.space.space_type)}
                     </span>
                     {detail.space.amenities.slice(0, 6).map((amenity) => (
                       <span
                         key={amenity}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
+                        className="rounded-full border border-line bg-surface-2 px-3 py-2 text-sm font-medium text-text-2"
                       >
                         {amenity}
                       </span>
                     ))}
                   </div>
                 </div>
-                <div className="min-w-[220px] rounded-[24px] border border-teal-200 bg-teal-50 px-5 py-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">Pricing</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-900">{primaryPrice}</div>
+                <div className="min-w-[220px] rounded-2xl border border-brand/30 bg-brand-soft px-5 py-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand">Pricing</div>
+                  <div className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-text">{primaryPrice}</div>
                   {priceRows.length > 1 ? (
-                    <div className="mt-3 space-y-2 text-sm text-slate-600">
+                    <div className="mt-3 space-y-2 text-sm text-text-2">
                       {priceRows.slice(1).map((row) => (
                         <div key={row.label} className="flex items-center justify-between gap-4">
                           <span>{row.label}</span>
-                          <span className="font-medium text-slate-900">{row.value}</span>
+                          <span className="font-medium text-text">{row.value}</span>
                         </div>
                       ))}
                     </div>
@@ -708,17 +708,17 @@ export function PublicSpaceDetailView({
               </div>
             </section>
 
-            <section className="grid gap-8 border-b border-slate-200 pb-8 md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+            <section className="grid gap-8 border-b border-line pb-8 md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <div className="space-y-5">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Located At</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-900">{detail.location.name}</div>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{locationAddress}</p>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-3">Located At</div>
+                  <div className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-text">{detail.location.name}</div>
+                  <p className="mt-2 text-sm leading-6 text-text-2">{locationAddress}</p>
                   <a
                     href={buildDirectionsHref(locationAddress, detail.location.lat, detail.location.lng)}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-teal-700 hover:underline"
+                    className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline"
                   >
                     Get directions
                     <ArrowUpRight className="h-4 w-4" />
@@ -741,18 +741,18 @@ export function PublicSpaceDetailView({
                 />
 
                 {(detail.location.public_phone || detail.location.public_email) ? (
-                  <div className="rounded-[24px] border border-slate-200 bg-white p-5">
-                    <div className="text-sm font-semibold text-slate-900">Questions About This Listing?</div>
-                    <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="rounded-2xl border border-line bg-surface p-5">
+                    <div className="text-sm font-semibold text-text">Questions About This Listing?</div>
+                    <div className="mt-4 space-y-3 text-sm text-text-2">
                       {detail.location.public_phone ? (
-                        <a href={`tel:${detail.location.public_phone}`} className="flex items-center gap-3 hover:text-slate-900">
-                          <Phone className="h-4 w-4 text-slate-400" />
+                        <a href={`tel:${detail.location.public_phone}`} className="flex items-center gap-3 hover:text-text">
+                          <Phone className="h-4 w-4 text-text-4" />
                           {detail.location.public_phone}
                         </a>
                       ) : null}
                       {detail.location.public_email ? (
-                        <a href={`mailto:${detail.location.public_email}`} className="flex items-center gap-3 hover:text-slate-900">
-                          <Mail className="h-4 w-4 text-slate-400" />
+                        <a href={`mailto:${detail.location.public_email}`} className="flex items-center gap-3 hover:text-text">
+                          <Mail className="h-4 w-4 text-text-4" />
                           {detail.location.public_email}
                         </a>
                       ) : null}
@@ -763,14 +763,14 @@ export function PublicSpaceDetailView({
             </section>
 
             {(detail.location.public_parking_notes.length > 0 || detail.location.public_transit_notes.length > 0) ? (
-              <section className="grid gap-6 border-b border-slate-200 pb-8 md:grid-cols-2">
+              <section className="grid gap-6 border-b border-line pb-8 md:grid-cols-2">
                 {detail.location.public_parking_notes.length > 0 ? (
                   <div>
-                    <h2 className="text-2xl font-semibold text-slate-900">Parking</h2>
+                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Parking</h2>
                     <div className="mt-4 grid gap-3">
                       {detail.location.public_parking_notes.map((item) => (
-                        <div key={item} className="flex items-start gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                          <MapPin className="mt-0.5 h-4 w-4 text-slate-400" />
+                        <div key={item} className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-text-2">
+                          <MapPin className="mt-0.5 h-4 w-4 text-text-4" />
                           <span>{item}</span>
                         </div>
                       ))}
@@ -779,11 +779,11 @@ export function PublicSpaceDetailView({
                 ) : null}
                 {detail.location.public_transit_notes.length > 0 ? (
                   <div>
-                    <h2 className="text-2xl font-semibold text-slate-900">Transit</h2>
+                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Transit</h2>
                     <div className="mt-4 grid gap-3">
                       {detail.location.public_transit_notes.map((item) => (
-                        <div key={item} className="flex items-start gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                          <MapPin className="mt-0.5 h-4 w-4 text-slate-400" />
+                        <div key={item} className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-text-2">
+                          <MapPin className="mt-0.5 h-4 w-4 text-text-4" />
                           <span>{item}</span>
                         </div>
                       ))}
@@ -794,12 +794,12 @@ export function PublicSpaceDetailView({
             ) : null}
 
             {detail.location.public_included_items.length > 0 ? (
-              <section className="border-b border-slate-200 pb-8">
-                <h2 className="text-2xl font-semibold text-slate-900">Included With Your Reservation</h2>
+              <section className="border-b border-line pb-8">
+                <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Included With Your Reservation</h2>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   {detail.location.public_included_items.map((item) => (
-                    <div key={item} className="flex items-start gap-3 rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-teal-600" />
+                    <div key={item} className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-text-2">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
                       <span>{item}</span>
                     </div>
                   ))}
@@ -809,16 +809,16 @@ export function PublicSpaceDetailView({
 
             {detail.support_contacts.length > 0 ? (
               <section>
-                <h2 className="text-2xl font-semibold text-slate-900">We&apos;re Here To Help</h2>
+                <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">We&apos;re Here To Help</h2>
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
                   {detail.support_contacts.map((contact) => (
-                    <div key={`${contact.name}-${contact.title}`} className="flex items-center gap-4 rounded-[24px] border border-slate-200 bg-white px-5 py-4">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,_#c7f9cc,_#e2e8f0)] text-sm font-semibold text-slate-900">
+                    <div key={`${contact.name}-${contact.title}`} className="flex items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--ps-mint-100),var(--surface-2))] text-sm font-semibold text-text">
                         {buildInitials(contact.name)}
                       </div>
                       <div>
-                        <div className="text-base font-semibold text-slate-900">{contact.name}</div>
-                        <div className="text-sm text-slate-500">{contact.title}</div>
+                        <div className="text-base font-semibold text-text">{contact.name}</div>
+                        <div className="text-sm text-text-3">{contact.title}</div>
                       </div>
                     </div>
                   ))}
@@ -829,14 +829,14 @@ export function PublicSpaceDetailView({
 
           <aside className="lg:sticky lg:top-6 lg:self-start">
             {leaseBookingMode ? (
-              <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)]">
+              <div className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-pop">
                 {detail.cancellation_policy ? (
-                  <div className="rounded-[20px] border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+                  <div className="rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm text-brand-strong">
                     <div className="flex items-center gap-2 font-semibold">
                       <ShieldCheck className="h-4 w-4" />
                       Book with confidence
                     </div>
-                    <p className="mt-2 leading-6 text-teal-800">{cancellationTierText}</p>
+                    <p className="mt-2 leading-6 text-brand-strong">{cancellationTierText}</p>
                   </div>
                 ) : null}
                 <LeaseBookingWidget
@@ -853,19 +853,19 @@ export function PublicSpaceDetailView({
                 />
               </div>
             ) : (
-            <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)]">
+            <div className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-pop">
               {detail.cancellation_policy ? (
-                <div className="rounded-[20px] border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+                <div className="rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm text-brand-strong">
                   <div className="flex items-center gap-2 font-semibold">
                     <ShieldCheck className="h-4 w-4" />
                     Book with confidence
                   </div>
-                  <p className="mt-2 leading-6 text-teal-800">{cancellationTierText}</p>
+                  <p className="mt-2 leading-6 text-brand-strong">{cancellationTierText}</p>
                 </div>
               ) : null}
 
-              <div className="rounded-[24px] border border-slate-200 p-5">
-                <div className="text-center text-3xl font-semibold text-slate-900">{primaryPrice}</div>
+              <div className="rounded-2xl border border-line p-5">
+                <div className="text-center text-3xl font-semibold text-text">{primaryPrice}</div>
 
                 <div className="mt-5 grid gap-3">
                   <AvailabilityCalendar
@@ -893,16 +893,16 @@ export function PublicSpaceDetailView({
 
                   {!allDay ? (
                     <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-                      <label className="grid gap-1 text-xs font-medium text-slate-500">
+                      <label className="grid gap-1 text-xs font-medium text-text-3">
                         <span className="inline-flex items-center gap-2">
-                          <Clock3 className="h-4 w-4 text-slate-500" />
+                          <Clock3 className="h-4 w-4 text-text-3" />
                           Start
                         </span>
                         <select
                           value={startTime}
                           onChange={(event) => setStartTime(event.target.value)}
                           disabled={startSlotOptions.length === 0}
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                          className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {startSlotOptions.length === 0 ? (
                             <option value="">No times available</option>
@@ -914,17 +914,17 @@ export function PublicSpaceDetailView({
                           ))}
                         </select>
                       </label>
-                      <span className="hidden self-end pb-3 text-sm text-slate-500 sm:block">to</span>
-                      <label className="grid gap-1 text-xs font-medium text-slate-500">
+                      <span className="hidden self-end pb-3 text-sm text-text-3 sm:block">to</span>
+                      <label className="grid gap-1 text-xs font-medium text-text-3">
                         <span className="inline-flex items-center gap-2 sm:invisible">
-                          <Clock3 className="h-4 w-4 text-slate-500" />
+                          <Clock3 className="h-4 w-4 text-text-3" />
                           End
                         </span>
                         <select
                           value={endTime}
                           onChange={(event) => setEndTime(event.target.value)}
                           disabled={endSlotOptions.length === 0}
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                          className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {endSlotOptions.length === 0 ? (
                             <option value="">—</option>
@@ -946,8 +946,8 @@ export function PublicSpaceDetailView({
                       disabled={hourlyAmount == null}
                       className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         !allDay
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                          ? "border-brand bg-brand text-white"
+                          : "border-line bg-surface text-text-2 hover:border-line-strong"
                       }`}
                     >
                       By the hour
@@ -958,21 +958,21 @@ export function PublicSpaceDetailView({
                       disabled={allDayDisabled || dailyAmount == null}
                       className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         allDay
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                          ? "border-brand bg-brand text-white"
+                          : "border-line bg-surface text-text-2 hover:border-line-strong"
                       }`}
                     >
                       Full day
                     </button>
                   </div>
 
-                  <div className="grid gap-2 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
-                    <label className="grid gap-1 text-xs font-medium text-slate-500">
+                  <div className="grid gap-2 rounded-[18px] border border-line bg-surface-2 p-3">
+                    <label className="grid gap-1 text-xs font-medium text-text-3">
                       Recurrence
                       <select
                         value={recurrenceFrequency}
                         onChange={(event) => setRecurrenceFrequency(event.target.value as "none" | "weekly" | "monthly")}
-                        className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none"
+                        className="h-10 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
                       >
                         <option value="none">One time</option>
                         <option value="weekly">Weekly</option>
@@ -980,7 +980,7 @@ export function PublicSpaceDetailView({
                       </select>
                     </label>
                     {recurrenceFrequency !== "none" ? (
-                      <label className="grid gap-1 text-xs font-medium text-slate-500">
+                      <label className="grid gap-1 text-xs font-medium text-text-3">
                         Occurrences
                         <input
                           type="number"
@@ -988,20 +988,20 @@ export function PublicSpaceDetailView({
                           max={52}
                           value={recurrenceCount}
                           onChange={(event) => setRecurrenceCount(event.target.value)}
-                          className="h-10 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none"
+                          className="h-10 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
                         />
                       </label>
                     ) : null}
                   </div>
 
                   {bufferBefore > 0 || bufferAfter > 0 ? (
-                    <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                    <div className="rounded-[18px] border border-warning/30 bg-warning-soft px-4 py-3 text-xs leading-5 text-warning">
                       This space includes {bufferBefore} min before and {bufferAfter} min after each booking for turnover.
                     </div>
                   ) : null}
 
                   {volumeDiscounts.length > 0 && !allDay ? (
-                    <div className="text-xs text-slate-600">
+                    <div className="text-xs text-text-2">
                       {volumeDiscounts
                         .slice()
                         .sort((a, b) => a.min_hours - b.min_hours)
@@ -1012,16 +1012,16 @@ export function PublicSpaceDetailView({
                     </div>
                   ) : null}
 
-                  {error ? <div className="text-sm text-red-600">{error}</div> : null}
+                  {error ? <div className="text-sm text-danger">{error}</div> : null}
 
                   {!isAuthenticated ? (
-                    <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div className="rounded-[18px] border border-line bg-surface-2 px-4 py-3 text-sm text-text-2">
                       Browse freely now, then sign in when you&apos;re ready to reserve or start a membership.
                     </div>
                   ) : null}
 
                   {isAuthenticated ? (
-                    <label className="flex items-start gap-3 rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    <label className="flex items-start gap-3 rounded-[18px] border border-line bg-surface-2 px-4 py-3 text-sm text-text-2">
                       <input
                         type="checkbox"
                         checked={authorizationConsent}
@@ -1033,18 +1033,18 @@ export function PublicSpaceDetailView({
                   ) : null}
 
                   {isAuthenticated && !leaseBookingMode ? (
-                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
+                    <div className="rounded-[18px] border border-line bg-surface px-4 py-3">
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-success-soft text-success">
                           <Gift className="h-4 w-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-slate-900">Rewards</div>
+                          <div className="text-sm font-semibold text-text">Rewards</div>
                           {loyaltyLoading ? (
-                            <div className="mt-1 text-sm text-slate-500">Checking your balance...</div>
+                            <div className="mt-1 text-sm text-text-3">Checking your balance...</div>
                           ) : loyaltyPreview?.eligible ? (
                             <>
-                              <div className="mt-1 text-sm text-slate-600">
+                              <div className="mt-1 text-sm text-text-2">
                                 {formatPoints(loyaltyPreview.total_balance)} points available. Use up to{" "}
                                 {formatPoints(loyaltyPreview.max_redeemable_points)} points on this booking.
                               </div>
@@ -1055,15 +1055,15 @@ export function PublicSpaceDetailView({
                                   max={loyaltyPreview.max_redeemable_points}
                                   value={loyaltyPoints}
                                   onChange={(event) => setLoyaltyPoints(event.target.value)}
-                                  className="h-10 rounded-2xl border border-slate-200 px-3 text-sm font-medium text-slate-900 outline-none"
+                                  className="h-10 rounded-2xl border border-line px-3 text-sm font-medium text-text outline-none"
                                 />
-                                <div className="flex h-10 items-center rounded-2xl bg-emerald-50 px-3 text-sm font-semibold text-emerald-700">
+                                <div className="flex h-10 items-center rounded-2xl bg-success-soft px-3 text-sm font-semibold text-success">
                                   Save {formatCents(loyaltyDiscountCents)}
                                 </div>
                               </div>
                             </>
                           ) : (
-                            <div className="mt-1 text-sm text-slate-500">
+                            <div className="mt-1 text-sm text-text-3">
                               {loyaltyPreview?.reason || "Rewards are not available for this booking."}
                             </div>
                           )}
@@ -1076,14 +1076,14 @@ export function PublicSpaceDetailView({
                     type="button"
                     onClick={handleReserve}
                     disabled={requesting || !date || (!allDay && (!startTime || !endTime))}
-                    className="inline-flex h-12 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-12 items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {requesting ? "Reserving..." : isAuthenticated ? reserveActionLabel : `Sign in to ${reserveActionLabel}`}
                   </button>
                 </div>
 
                 {breakdown != null ? (
-                  <div className="mt-5 space-y-3 text-sm text-slate-700">
+                  <div className="mt-5 space-y-3 text-sm text-text-2">
                     {breakdown.basis === "daily" ? (
                       <div className="flex items-center justify-between">
                         <span>Day rate</span>
@@ -1091,7 +1091,7 @@ export function PublicSpaceDetailView({
                       </div>
                     ) : breakdown.basis === "capped_to_daily" ? (
                       <>
-                        <div className="flex items-center justify-between text-slate-500 line-through">
+                        <div className="flex items-center justify-between text-text-3 line-through">
                           <span>
                             {formatUsd(hourlyPrice)} x {hours} hrs
                           </span>
@@ -1119,32 +1119,32 @@ export function PublicSpaceDetailView({
                     ) : null}
 
                     {breakdown.discountPercent > 0 ? (
-                      <div className="flex items-center justify-between text-emerald-700">
+                      <div className="flex items-center justify-between text-success">
                         <span>Volume discount ({breakdown.discountPercent}%)</span>
                         <span>-{formatUsd(breakdown.discountAmount)}</span>
                       </div>
                     ) : null}
 
                     {loyaltyDiscountCents > 0 ? (
-                      <div className="flex items-center justify-between text-emerald-700">
+                      <div className="flex items-center justify-between text-success">
                         <span>Rewards</span>
                         <span>-{formatCents(loyaltyDiscountCents)}</span>
                       </div>
                     ) : null}
 
-                    <div className="border-t border-slate-200" />
-                    <div className="flex items-center justify-between font-semibold text-slate-900">
+                    <div className="border-t border-line" />
+                    <div className="flex items-center justify-between font-semibold text-text">
                       <span>Estimated due on approval</span>
                       <span>{formatCents(Math.max(0, Math.round(breakdown.total * 100) - loyaltyDiscountCents))}</span>
                     </div>
                   </div>
                 ) : (
                   priceRows.length > 1 ? (
-                    <div className="mt-5 space-y-2 text-sm text-slate-600">
+                    <div className="mt-5 space-y-2 text-sm text-text-2">
                       {priceRows.slice(1).map((row) => (
                         <div key={row.label} className="flex items-center justify-between gap-4">
                           <span>{row.label}</span>
-                          <span className="font-medium text-slate-900">{row.value}</span>
+                          <span className="font-medium text-text">{row.value}</span>
                         </div>
                       ))}
                     </div>
@@ -1153,19 +1153,19 @@ export function PublicSpaceDetailView({
               </div>
 
               {plans.length > 0 ? (
-                <div className="rounded-[24px] border border-slate-200 p-5">
-                  <div className="text-sm font-semibold text-slate-900">Membership plans</div>
+                <div className="rounded-2xl border border-line p-5">
+                  <div className="text-sm font-semibold text-text">Membership plans</div>
                   <div className="mt-4 grid gap-3">
                     {plans.map((plan) => (
-                      <div key={plan.public_id} className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
-                        <div className="text-sm font-semibold text-slate-900">{plan.name}</div>
-                        <div className="mt-1 text-sm text-slate-600">
+                      <div key={plan.public_id} className="rounded-xl border border-line bg-surface-2 px-4 py-3">
+                        <div className="text-sm font-semibold text-text">{plan.name}</div>
+                        <div className="mt-1 text-sm text-text-2">
                           {plan.billing_cycle} • ${plan.price}
                         </div>
                         <button
                           type="button"
                           onClick={() => handleMembershipClick(plan)}
-                          className="mt-3 inline-flex h-10 items-center justify-center rounded-full border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+                          className="mt-3 inline-flex h-10 items-center justify-center rounded-full border border-line-strong px-4 text-sm font-medium text-text-2 transition hover:border-text hover:text-text"
                         >
                           {isAuthenticated ? "Start membership" : "Sign in for membership"}
                         </button>
