@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.password import hash_password, verify_password
 from app.db.deps import get_db
 from app.models.audit_log import AuditLog
 from app.models.booking import Booking
@@ -32,6 +33,8 @@ from app.models.user import User
 from app.schemas.admin import (
     ImpersonationStartIn,
     OrganizationAdminUpdate,
+    PlatformPasswordUpdateIn,
+    PlatformProfileUpdateIn,
     PlatformSettingsUpdateIn,
     PlatformTeamInviteIn,
     PlatformTeamUpdateIn,
@@ -1009,10 +1012,19 @@ def get_platform_settings(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
-    require_superadmin(db, token)
+    actor, _member = require_superadmin(db, token)
     settings = get_or_create_platform_settings(db)
     return {
         "default_owner_commission_pct": settings.default_owner_commission_pct,
+        "current_admin": {
+            "public_id": actor.public_id,
+            "email": actor.email,
+            "first_name": actor.first_name,
+            "last_name": actor.last_name,
+            "name": _user_label(actor),
+            "created_at": actor.created_at.isoformat() if actor.created_at else None,
+            "has_password": bool(actor.password_hash),
+        },
     }
 
 
@@ -1041,6 +1053,77 @@ def update_platform_settings(
     return {
         "default_owner_commission_pct": settings.default_owner_commission_pct,
     }
+
+
+@router.patch("/admin/settings/profile")
+def update_platform_profile(
+    payload: PlatformProfileUpdateIn,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    actor, _member = require_superadmin(db, token)
+    before = {
+        "first_name": actor.first_name,
+        "last_name": actor.last_name,
+        "full_name": actor.full_name,
+    }
+    if payload.first_name is not None:
+        actor.first_name = payload.first_name.strip() or None
+    if payload.last_name is not None:
+        actor.last_name = payload.last_name.strip() or None
+    if payload.first_name is not None or payload.last_name is not None:
+        actor.full_name = " ".join(part for part in [actor.first_name, actor.last_name] if part).strip() or None
+    db.add(actor)
+    db.commit()
+    db.refresh(actor)
+    write_audit_log(
+        db=db,
+        actor_id=actor.id,
+        action="platform_profile_updated",
+        entity_type="user",
+        entity_public_id=actor.public_id,
+        before_state=before,
+        after_state={
+            "first_name": actor.first_name,
+            "last_name": actor.last_name,
+            "full_name": actor.full_name,
+        },
+    )
+    return {
+        "public_id": actor.public_id,
+        "email": actor.email,
+        "first_name": actor.first_name,
+        "last_name": actor.last_name,
+        "name": _user_label(actor),
+        "created_at": actor.created_at.isoformat() if actor.created_at else None,
+        "has_password": bool(actor.password_hash),
+    }
+
+
+@router.patch("/admin/settings/password")
+def update_platform_password(
+    payload: PlatformPasswordUpdateIn,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    actor, _member = require_superadmin(db, token)
+    if actor.password_hash:
+        if not payload.current_password or not verify_password(payload.current_password, actor.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+    had_password = bool(actor.password_hash)
+    actor.password_hash = hash_password(payload.new_password)
+    db.add(actor)
+    db.commit()
+    write_audit_log(
+        db=db,
+        actor_id=actor.id,
+        action="platform_password_updated",
+        entity_type="user",
+        entity_public_id=actor.public_id,
+        before_state={"had_password": had_password},
+        after_state={"password_changed": True},
+    )
+    return {"ok": True}
 
 
 @router.get("/admin/audit-logs")

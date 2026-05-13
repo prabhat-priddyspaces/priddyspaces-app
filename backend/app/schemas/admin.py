@@ -47,6 +47,23 @@ class PlatformSettingsUpdateIn(BaseModel):
         return value
 
 
+class PlatformProfileUpdateIn(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class PlatformPasswordUpdateIn(BaseModel):
+    current_password: str | None = None
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return value
+
+
 class ImpersonationStartIn(BaseModel):
     user_public_id: str
     reason: str
