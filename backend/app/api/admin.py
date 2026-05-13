@@ -65,6 +65,14 @@ def _user_label(user: User) -> str:
     return " ".join(parts) if parts else user.email
 
 
+def _space_label(space: Space | None) -> str | None:
+    if not space:
+        return None
+    if space.name and space.name.strip():
+        return space.name.strip()
+    return space.space_type.value.replace("_", " ").title()
+
+
 def _build_metrics(db: Session) -> dict[str, int | float]:
     tenant_count = db.query(Organization).count()
     user_count = db.query(User).count()
@@ -695,21 +703,60 @@ def list_admin_booking_activity(
     require_platform_roles(db, token, READ_ROLES)
     bookings = db.query(Booking).order_by(Booking.created_at.desc()).limit(25).all()
     requests = db.query(BookingRequest).order_by(BookingRequest.created_at.desc()).limit(25).all()
+    user_ids = {
+        user_id
+        for user_id in [*(booking.user_id for booking in bookings), *(request.user_id for request in requests)]
+        if user_id is not None
+    }
+    space_ids = {
+        space_id
+        for space_id in [*(booking.space_id for booking in bookings), *(request.space_id for request in requests)]
+        if space_id is not None
+    }
     booking_users = {
         user.id: user
-        for user in db.query(User).filter(User.id.in_([booking.user_id for booking in bookings])).all()
-    } if bookings else {}
-    request_users = {
-        user.id: user
-        for user in db.query(User).filter(User.id.in_([request.user_id for request in requests])).all()
-    } if requests else {}
+        for user in db.query(User).filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
+    spaces = {
+        space.id: space
+        for space in db.query(Space).filter(Space.id.in_(space_ids)).all()
+    } if space_ids else {}
+    location_ids = {space.location_id for space in spaces.values()}
+    locations = {
+        location.id: location
+        for location in db.query(Location).filter(Location.id.in_(location_ids)).all()
+    } if location_ids else {}
+    organization_ids = {location.organization_id for location in locations.values()}
+    organizations = {
+        organization.id: organization
+        for organization in db.query(Organization).filter(Organization.id.in_(organization_ids)).all()
+    } if organization_ids else {}
+
+    def booking_context(space_id: int) -> dict[str, object]:
+        space = spaces.get(space_id)
+        location = locations.get(space.location_id) if space else None
+        organization = organizations.get(location.organization_id) if location else None
+        return {
+            "space_public_id": space.public_id if space else None,
+            "space_name": _space_label(space),
+            "space_type": space.space_type.value if space else None,
+            "location_public_id": location.public_id if location else None,
+            "location_name": location.name if location else None,
+            "organization_public_id": organization.public_id if organization else None,
+            "organization_name": organization.name if organization else None,
+        }
+
     return {
         "bookings": [
             {
                 "public_id": booking.public_id,
                 "status": booking.status.value,
+                "member_name": _user_label(booking_users[booking.user_id]) if booking_users.get(booking.user_id) else None,
                 "member_email": booking_users.get(booking.user_id).email if booking_users.get(booking.user_id) else None,
+                "start_datetime": booking.start_datetime.isoformat() if booking.start_datetime else None,
+                "end_datetime": booking.end_datetime.isoformat() if booking.end_datetime else None,
                 "created_at": booking.created_at.isoformat() if booking.created_at else None,
+                **booking_context(booking.space_id),
             }
             for booking in bookings
         ],
@@ -717,9 +764,22 @@ def list_admin_booking_activity(
             {
                 "public_id": request.public_id,
                 "status": request.status.value,
-                "member_email": request_users.get(request.user_id).email if request_users.get(request.user_id) else None,
+                "member_name": (
+                    _user_label(booking_users[request.user_id])
+                    if request.user_id is not None and booking_users.get(request.user_id)
+                    else request.guest_full_name
+                ),
+                "member_email": (
+                    booking_users.get(request.user_id).email
+                    if request.user_id is not None and booking_users.get(request.user_id)
+                    else request.guest_email
+                ),
+                "request_kind": request.request_kind,
+                "start_datetime": request.start_datetime.isoformat() if request.start_datetime else None,
+                "end_datetime": request.end_datetime.isoformat() if request.end_datetime else None,
                 "operator_notes": request.operator_notes,
                 "created_at": request.created_at.isoformat() if request.created_at else None,
+                **booking_context(request.space_id),
             }
             for request in requests
         ],

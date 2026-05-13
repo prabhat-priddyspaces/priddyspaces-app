@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import text
 
 from app.core.password import verify_password
-from app.models.enums import OrganizationReviewStatus, PlatformTeamRole, SpaceType, SpaceVisibility, UserAppRole, UserRole
+from app.models.booking_request import BookingRequest
+from app.models.enums import BookingRequestStatus, OrganizationReviewStatus, PlatformTeamRole, SpaceType, SpaceVisibility, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
@@ -211,3 +214,56 @@ def test_impersonation_stop_uses_actor_platform_role(db_session, client_factory)
     response = client.post("/api/admin/impersonation/stop")
     assert response.status_code == 200
     assert response.json()["default_route"] == "/admin"
+
+
+def test_admin_booking_activity_includes_member_and_inventory_context(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="admin-bookings@example.com", role=PlatformTeamRole.SUPERADMIN)
+    member = _create_user(db_session, email="booker@example.com", role=UserAppRole.MEMBER)
+    owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.APPROVED)
+    location = Location(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Downtown Hub",
+        address="123 Main St",
+        city="Miami",
+        timezone="America/New_York",
+    )
+    db_session.add(location)
+    db_session.commit()
+    db_session.refresh(location)
+    space = Space(
+        location_id=location.id,
+        tenant_id=org.id,
+        name="Board Room",
+        space_type=SpaceType.CONFERENCE_ROOM,
+        capacity=8,
+        visibility=SpaceVisibility.PUBLIC,
+    )
+    db_session.add(space)
+    db_session.commit()
+    db_session.refresh(space)
+    start = datetime.now(timezone.utc).replace(microsecond=0)
+    request = BookingRequest(
+        tenant_id=org.id,
+        user_id=member.id,
+        space_id=space.id,
+        start_datetime=start,
+        end_datetime=start + timedelta(hours=1),
+        status=BookingRequestStatus.REQUESTED,
+    )
+    db_session.add(request)
+    db_session.commit()
+
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    response = client.get("/api/admin/bookings")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["booking_requests"][0]["member_email"] == member.email
+    assert body["booking_requests"][0]["space_name"] == "Board Room"
+    assert body["booking_requests"][0]["location_name"] == "Downtown Hub"
+    assert body["booking_requests"][0]["organization_name"] == org.name
