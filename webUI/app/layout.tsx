@@ -1,4 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./_styles/tokens.css";
 import "../styles/globals.css";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -6,6 +8,18 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { AssistantMount } from "@/components/assistant-mount";
 import { ClerkTokenSync } from "@/components/clerk-token-sync";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
+
+const geistSans = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+});
 
 export const metadata = {
   title: "Priddyspaces Coworking",
@@ -17,9 +31,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const fontClasses = `${geistSans.variable} ${geistMono.variable} font-sans`;
   if (IS_E2E_BYPASS) {
     return (
-      <html lang="en">
+      <html lang="en" className={fontClasses}>
         <body>
           {children}
           <AssistantMount />
@@ -38,7 +53,7 @@ export default function RootLayout({
       signInFallbackRedirectUrl="/dashboard"
       signUpFallbackRedirectUrl="/dashboard"
     >
-      <html lang="en">
+      <html lang="en" className={fontClasses}>
         <body>
           <ClerkTokenSync />
           {children}
