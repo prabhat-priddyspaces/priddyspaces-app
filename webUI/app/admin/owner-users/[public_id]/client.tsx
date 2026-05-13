@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
@@ -39,14 +39,17 @@ interface OwnerUserDetail {
 
 export function AdminOwnerUserDetailClient() {
   const params = useParams<{ public_id: string }>();
+  const searchParams = useSearchParams();
+  const ownerPublicId = searchParams.get("id") || (params.public_id === "_" ? "" : params.public_id);
   const [data, setData] = useState<OwnerUserDetail | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    if (!ownerPublicId) return;
     const token = getAccessToken() ?? undefined;
     try {
       const result = await apiFetch<OwnerUserDetail>(
-        `/api/admin/owner-users/${params.public_id}`,
+        `/api/admin/owner-users/${ownerPublicId}`,
         { method: "GET" },
         token
       );
@@ -54,7 +57,7 @@ export function AdminOwnerUserDetailClient() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load user");
     }
-  }, [params.public_id]);
+  }, [ownerPublicId]);
 
   useEffect(() => {
     load();

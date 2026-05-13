@@ -63,9 +63,29 @@ export function legacyOwnerSpaceHref(pathname: string, search: string) {
   return `/owner/spaces/${segments[3]}.html?${next.toString()}`;
 }
 
+export function legacyAdminDetailHref(pathname: string, search: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  if (
+    segments.length !== 3 ||
+    segments[0] !== "admin" ||
+    !["members", "owner-users"].includes(segments[1])
+  ) {
+    return null;
+  }
+
+  const publicId = segments[2];
+  if (!publicId || publicId === "_" || publicId === "_.html") return null;
+
+  const next = new URLSearchParams(search);
+  next.set("id", decodeURIComponent(publicId));
+  return `/admin/${segments[1]}/_.html?${next.toString()}`;
+}
+
 export function defaultMarketplaceFallbackHref(pathname: string, search: string) {
   const ownerSpaceHref = legacyOwnerSpaceHref(pathname, search);
   if (ownerSpaceHref) return ownerSpaceHref;
+  const adminDetailHref = legacyAdminDetailHref(pathname, search);
+  if (adminDetailHref) return adminDetailHref;
   const legacyHref = legacyStaticDetailHref(pathname, search);
   if (legacyHref) return legacyHref;
   if (pathname === "/" || pathname === "") return "/spaces";

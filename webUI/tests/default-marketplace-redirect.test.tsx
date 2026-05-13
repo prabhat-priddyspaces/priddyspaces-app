@@ -80,4 +80,16 @@ describe("DefaultMarketplaceRedirect", () => {
       "/owner/spaces/edit.html?spaceId=space_1",
     );
   });
+
+  it("recovers admin member detail URLs for static export", () => {
+    expect(defaultMarketplaceFallbackHref("/admin/members/member_1", "")).toBe(
+      "/admin/members/_.html?id=member_1",
+    );
+  });
+
+  it("recovers admin owner user detail URLs for static export", () => {
+    expect(defaultMarketplaceFallbackHref("/admin/owner-users/owner_1", "?tab=activity")).toBe(
+      "/admin/owner-users/_.html?tab=activity&id=owner_1",
+    );
+  });
 });
