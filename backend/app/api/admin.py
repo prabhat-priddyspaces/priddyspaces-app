@@ -471,11 +471,19 @@ def list_owner_companies(
         .order_by(AuditLog.created_at.desc())
         .all()
     )
+    review_actor_ids = {log.actor_id for log in review_logs if log.actor_id is not None}
+    review_actors = {
+        user.id: user
+        for user in db.query(User).filter(User.id.in_(review_actor_ids)).all()
+    } if review_actor_ids else {}
     review_history_by_org: dict[str, list[dict[str, object]]] = {}
     for log in review_logs:
+        actor = review_actors.get(log.actor_id)
         review_history_by_org.setdefault(log.entity_public_id, []).append(
             {
                 "action": log.action,
+                "actor_email": actor.email if actor else None,
+                "actor_name": _user_label(actor) if actor else None,
                 "before_state": log.before_state,
                 "after_state": log.after_state,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
@@ -498,7 +506,7 @@ def list_owner_companies(
             },
             "locations": location_counts.get(organization.id, 0),
             "listings": listing_counts.get(organization.id, 0),
-            "review_history": review_history_by_org.get(organization.public_id, [])[:5],
+            "review_history": review_history_by_org.get(organization.public_id, []),
         }
         for organization in organizations
     ]
