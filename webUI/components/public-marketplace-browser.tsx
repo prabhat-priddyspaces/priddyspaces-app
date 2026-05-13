@@ -7,6 +7,7 @@ import { CalendarDays, Clock3, Compass, Search, SlidersHorizontal, Users } from 
 
 import { apiFetch } from "@/lib/api";
 import { PublicTopbar } from "@/components/public-topbar";
+import { PublicImageWithFallback } from "@/components/public-image-with-fallback";
 import {
   DEFAULT_RADIUS_MILES,
   MAX_RADIUS_MILES,
@@ -533,17 +534,12 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 >
                   <div className="flex gap-4">
                     <div className="h-36 w-36 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
-                      {location.featured_image_url ? (
-                        <img
-                          src={location.featured_image_url}
-                          alt={location.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-xs font-semibold uppercase tracking-[0.24em] text-slate-600">
-                          Priddyspaces
-                        </div>
-                      )}
+                      <PublicImageWithFallback
+                        src={location.featured_image_url}
+                        alt={location.name}
+                        className="h-full w-full object-cover"
+                        fallbackClassName="flex h-full items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-xs font-semibold uppercase tracking-[0.24em] text-slate-600"
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-3">

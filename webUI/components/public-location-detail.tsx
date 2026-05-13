@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
+import { PublicImageWithFallback } from "@/components/public-image-with-fallback";
 import { PublicWorkingHours } from "@/components/public-working-hours";
 import { PublicTopbar } from "@/components/public-topbar";
 import {
@@ -133,13 +134,12 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-5">
             <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-              {location.featured_image_url ? (
-                <img src={location.featured_image_url} alt={location.name} className="h-80 w-full object-cover" />
-              ) : (
-                <div className="flex h-80 items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-sm font-semibold uppercase tracking-[0.24em] text-slate-600">
-                  Priddyspaces
-                </div>
-              )}
+              <PublicImageWithFallback
+                src={location.featured_image_url}
+                alt={location.name}
+                className="h-80 w-full object-cover"
+                fallbackClassName="flex h-80 items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-sm font-semibold uppercase tracking-[0.24em] text-slate-600"
+              />
             </div>
 
             <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -236,13 +236,13 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                 <div key={space.public_id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex gap-4">
                     <div className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
-                      {space.image_url ? (
-                        <img src={space.image_url} alt={space.space_type} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-                          Space
-                        </div>
-                      )}
+                      <PublicImageWithFallback
+                        src={space.image_url}
+                        alt={space.space_type}
+                        className="h-full w-full object-cover"
+                        fallbackLabel="Space"
+                        fallbackClassName="flex h-full items-center justify-center bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500"
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-3">

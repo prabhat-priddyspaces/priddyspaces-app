@@ -81,6 +81,41 @@ describe("public marketplace flows", () => {
     expect(pushMock).toHaveBeenCalledWith("/locations/_?q=Miami&id=loc_1&route=spaces");
   });
 
+  it("shows a designed fallback when a result image fails to load", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      meta: { total_locations: 1, page: 1, page_size: 20 },
+      results: [
+        {
+          location_public_id: "loc_1",
+          name: "Broken Image Place",
+          address: "100 Main St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33101",
+          neighborhood: "Downtown",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          featured_image_url: "https://assets.example.com/missing.png",
+          location_amenities: ["WiFi"],
+          matching_space_count: 1,
+          featured_space_public_id: "space_1",
+          starting_day_pass_price: 49,
+          starting_monthly_price: null,
+          starting_hourly_price: null,
+          starting_membership_price: null,
+        },
+      ],
+    });
+
+    render(<PublicMarketplaceBrowser routeKey="spaces" />);
+
+    const image = await screen.findByAltText("Broken Image Place");
+    fireEvent.error(image);
+
+    expect(screen.getAllByText("Priddyspaces").length).toBeGreaterThan(1);
+  });
+
   it("hides empty optional sections on the public detail page", async () => {
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/availability")) {
