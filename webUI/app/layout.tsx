@@ -7,6 +7,7 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { AssistantMount } from "@/components/assistant-mount";
 import { ClerkTokenSync } from "@/components/clerk-token-sync";
+import { CommandPalette } from "@/components/command-palette";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
 const geistSans = Geist({
@@ -38,6 +39,7 @@ export default function RootLayout({
         <body>
           {children}
           <AssistantMount />
+          <CommandPalette />
         </body>
       </html>
     );
@@ -58,6 +60,7 @@ export default function RootLayout({
           <ClerkTokenSync />
           {children}
           <AssistantMount />
+          <CommandPalette />
         </body>
       </html>
     </ClerkProvider>

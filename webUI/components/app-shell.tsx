@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useMe } from "@/hooks/useMe";
 import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Topbar } from "@/components/shell/topbar";
 import { WorkspaceShell } from "@/components/shell/workspace-shell";
@@ -58,6 +60,7 @@ export function AppShell({
               </Button>
             </Link>
           ) : null}
+          <ThemeToggle />
           <Button
             variant="ghost"
             size="sm"
@@ -83,6 +86,7 @@ export function AppShell({
       }
     >
       {children}
+      <MobileBottomNav variant="owner" />
     </WorkspaceShell>
   );
 }

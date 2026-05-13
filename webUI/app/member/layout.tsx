@@ -6,6 +6,8 @@ import { useAuth } from "@clerk/nextjs";
 
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Button } from "@/components/ui/button";
+import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Topbar } from "@/components/shell/topbar";
 import { WorkspaceShell } from "@/components/shell/workspace-shell";
 import { useAppSignOut } from "@/hooks/useAppSignOut";
@@ -44,11 +46,14 @@ function Shell({
     <Topbar
       title="Workspace"
       actions={
-        onSignOut ? (
-          <Button variant="ghost" size="sm" onClick={onSignOut}>
-            Logout
-          </Button>
-        ) : null
+        <>
+          <ThemeToggle />
+          {onSignOut ? (
+            <Button variant="ghost" size="sm" onClick={onSignOut}>
+              Logout
+            </Button>
+          ) : null}
+        </>
       }
     />
   );
@@ -64,6 +69,7 @@ function Shell({
       }
     >
       {children}
+      <MobileBottomNav variant="customer" />
     </WorkspaceShell>
   );
 }
