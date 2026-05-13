@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ interface BookingRequest {
 }
 
 type StatusFilter = "all" | "requested" | "approved" | "payment_failed" | "rejected" | "cancelled";
+type DecisionAction = "approve" | "reject";
 
 const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -42,12 +44,18 @@ const FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
 ];
 
 export default function OwnerRequestsPage() {
+  const searchParams = useSearchParams();
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [pendingDecision, setPendingDecision] = useState<{
+    publicId: string;
+    action: DecisionAction;
+  } | null>(null);
+  const handledDeepLink = useRef<string | null>(null);
 
   const filtered = useMemo(() => {
     if (filter === "all") return bookings;
@@ -84,6 +92,27 @@ export default function OwnerRequestsPage() {
   useEffect(() => {
     load().catch(() => null);
   }, []);
+
+  useEffect(() => {
+    const publicId = searchParams.get("request");
+    const decision = searchParams.get("decision");
+    if (!publicId || (decision !== "approve" && decision !== "reject") || bookings.length === 0) {
+      return;
+    }
+    const key = `${publicId}:${decision}`;
+    if (handledDeepLink.current === key) return;
+    const request = bookings.find((item) => item.public_id === publicId);
+    if (!request || request.status !== "requested") return;
+    handledDeepLink.current = key;
+    setFilter("all");
+    setPendingDecision({ publicId, action: decision });
+    window.setTimeout(() => {
+      document.getElementById(`request-${publicId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+  }, [bookings, searchParams]);
 
   async function updateStatus(publicId: string, action: "approve" | "reject") {
     const token = getAccessToken() ?? undefined;
@@ -127,6 +156,17 @@ export default function OwnerRequestsPage() {
     }
   }
 
+  async function confirmPendingDecision() {
+    if (!pendingDecision) return;
+    const decision = pendingDecision;
+    setPendingDecision(null);
+    await updateStatus(decision.publicId, decision.action);
+  }
+
+  const pendingRequest = pendingDecision
+    ? bookings.find((request) => request.public_id === pendingDecision.publicId)
+    : null;
+
   return (
     <AppShell>
       <div className="grid gap-6">
@@ -167,7 +207,7 @@ export default function OwnerRequestsPage() {
         ) : (
           <div className="grid gap-4">
             {filtered.map((request) => (
-              <Card key={request.public_id} className="p-4">
+              <Card key={request.public_id} id={`request-${request.public_id}`} className="p-4">
                 <div className="grid gap-4">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="text-sm">
@@ -292,6 +332,31 @@ export default function OwnerRequestsPage() {
           </div>
         )}
       </div>
+      {pendingDecision && pendingRequest ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-md border border-border bg-surface p-5 shadow-xl">
+            <div className="text-lg font-semibold text-textPrimary">
+              {pendingDecision.action === "approve" ? "Approve request" : "Reject request"}
+            </div>
+            <div className="mt-2 text-sm text-textSecondary">
+              Request {pendingRequest.public_id.slice(0, 8)}... for{" "}
+              {new Date(pendingRequest.start_datetime).toLocaleString()}.
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setPendingDecision(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={confirmPendingDecision}
+                disabled={updating === pendingDecision.publicId}
+              >
+                {pendingDecision.action === "approve" ? "Approve" : "Reject"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

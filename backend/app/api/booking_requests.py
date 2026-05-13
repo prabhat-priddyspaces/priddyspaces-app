@@ -26,6 +26,7 @@ from datetime import datetime, time, timezone
 
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.membership_plan import MembershipPlan
+from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.space import Space
@@ -46,7 +47,7 @@ from app.schemas.booking_request import (
     GuestBookingRequestOut,
 )
 from app.services.auth_user import get_or_create_user
-from app.services.authz import accessible_location_ids, require_location_roles
+from app.services.authz import accessible_location_ids, require_location_roles, user_can_access_location
 from app.services.availability import booking_overlaps, booking_request_overlaps, subscription_overlaps
 from app.services.booking_inventory import (
     create_pending_booking_hold,
@@ -74,10 +75,13 @@ from app.services.pricing import (
 from app.services.money import cents_to_money
 from app.services.loyalty import attach_lock_to_booking_request, release_redemption_for_request
 from app.services.notifications import (
-    send_email,
-    send_guest_approval_email,
-    send_guest_booking_confirmation,
-    send_guest_rejection_email,
+    send_booking_confirmed_email,
+    send_booking_cancelled_email,
+    send_booking_request_cancelled_email,
+    send_booking_payment_failed_email,
+    send_booking_rejected_email,
+    send_booking_request_submitted_email,
+    send_owner_confirmed_booking_notification,
     send_owner_booking_request_notification,
 )
 from app.services.audit import write_audit_log
@@ -503,35 +507,57 @@ def _create_membership_purchase_request(
     return req
 
 
-def _owner_emails_for_space(db: Session, space: Space) -> list[str]:
-    """Return email addresses of all active OWNER/ADMIN members for the space's location."""
-    from app.models.organization import Organization
-    from app.models.organization_member import OrganizationMember
-
+def _owner_notification_emails_for_space(db: Session, space: Space) -> list[str]:
+    """Return opted-in owner-side users who can access this space's location."""
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         return []
-    org = db.query(Organization).filter(Organization.id == location.organization_id).first() if hasattr(location, "organization_id") else None
-    owner_user_ids: set[int] = set()
-    if org:
-        members = (
-            db.query(OrganizationMember)
-            .filter(
-                OrganizationMember.organization_id == org.id,
-                OrganizationMember.is_active.is_(True),
-                OrganizationMember.role.in_(["owner", "admin"]),
-            )
-            .all()
+    roles = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
+    members = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.organization_id == location.organization_id,
+            OrganizationMember.is_active.is_(True),
+            OrganizationMember.receives_new_booking_email.is_(True),
+            OrganizationMember.role.in_(roles),
         )
-        for m in members:
-            owner_user_ids.add(m.user_id)
-    if not owner_user_ids:
-        owner_user = db.query(User).filter(User.id == space.tenant_id).first()
-        if owner_user:
-            return [owner_user.email]
+        .all()
+    )
+    user_ids = {
+        member.user_id
+        for member in members
+        if user_can_access_location(db, member.user_id, location, roles)
+    }
+    if not user_ids:
         return []
-    users = db.query(User).filter(User.id.in_(owner_user_ids)).all()
-    return [u.email for u in users if u.email]
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    return sorted({user.email for user in users if user.email})
+
+
+def _notify_owner_team_of_request(db: Session, req: BookingRequest, space: Space, location: Location) -> None:
+    for owner_email in _owner_notification_emails_for_space(db, space):
+        send_owner_booking_request_notification(db, owner_email, req, space, location)
+
+
+def _notify_owner_team_of_confirmed_booking(
+    db: Session,
+    req: BookingRequest,
+    booking: Booking | None,
+    space: Space,
+    location: Location,
+) -> None:
+    if not booking:
+        return
+    for owner_email in _owner_notification_emails_for_space(db, space):
+        send_owner_confirmed_booking_notification(db, owner_email, req, booking, space, location)
+
+
+def _audit_context_with_actor_email(db: Session, actor_id: int, context: dict | None) -> dict:
+    actor = db.query(User).filter(User.id == actor_id).first()
+    merged = dict(context or {})
+    if actor and actor.email:
+        merged.setdefault("actor_email", actor.email)
+    return merged
 
 
 @router.post("/guest/booking-requests", response_model=GuestBookingRequestOut)
@@ -626,16 +652,8 @@ def create_guest_booking_request(
     except Exception:
         pass
 
-    send_guest_booking_confirmation(
-        guest_email=str(payload.guest_email),
-        guest_name=payload.guest_full_name,
-        req=req,
-        space=space,
-        location=location,
-    )
-
-    for owner_email in _owner_emails_for_space(db, space):
-        send_owner_booking_request_notification(db, owner_email, req, space, location)
+    send_booking_request_submitted_email(db, req, space, location)
+    _notify_owner_team_of_request(db, req, space, location)
 
     return GuestBookingRequestOut(
         public_id=req.public_id,
@@ -660,12 +678,11 @@ def create_booking_request(
             raise HTTPException(status_code=400, detail="Rewards cannot be redeemed for memberships or leases")
         req = _create_membership_purchase_request(payload, user, db)
         space = db.query(Space).filter(Space.id == req.space_id).first()
-        send_email(user.email, "Membership request submitted", f"Request {req.public_id} submitted.")
         if space:
             location = db.query(Location).filter(Location.id == space.location_id).first()
             if location:
-                for owner_email in _owner_emails_for_space(db, space):
-                    send_owner_booking_request_notification(db, owner_email, req, space, location)
+                send_booking_request_submitted_email(db, req, space, location)
+                _notify_owner_team_of_request(db, req, space, location)
         return _to_out(req, space, None, db)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
@@ -787,13 +804,13 @@ def create_booking_request(
                     series.status = "active"
                     db.add(series)
                     db.commit()
-            send_email(user.email, "Booking confirmed", f"Request {req.public_id} was booked and charged.")
+            send_booking_confirmed_email(db, req, booking, space, location)
+            _notify_owner_team_of_confirmed_booking(db, req, booking, space, location)
+        elif req.status == BookingRequestStatus.PAYMENT_FAILED:
+            send_booking_payment_failed_email(db, req, space)
         return _to_out(req, space, booking, db)
-    send_email(user.email, "Booking request submitted", f"Request {req.public_id} submitted.")
-    location = db.query(Location).filter(Location.id == space.location_id).first()
-    if location:
-        for owner_email in _owner_emails_for_space(db, space):
-            send_owner_booking_request_notification(db, owner_email, req, space, location)
+    send_booking_request_submitted_email(db, req, space, location)
+    _notify_owner_team_of_request(db, req, space, location)
     return _to_out(req, space, None, db)
 
 
@@ -982,17 +999,10 @@ def approve_booking_request(
         db.refresh(req)
         after_status = req.status
     if req.status == BookingRequestStatus.APPROVED:
-        if req.is_guest_checkout and req.guest_email:
-            send_guest_approval_email(
-                guest_email=req.guest_email,
-                guest_name=req.guest_full_name or "Guest",
-                req=req,
-                space=space,
-            )
-        else:
-            member = db.query(User).filter(User.id == req.user_id).first()
-            if member:
-                send_email(member.email, "Booking request approved", f"Request {req.public_id} approved.")
+        booking_for_email = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+        send_booking_confirmed_email(db, req, booking_for_email, space, location)
+    elif req.status == BookingRequestStatus.PAYMENT_FAILED:
+        send_booking_payment_failed_email(db, req, space)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -1003,7 +1013,7 @@ def approve_booking_request(
         before_state={"status": before_status.value},
         after_state={"status": after_status.value, "payment_status": req.payment_status},
         acting_as_user_id=acting_as_user_id,
-        context=context,
+        context=_audit_context_with_actor_email(db, actor_id, context),
     )
     booking = None
     if req.booking_id:
@@ -1052,6 +1062,10 @@ def retry_booking_request_payment(
         db.commit()
         db.refresh(req)
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
+    if req.status == BookingRequestStatus.APPROVED:
+        send_booking_confirmed_email(db, req, booking, space, location)
+    elif req.status == BookingRequestStatus.PAYMENT_FAILED:
+        send_booking_payment_failed_email(db, req, space)
     return _to_out(req, space, booking, db)
 
 
@@ -1083,17 +1097,7 @@ def reject_booking_request(
     db.add(req)
     db.commit()
     db.refresh(req)
-    if req.is_guest_checkout and req.guest_email:
-        send_guest_rejection_email(
-            guest_email=req.guest_email,
-            guest_name=req.guest_full_name or "Guest",
-            req=req,
-            space=space,
-        )
-    else:
-        member = db.query(User).filter(User.id == req.user_id).first()
-        if member:
-            send_email(member.email, "Booking request rejected", f"Request {req.public_id} rejected.")
+    send_booking_rejected_email(db, req, space)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -1104,7 +1108,7 @@ def reject_booking_request(
         before_state={"status": BookingRequestStatus.REQUESTED.value},
         after_state={"status": req.status.value},
         acting_as_user_id=acting_as_user_id,
-        context=context,
+        context=_audit_context_with_actor_email(db, actor_id, context),
     )
     booking = None
     if req.booking_id:
@@ -1160,10 +1164,8 @@ def cancel_booking_request(
     db.refresh(req)
     if booking:
         db.refresh(booking)
-    if req.is_guest_checkout and req.guest_email:
-        send_email(req.guest_email, "Booking canceled", f"Your booking request {req.public_id} has been canceled.")
+    if booking:
+        send_booking_cancelled_email(db, booking, req, space, location)
     else:
-        member = db.query(User).filter(User.id == req.user_id).first()
-        if member:
-            send_email(member.email, "Booking canceled", f"Request {req.public_id} has been canceled.")
+        send_booking_request_cancelled_email(db, req, space)
     return _to_out(req, space, booking, db)

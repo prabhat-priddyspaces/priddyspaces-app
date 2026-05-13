@@ -20,8 +20,6 @@ from app.models.payment_refund import PaymentRefund
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.tax_config import TaxConfig
-from app.models.user import User
-from app.services.notifications import send_email
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
@@ -338,9 +336,6 @@ def charge_booking_request(
         finalize_redemption_for_payment(db, req, booking, payment)
         db.commit()
         record_earned_for_payment(db, payment, booking=booking, booking_request=req)
-        member = db.query(User).filter(User.id == req.user_id).first()
-        if member:
-            send_email(member.email, "Booking approved and charged", f"Request {req.public_id} was approved and charged.")
         return req, booking, payment
 
     failure_reason = result.failure_reason if result else failure_reason
@@ -369,9 +364,6 @@ def charge_booking_request(
     db.commit()
     db.refresh(req)
     db.refresh(payment)
-    member = db.query(User).filter(User.id == req.user_id).first()
-    if member:
-        send_email(member.email, "Booking payment failed", f"Request {req.public_id} could not be charged.")
     return req, None, payment
 
 

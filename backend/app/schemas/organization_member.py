@@ -8,6 +8,7 @@ class OrganizationMemberCreate(BaseModel):
     email: str | None = None
     role: UserRole
     can_override_pricing: bool = False
+    receives_new_booking_email: bool | None = None
     location_public_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -22,11 +23,16 @@ class OrganizationMemberCreate(BaseModel):
         return self
 
 
+class OrganizationMemberUpdate(BaseModel):
+    receives_new_booking_email: bool | None = None
+
+
 class OrganizationMemberOut(BaseModel):
     public_id: str
     user_id: int
     role: UserRole
     can_override_pricing: bool
+    receives_new_booking_email: bool
     location_public_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
@@ -39,6 +45,7 @@ class OrganizationMemberDetailOut(BaseModel):
     user_email: str
     role: UserRole
     can_override_pricing: bool
+    receives_new_booking_email: bool
     location_public_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

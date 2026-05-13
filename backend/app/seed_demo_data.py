@@ -290,12 +290,14 @@ def _ensure_owner_membership(db: Session, *, org: Organization, owner: User) -> 
             user_id=owner.id,
             role=UserRole.OWNER,
             can_override_pricing=True,
+            receives_new_booking_email=True,
             is_active=True,
         )
     else:
         member.tenant_id = org.id
         member.role = UserRole.OWNER
         member.can_override_pricing = True
+        member.receives_new_booking_email = True
         member.is_active = True
     db.add(member)
     db.commit()

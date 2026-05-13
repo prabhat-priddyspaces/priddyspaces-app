@@ -61,3 +61,63 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
   await expect(page.getByText("Booking created: book_approved_1")).toBeVisible();
   await expect(notes).toHaveValue("Approved for the afternoon block");
 });
+
+test("owner request email deep link opens approve confirmation", async ({ page }) => {
+  const requestState = {
+    public_id: "req_email_1",
+    booking_id: null as number | null,
+    booking_public_id: null as string | null,
+    start_datetime: "2026-04-12T14:00:00.000Z",
+    end_datetime: "2026-04-12T15:30:00.000Z",
+    status: "requested",
+    payment_status: "not_charged",
+    payment_provider: "stripe",
+    cancellation_deadline_at: null,
+    estimated_amount: 180,
+    operator_notes: null as string | null,
+    failure_reason: null,
+    is_guest_checkout: false,
+    guest_email: null,
+    guest_full_name: null,
+    guest_phone: null,
+    guest_company_name: null,
+    guest_notes: null,
+  };
+
+  await mockSession(page, "owner");
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("owner"));
+      return;
+    }
+
+    if (key === "GET /api/booking-requests") {
+      await json(route, [requestState]);
+      return;
+    }
+
+    if (key === "POST /api/booking-requests/req_email_1/approve") {
+      requestState.status = "approved";
+      requestState.payment_status = "succeeded";
+      requestState.booking_id = 45;
+      requestState.booking_public_id = "book_email_1";
+      await json(route, requestState);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/owner/requests?request=req_email_1&decision=approve");
+
+  await expect(page.getByRole("heading", { name: "Requests" })).toBeVisible();
+  await expect(page.getByText("Approve request")).toBeVisible();
+  await page.getByRole("button", { name: "Approve", exact: true }).last().click();
+
+  await expect(page.getByText("Status: approved")).toBeVisible();
+  await expect(page.getByText("Booking created: book_email_1")).toBeVisible();
+});

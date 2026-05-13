@@ -19,3 +19,4 @@ class OrganizationMember(PublicIdMixin, TimestampMixin, Base):
     )
     is_active = Column(Boolean, default=True)
     can_override_pricing = Column(Boolean, default=False)
+    receives_new_booking_email = Column(Boolean, default=False, server_default="false")
