@@ -18,7 +18,7 @@ from app.schemas.media import (
 )
 from app.services.auth_user import get_or_create_user
 from app.services.authz import require_location_roles
-from app.services.storage import presign_space_image_upload
+from app.services.storage import presign_space_image_upload, public_space_image_url
 
 router = APIRouter()
 
@@ -115,6 +115,11 @@ def _normalize_primary_image(db: Session, space_id: int, preferred_image_id: int
     db.commit()
 
 
+def _space_image_out(image: SpaceImage) -> SpaceImageOut:
+    item = SpaceImageOut.model_validate(image)
+    return item.model_copy(update={"image_url": public_space_image_url(image.storage_key, image.image_url)})
+
+
 @router.post("/media/presign", response_model=MediaPresignOut)
 def presign_media(
     payload: MediaPresignIn,
@@ -138,7 +143,7 @@ def create_media(
     image = SpaceImage(
         tenant_id=space.tenant_id,
         space_id=space.id,
-        image_url=payload.image_url,
+        image_url=public_space_image_url(payload.storage_key, payload.image_url),
         storage_key=payload.storage_key,
         is_primary=is_primary,
         sort_order=payload.sort_order,
@@ -151,7 +156,7 @@ def create_media(
         _normalize_primary_image(db, space.id, image.id)
         db.refresh(image)
 
-    return image
+    return _space_image_out(image)
 
 
 @router.patch("/media/{public_id}", response_model=SpaceImageOut)
@@ -178,7 +183,7 @@ def update_media(
         _normalize_primary_image(db, space.id)
 
     db.refresh(image)
-    return image
+    return _space_image_out(image)
 
 
 @router.delete("/media/{public_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -205,7 +210,7 @@ def list_space_media(
     token: dict | None = Depends(get_optional_user),
 ):
     space, _location = _space_with_access(db, token, space_public_id, allow_member_read=True)
-    return (
+    images = (
         db.query(SpaceImage)
         .filter(SpaceImage.space_id == space.id)
         .order_by(
@@ -215,3 +220,4 @@ def list_space_media(
         )
         .all()
     )
+    return [_space_image_out(image) for image in images]

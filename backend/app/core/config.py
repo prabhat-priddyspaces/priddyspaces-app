@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     CORS_ALLOW_ORIGINS: str = "http://localhost:3000"
     S3_BUCKET: str = ""
     S3_REGION: str = ""
+    S3_PUBLIC_BASE_URL: str = ""
     SENDGRID_API_KEY: str = ""
     SENDGRID_FROM_EMAIL: str = "no-reply@priddyspaces.local"
     SENDGRID_MARKETING_FROM_EMAIL: str = "marketing@priddyspaces.local"

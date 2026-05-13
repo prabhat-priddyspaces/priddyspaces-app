@@ -6,6 +6,7 @@ from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.location import Location
 from app.models.space import Space
+from app.core.config import settings
 
 
 def _seed_owner_space(db):
@@ -176,3 +177,31 @@ def test_media_update_and_delete_flow(db_session, client_factory, monkeypatch):
     assert len(items) == 1
     assert items[0]["public_id"] == first_image["public_id"]
     assert items[0]["is_primary"] is True
+
+
+def test_media_responses_use_configured_public_base_url(db_session, client_factory, monkeypatch):
+    owner, space = _seed_owner_space(db_session)
+    monkeypatch.setattr(settings, "S3_PUBLIC_BASE_URL", "https://assets.example.com")
+
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True
+    })
+
+    create = client.post(
+        "/api/media",
+        json={
+            "space_public_id": space.public_id,
+            "storage_key": "spaces/legacy.jpg",
+            "image_url": "https://bucket.s3.us-east-1.amazonaws.com/spaces/legacy.jpg",
+            "is_primary": True,
+            "sort_order": 0
+        }
+    )
+    assert create.status_code == 200
+    assert create.json()["image_url"] == "https://assets.example.com/spaces/legacy.jpg"
+
+    listing = client.get(f"/api/spaces/{space.public_id}/media")
+    assert listing.status_code == 200
+    assert listing.json()[0]["image_url"] == "https://assets.example.com/spaces/legacy.jpg"

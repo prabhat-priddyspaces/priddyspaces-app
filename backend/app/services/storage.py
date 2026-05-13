@@ -6,6 +6,15 @@ from fastapi import HTTPException
 from app.core.config import settings
 
 
+def public_space_image_url(key: str, fallback_url: str | None = None) -> str:
+    public_base_url = settings.S3_PUBLIC_BASE_URL.strip().rstrip("/")
+    if public_base_url and key.startswith("spaces/"):
+        return f"{public_base_url}/{key.lstrip('/')}"
+    if fallback_url:
+        return fallback_url
+    return f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{key}"
+
+
 def presign_floor_plan_upload(filename: str) -> dict:
     if not settings.S3_BUCKET or not settings.S3_REGION:
         raise HTTPException(status_code=500, detail="S3 not configured")
@@ -39,7 +48,7 @@ def presign_space_image_upload(filename: str, content_type: str | None = None) -
         ExpiresIn=3600
     )
 
-    public_url = f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{key}"
+    public_url = public_space_image_url(key)
     return {"upload_url": url, "key": key, "public_url": public_url}
 
 
