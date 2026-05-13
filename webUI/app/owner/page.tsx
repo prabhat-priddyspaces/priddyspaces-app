@@ -2,16 +2,47 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  Building2,
+  Calendar,
+  Check,
+  DollarSign,
+  Inbox,
+  Plus,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { StatCard } from "@/components/charts/stat-card";
+import { RevenueChart } from "@/components/charts/revenue-chart";
+import {
+  TimelineMini,
+  type TimelineRoom,
+} from "@/components/dashboard/timeline-mini";
+import { OwnerDashboardEmpty } from "@/components/dashboard/owner-dashboard-empty";
+import { useMe } from "@/hooks/useMe";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { moneyToNumber, type MoneyValue } from "@/lib/money";
 
 interface BookingRequest {
   status: string;
   estimated_amount: MoneyValue | null;
+  created_at?: string;
+  starts_at?: string;
+  ends_at?: string;
+  notes?: string | null;
+  member?: { first_name?: string | null; last_name?: string | null; email?: string | null } | null;
+  space?: { name?: string | null } | null;
+  location?: { name?: string | null } | null;
 }
 
 interface Payment {
@@ -53,13 +84,93 @@ interface LocationSummary {
   occupiedSpaces: number;
 }
 
-const currency = new Intl.NumberFormat("en-US", {
+const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
 });
 
+const SAMPLE_TIMELINE: TimelineRoom[] = [
+  {
+    name: "Riverside 3",
+    type: "Conf",
+    events: [
+      { start: 0.08, width: 0.12, label: "Std Up", tone: "violet" },
+      { start: 0.25, width: 0.13, label: "Maya Chen", tone: "pending" },
+      { start: 0.5, width: 0.18, label: "Atlas weekly", tone: "mint" },
+    ],
+  },
+  {
+    name: "Plantation 1",
+    type: "Open",
+    events: [
+      { start: 0.0, width: 0.4, label: "Day pass · 8 desks", tone: "mint" },
+      { start: 0.55, width: 0.3, label: "—", tone: "muted" },
+    ],
+  },
+  {
+    name: "Coral 12B",
+    type: "Office",
+    events: [
+      { start: 0.0, width: 0.95, label: "Foundry Co. · monthly", tone: "violet" },
+    ],
+  },
+  {
+    name: "Brickell A",
+    type: "Conf",
+    events: [
+      { start: 0.12, width: 0.08, label: "—", tone: "muted" },
+      { start: 0.3, width: 0.12, label: "Loop sync", tone: "violet" },
+      { start: 0.6, width: 0.2, label: "Workshop", tone: "violet" },
+    ],
+  },
+  {
+    name: "Plantation 2",
+    type: "Conf",
+    events: [
+      { start: 0.4, width: 0.15, label: "Sales QBR", tone: "violet" },
+      { start: 0.7, width: 0.15, label: "Interview", tone: "warning" },
+    ],
+  },
+];
+
+function requesterName(req: BookingRequest): string {
+  const name = [req.member?.first_name, req.member?.last_name]
+    .filter(Boolean)
+    .join(" ");
+  return name || req.member?.email || "Member";
+}
+
+function requestWhere(req: BookingRequest): string {
+  const space = req.space?.name ?? "Space";
+  const location = req.location?.name;
+  return location ? `${space} · ${location}` : space;
+}
+
+function requestWhen(req: BookingRequest): string {
+  if (!req.starts_at) return "";
+  try {
+    const start = new Date(req.starts_at);
+    return start.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function OwnerDashboard() {
+  const { me } = useMe();
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -156,11 +267,8 @@ export default function OwnerDashboard() {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    const pendingRequests = requests.filter((request) => request.status === "requested").length;
-    const approvedRequests = requests.filter((request) => request.status === "approved").length;
-    const openRequestValue = requests
-      .filter((request) => request.status === "requested")
-      .reduce((sum, request) => sum + (moneyToNumber(request.estimated_amount) ?? 0), 0);
+    const pendingRequests = requests.filter((r) => r.status === "requested").length;
+    const approvedRequests = requests.filter((r) => r.status === "approved").length;
     const monthRevenue = payments
       .filter((payment) => {
         const createdAt = new Date(payment.created_at);
@@ -171,116 +279,407 @@ export default function OwnerDashboard() {
         );
       })
       .reduce((sum, payment) => sum + (payment.amount || 0), 0);
-    const failedPayments = payments.filter((payment) => payment.status === "failed").length;
-    const activeMemberships = subscriptions.filter((subscription) =>
-      ["active", "trialing", "past_due", "canceling"].includes(subscription.status)
+    const activeMemberships = subscriptions.filter((s) =>
+      ["active", "trialing", "past_due", "canceling"].includes(s.status)
     ).length;
-    const totalSpaces = locationSummaries.reduce((sum, location) => sum + location.totalSpaces, 0);
-    const invoiceVolume = invoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+    const totalSpaces = locationSummaries.reduce((sum, l) => sum + l.totalSpaces, 0);
+    const occupiedSpaces = locationSummaries.reduce((sum, l) => sum + l.occupiedSpaces, 0);
+    const occupancy = totalSpaces === 0 ? null : Math.round((occupiedSpaces / totalSpaces) * 100);
+    const grossRevenue = payments
+      .filter((p) => p.status === "succeeded")
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const refundedRevenue = payments
+      .filter((p) => p.status === "refunded")
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const openRequestValue = requests
+      .filter((r) => r.status === "requested")
+      .reduce((sum, r) => sum + (moneyToNumber(r.estimated_amount) ?? 0), 0);
+    const todayBookings = requests.filter((r) => {
+      if (!r.starts_at) return false;
+      const start = new Date(r.starts_at);
+      return (
+        start.getDate() === now.getDate() &&
+        start.getMonth() === now.getMonth() &&
+        start.getFullYear() === now.getFullYear()
+      );
+    }).length;
 
-    return [
-      { label: "Pending Requests", value: pendingRequests.toString() },
-      { label: "Approved Requests", value: approvedRequests.toString() },
-      { label: "Open Request Value", value: currency.format(openRequestValue) },
-      { label: "MTD Revenue", value: currency.format(monthRevenue) },
-      { label: "Failed Payments", value: failedPayments.toString() },
-      { label: "Active Memberships", value: activeMemberships.toString() },
-      { label: "Locations", value: locationSummaries.length.toString() },
-      { label: "Spaces", value: totalSpaces.toString() },
-      { label: "Invoice Volume", value: currency.format(invoiceVolume) },
-      { label: "Team Members", value: membersCount.toString() },
-    ];
-  }, [invoices, locationSummaries, membersCount, payments, requests, subscriptions]);
+    return {
+      pendingRequests,
+      approvedRequests,
+      monthRevenue,
+      activeMemberships,
+      totalSpaces,
+      occupiedSpaces,
+      occupancy,
+      grossRevenue,
+      refundedRevenue,
+      openRequestValue,
+      todayBookings,
+      invoiceVolume: invoices.reduce((sum, i) => sum + (i.amount || 0), 0),
+    };
+  }, [invoices, locationSummaries, payments, requests, subscriptions]);
+
+  const pendingPreview = useMemo(
+    () =>
+      requests
+        .filter((r) => r.status === "requested")
+        .slice(0, 4),
+    [requests]
+  );
+
+  const isEmpty = !loading && locationSummaries.length === 0;
+  const firstName = me?.first_name ?? null;
 
   return (
-    <AppShell>
-      <div className="grid gap-6">
-        <div>
-          <h2 className="text-2xl font-semibold">Dashboard</h2>
-          <p className="text-textSecondary">
-            Revenue, membership, and location activity across your workspace portfolio.
-          </p>
-        </div>
+    <AppShell
+      title="Dashboard"
+      breadcrumb={["Owner", me?.company_name ?? "Workspace"]}
+    >
+      {error ? (
+        <div className="mb-4 text-[13px] text-danger">{error}</div>
+      ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Link
-            href="/owner/calendar"
-            className="rounded-md border border-accent/30 bg-accentSubtle p-4 text-accent transition hover:bg-accent hover:text-white"
-          >
-            <div className="text-sm font-semibold">Calendar</div>
-            <div className="text-xs opacity-80">See what's booked, by whom, when.</div>
-          </Link>
-          <Link
-            href="/owner/requests"
-            className="rounded-md border border-border bg-surface p-4 text-textPrimary transition hover:border-accent/40"
-          >
-            <div className="text-sm font-semibold">Requests</div>
-            <div className="text-xs text-textMuted">Approve, deny, or retry payment.</div>
-          </Link>
-          <Link
-            href="/owner/members"
-            className="rounded-md border border-border bg-surface p-4 text-textPrimary transition hover:border-accent/40"
-          >
-            <div className="text-sm font-semibold">Members</div>
-            <div className="text-xs text-textMuted">Members who interact with your spaces.</div>
-          </Link>
-        </div>
-
-        {error ? <div className="text-sm text-error">{error}</div> : null}
-
-        {loading ? (
-          <div className="text-sm text-textMuted">Loading...</div>
-        ) : (
-          <>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              {stats.map((stat) => (
-                <Card key={stat.label} className="p-4">
-                  <div className="text-sm text-textMuted">{stat.label}</div>
-                  <div className="mt-2 text-2xl font-semibold text-textPrimary">{stat.value}</div>
-                </Card>
-              ))}
+      {loading ? (
+        <div className="text-[13px] text-text-3">Loading…</div>
+      ) : isEmpty ? (
+        <OwnerDashboardEmpty firstName={firstName ?? undefined} />
+      ) : (
+        <div className="space-y-5">
+          {/* Hero strip */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-[22px] font-semibold tracking-[-0.02em]">
+                {greeting()}{firstName ? `, ${firstName}` : ""}.
+              </h2>
+              <p className="text-[13px] text-text-3 mt-1">
+                {stats.pendingRequests} {stats.pendingRequests === 1 ? "request" : "requests"} waiting · {stats.todayBookings} bookings today
+                {stats.occupancy != null ? ` · occupancy ${stats.occupancy}%` : ""}.
+              </p>
             </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              {locationSummaries.map((location) => {
-                const occupancyRate =
-                  location.totalSpaces === 0
-                    ? 0
-                    : Math.round((location.occupiedSpaces / location.totalSpaces) * 100);
-
-                return (
-                  <Card key={location.public_id} className="p-4">
-                    <div className="text-base font-semibold text-textPrimary">{location.name}</div>
-                    <div className="mt-1 text-sm text-textMuted">
-                      {location.city || "City not set"}
-                    </div>
-                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                      <div>
-                        <div className="text-textMuted">Spaces</div>
-                        <div className="mt-1 font-semibold text-textPrimary">
-                          {location.totalSpaces}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-textMuted">Occupied</div>
-                        <div className="mt-1 font-semibold text-textPrimary">
-                          {location.occupiedSpaces}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-textMuted">Occupancy</div>
-                        <div className="mt-1 font-semibold text-textPrimary">
-                          {occupancyRate}%
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
+            <div className="hidden lg:flex items-center gap-2">
+              <Badge variant="violet">
+                <Sparkles size={11} strokeWidth={2.5} />
+                AI summary ready
+              </Badge>
+              <Link href="/owner/calendar">
+                <Button variant="default" size="default">
+                  <Calendar size={14} />
+                  Calendar
+                </Button>
+              </Link>
+              <Link href="/owner/spaces/new">
+                <Button variant="primary" size="default">
+                  <Plus size={14} />
+                  New space
+                </Button>
+              </Link>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+
+          {/* KPI strip */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <StatCard
+              label="MTD Revenue"
+              value={currencyFormatter.format(stats.monthRevenue)}
+              icon={DollarSign}
+              accent="violet"
+              sub={`Open ${currencyFormatter.format(stats.openRequestValue)} in pending requests`}
+            />
+            <StatCard
+              label="Bookings"
+              value={stats.approvedRequests.toString()}
+              icon={Calendar}
+              accent="violet"
+              sub={`${stats.todayBookings} starting today`}
+            />
+            <StatCard
+              label="Occupancy"
+              value={stats.occupancy != null ? `${stats.occupancy}%` : "—"}
+              icon={Building2}
+              accent="mint"
+              sub={`${stats.occupiedSpaces} of ${stats.totalSpaces} spaces in use`}
+            />
+            <StatCard
+              label="Active members"
+              value={stats.activeMemberships.toString()}
+              icon={Users}
+              sub={`${membersCount} total invited`}
+            />
+          </div>
+
+          {/* Main grid */}
+          <div className="grid gap-3.5 grid-cols-1 lg:grid-cols-[1.6fr_1fr]">
+            {/* Today timeline (sample geometry — real bookings appear in /owner/calendar) */}
+            <Card padded={false} className="p-5">
+              <SectionHead
+                title={`Today · ${locationSummaries.length} ${
+                  locationSummaries.length === 1 ? "location" : "locations"
+                } · ${stats.totalSpaces} rooms`}
+                sub={new Date().toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+                right={
+                  <>
+                    <Button variant="ghost" size="sm">Day</Button>
+                    <Button variant="default" size="sm">Week</Button>
+                    <Button variant="ghost" size="sm">Month</Button>
+                  </>
+                }
+              />
+              <TimelineMini rooms={SAMPLE_TIMELINE} now={0.37} />
+              {/* HANDOFF: TimelineMini currently uses sample rooms. Wire to /api/bookings?date=today once endpoint exists. */}
+            </Card>
+
+            {/* Requests inbox */}
+            <Card padded={false} className="p-5">
+              <SectionHead
+                title="Pending requests"
+                sub={`${stats.pendingRequests} waiting`}
+                right={
+                  <Link href="/owner/requests">
+                    <Button variant="ghost" size="sm">
+                      Open inbox
+                      <ArrowRight size={12} />
+                    </Button>
+                  </Link>
+                }
+              />
+              <div className="flex flex-col">
+                {pendingPreview.length === 0 ? (
+                  <div className="text-[13px] text-text-3 py-3">
+                    No pending requests — you&apos;re all caught up.
+                  </div>
+                ) : (
+                  pendingPreview.map((req, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "flex items-center gap-2.5 py-2.5",
+                        i > 0 && "border-t border-line"
+                      )}
+                    >
+                      <Avatar name={requesterName(req)} size={32} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[13px] font-semibold">
+                            {requesterName(req)}
+                          </span>
+                          <span
+                            aria-hidden
+                            className="w-1.5 h-1.5 rounded-full bg-brand"
+                          />
+                        </div>
+                        <div
+                          className="text-[11px] text-text-3 truncate"
+                          title={`${requestWhere(req)} · ${requestWhen(req)}`}
+                        >
+                          {requestWhere(req)}
+                          {requestWhen(req) ? ` · ${requestWhen(req)}` : ""}
+                        </div>
+                      </div>
+                      <div
+                        className="font-mono text-[13px] font-semibold"
+                        style={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {currencyFormatter.format(
+                          moneyToNumber(req.estimated_amount) ?? 0
+                        )}
+                      </div>
+                      <Link href="/owner/requests" aria-label="Approve">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-[26px] w-[26px] p-0 justify-center border-success/30 text-success"
+                        >
+                          <Check size={13} strokeWidth={2.5} />
+                        </Button>
+                      </Link>
+                      <Link href="/owner/requests" aria-label="Reject">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-[26px] w-[26px] p-0 justify-center"
+                        >
+                          <X size={13} strokeWidth={2.5} />
+                        </Button>
+                      </Link>
+                    </div>
+                  ))
+                )}
+              </div>
+            </Card>
+
+            {/* Revenue chart */}
+            <Card padded={false} className="p-5">
+              <SectionHead
+                title="Revenue · last 30 days"
+                sub="Net of refunds & platform fees"
+                right={
+                  <>
+                    <LegendDot color="var(--brand)" label="Bookings" />
+                    <LegendDot color="var(--ps-mint-500)" label="Memberships" />
+                  </>
+                }
+              />
+              <RevenueChart />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-3.5 mt-3 border-t border-line">
+                <MiniStat
+                  label="Gross"
+                  value={currencyFormatter.format(stats.grossRevenue)}
+                />
+                <MiniStat
+                  label="Refunded"
+                  value={currencyFormatter.format(stats.refundedRevenue)}
+                />
+                <MiniStat
+                  label="Invoices"
+                  value={currencyFormatter.format(stats.invoiceVolume)}
+                />
+                <MiniStat
+                  label="Net (MTD)"
+                  value={currencyFormatter.format(stats.monthRevenue)}
+                  highlight
+                />
+              </div>
+              {/* HANDOFF: revenue series currently synthesized in <RevenueChart/>; replace with /api/payments aggregation by day. */}
+            </Card>
+
+            {/* Locations */}
+            <Card padded={false} className="p-5">
+              <SectionHead
+                title="Locations"
+                sub={`${locationSummaries.length} active`}
+                right={
+                  <Link href="/owner/locations">
+                    <Button variant="ghost" size="sm">
+                      Manage
+                      <ArrowRight size={12} />
+                    </Button>
+                  </Link>
+                }
+              />
+              <div className="flex flex-col">
+                {locationSummaries.map((location, i) => {
+                  const rate =
+                    location.totalSpaces === 0
+                      ? 0
+                      : location.occupiedSpaces / location.totalSpaces;
+                  const barColor =
+                    rate > 0.8
+                      ? "var(--ps-success)"
+                      : rate > 0.5
+                      ? "var(--brand)"
+                      : "var(--text-4)";
+                  return (
+                    <div
+                      key={location.public_id}
+                      className={cn(
+                        "grid grid-cols-[1fr_80px_60px] items-center gap-3 py-2",
+                        i > 0 && "border-t border-line"
+                      )}
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+                          {location.name}
+                        </div>
+                        <div className="text-[11px] text-text-3 mt-px">
+                          {location.city ?? "City not set"} · {location.totalSpaces}{" "}
+                          {location.totalSpaces === 1 ? "room" : "rooms"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="h-1 bg-surface-2 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${rate * 100}%`, background: barColor }}
+                          />
+                        </div>
+                        <div
+                          className="font-mono text-[10px] text-text-3 mt-0.5"
+                          style={{ fontVariantNumeric: "tabular-nums" }}
+                        >
+                          {Math.round(rate * 100)}% occ
+                        </div>
+                      </div>
+                      <div
+                        className="font-mono text-[12px] text-text-2 text-right"
+                        style={{ fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {location.occupiedSpaces} active
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
     </AppShell>
+  );
+}
+
+function SectionHead({
+  title,
+  sub,
+  right,
+}: {
+  title: React.ReactNode;
+  sub?: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-end justify-between mb-3.5 gap-3">
+      <div>
+        <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h3>
+        {sub && <div className="text-[12px] text-text-3 mt-0.5">{sub}</div>}
+      </div>
+      {right && (
+        <div className="flex gap-1.5 items-center">{right}</div>
+      )}
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12px] text-text-3">
+      <span
+        aria-hidden
+        className="w-2 h-2 rounded-sm"
+        style={{ background: color }}
+      />
+      {label}
+    </span>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-[0.05em] text-text-3 font-medium">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "font-mono text-[16px] font-semibold mt-0.5 tracking-[-0.02em]",
+          highlight ? "text-brand" : "text-text"
+        )}
+        style={{ fontVariantNumeric: "tabular-nums" }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
