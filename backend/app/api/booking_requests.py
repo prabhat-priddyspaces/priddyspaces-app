@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 from datetime import timedelta
 
@@ -88,6 +89,7 @@ from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -539,6 +541,28 @@ def _notify_owner_team_of_request(db: Session, req: BookingRequest, space: Space
         send_owner_booking_request_notification(db, owner_email, req, space, location)
 
 
+def _send_booking_request_notifications(
+    db: Session,
+    req: BookingRequest,
+    space: Space,
+    location: Location,
+) -> None:
+    try:
+        send_booking_request_submitted_email(db, req, space, location)
+    except Exception:
+        logger.exception(
+            "Failed to send booking request submitted email request_public_id=%s",
+            req.public_id,
+        )
+    try:
+        _notify_owner_team_of_request(db, req, space, location)
+    except Exception:
+        logger.exception(
+            "Failed to notify owner team for booking request request_public_id=%s",
+            req.public_id,
+        )
+
+
 def _notify_owner_team_of_confirmed_booking(
     db: Session,
     req: BookingRequest,
@@ -568,8 +592,8 @@ def create_guest_booking_request(
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
-    if payload.redemption_lock_public_id and not settings.PAYMENT_CHARGE_ON_APPROVAL:
-        raise HTTPException(status_code=400, detail="Rewards redemption requires payment on approval")
+    if payload.redemption_lock_public_id:
+        raise HTTPException(status_code=400, detail="Rewards redemption requires a member account")
 
     from app.models.enums import SpaceVisibility
     if space.visibility != SpaceVisibility.PUBLIC:
@@ -652,8 +676,7 @@ def create_guest_booking_request(
     except Exception:
         pass
 
-    send_booking_request_submitted_email(db, req, space, location)
-    _notify_owner_team_of_request(db, req, space, location)
+    _send_booking_request_notifications(db, req, space, location)
 
     return GuestBookingRequestOut(
         public_id=req.public_id,
@@ -681,8 +704,7 @@ def create_booking_request(
         if space:
             location = db.query(Location).filter(Location.id == space.location_id).first()
             if location:
-                send_booking_request_submitted_email(db, req, space, location)
-                _notify_owner_team_of_request(db, req, space, location)
+                _send_booking_request_notifications(db, req, space, location)
         return _to_out(req, space, None, db)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
@@ -809,8 +831,7 @@ def create_booking_request(
         elif req.status == BookingRequestStatus.PAYMENT_FAILED:
             send_booking_payment_failed_email(db, req, space)
         return _to_out(req, space, booking, db)
-    send_booking_request_submitted_email(db, req, space, location)
-    _notify_owner_team_of_request(db, req, space, location)
+    _send_booking_request_notifications(db, req, space, location)
     return _to_out(req, space, None, db)
 
 

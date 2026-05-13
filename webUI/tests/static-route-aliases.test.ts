@@ -38,6 +38,7 @@ function makeOutDir() {
   writeFileSync(path.join(tempDir, "owner", "spaces", "edit.html"), "<html>edit</html>");
   writeFileSync(path.join(tempDir, "owner", "spaces", "media.html"), "<html>media</html>");
   writeFileSync(path.join(tempDir, "member", "requests", "index.html"), "<html>requests</html>");
+  writeFileSync(path.join(tempDir, "member", "requests", "_.html"), "<html>request detail</html>");
   return tempDir;
 }
 
@@ -51,6 +52,7 @@ describe("static route aliases", () => {
     const outDir = makeOutDir();
 
     expect(collectStaticRouteAliases(outDir).map((alias) => alias.aliasKey)).toEqual([
+      "member/requests/_",
       "member/requests",
       "owner",
       "owner/locations/new",

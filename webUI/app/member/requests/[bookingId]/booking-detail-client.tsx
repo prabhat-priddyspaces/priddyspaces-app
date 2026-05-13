@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
@@ -59,6 +60,9 @@ interface Invoice {
 }
 
 export default function BookingDetailClient({ bookingId }: { bookingId: string }) {
+  const searchParams = useSearchParams();
+  const effectiveBookingId =
+    !bookingId || bookingId === "_" ? searchParams.get("id") || "" : bookingId;
   const [booking, setBooking] = useState<BookingRequest | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -67,10 +71,12 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
   const [cancelling, setCancelling] = useState(false);
 
   async function load() {
-    if (!bookingId) return;
+    if (!effectiveBookingId) {
+      throw new Error("Booking request not found");
+    }
     const token = getAccessToken() ?? undefined;
     const [bookingResp, paymentsResp, invoicesResp] = await Promise.all([
-      apiFetch<BookingRequest>(`/api/booking-requests/${bookingId}`, { method: "GET" }, token),
+      apiFetch<BookingRequest>(`/api/booking-requests/${effectiveBookingId}`, { method: "GET" }, token),
       apiFetch<Payment[]>("/api/payments", { method: "GET" }, token).catch(() => []),
       apiFetch<Invoice[]>("/api/invoices", { method: "GET" }, token).catch(() => []),
     ]);
@@ -80,11 +86,12 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
   }
 
   useEffect(() => {
+    setError("");
     setLoading(true);
     load()
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load booking"))
       .finally(() => setLoading(false));
-  }, [bookingId]);
+  }, [effectiveBookingId]);
 
   const relatedPayment = useMemo(() => {
     if (!booking?.booking_id) return null;

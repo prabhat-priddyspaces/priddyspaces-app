@@ -7,6 +7,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.location_admin import LocationAdmin
 from app.models.location import Location
 from app.models.space import Space
+from app.models.booking_request import BookingRequest
 from app.models.booking import Booking
 from app.models.audit_log import AuditLog
 from app.models.booking_series import BookingSeries
@@ -244,6 +245,68 @@ def test_owner_notification_recipients_require_opt_in_and_location_access(db_ses
         "owner@example.com",
         "staff-recipient@example.com",
     ]
+
+
+def test_guest_booking_request_survives_notification_failure(db_session, client_factory, monkeypatch):
+    _owner, space = _seed_owner_space(db_session)
+
+    def fail_notification(*args, **kwargs):
+        raise RuntimeError("email service unavailable")
+
+    monkeypatch.setattr(
+        "app.api.booking_requests.send_booking_request_submitted_email",
+        fail_notification,
+    )
+    monkeypatch.setattr(
+        "app.api.booking_requests._notify_owner_team_of_request",
+        fail_notification,
+    )
+
+    client = client_factory({})
+    resp = client.post(
+        "/api/guest/booking-requests",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 5, 13, 13, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 5, 13, 14, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+            "guest_full_name": "Test User",
+            "guest_email": "testi@mailinator.com",
+            "guest_phone": "1231231234",
+            "guest_company_name": "test",
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == BookingRequestStatus.REQUESTED.value
+    req = db_session.query(BookingRequest).filter(BookingRequest.public_id == body["public_id"]).one()
+    assert req.is_guest_checkout is True
+    assert req.user_id is None
+    assert req.guest_email == "testi@mailinator.com"
+
+
+def test_guest_booking_request_rejects_rewards_redemption(db_session, client_factory):
+    _owner, space = _seed_owner_space(db_session)
+
+    client = client_factory({})
+    resp = client.post(
+        "/api/guest/booking-requests",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 5, 14, 13, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 5, 14, 14, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+            "guest_full_name": "Test User",
+            "guest_email": "testi@mailinator.com",
+            "redemption_lock_public_id": "lock_1",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Rewards redemption requires a member account"
 
 
 def test_booking_request_approve_creates_booking(db_session, client_factory, monkeypatch):
