@@ -267,3 +267,26 @@ def test_admin_booking_activity_includes_member_and_inventory_context(db_session
     assert body["booking_requests"][0]["space_name"] == "Board Room"
     assert body["booking_requests"][0]["location_name"] == "Downtown Hub"
     assert body["booking_requests"][0]["organization_name"] == org.name
+
+
+def test_admin_audit_logs_include_readable_labels(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="audit-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    update = client.patch(
+        f"/api/admin/owner-companies/{org.public_id}",
+        json={"review_status": "approved", "review_notes": "Looks good"},
+    )
+    assert update.status_code == 200
+
+    response = client.get("/api/admin/audit-logs")
+    assert response.status_code == 200
+    first = response.json()[0]
+    assert first["action_label"] == "Organization review updated"
+    assert first["entity_label"] == org.name
+    assert first["actor_name"] == admin.email

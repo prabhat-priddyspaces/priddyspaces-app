@@ -73,6 +73,13 @@ def _space_label(space: Space | None) -> str | None:
     return space.space_type.value.replace("_", " ").title()
 
 
+def _humanize_label(value: str | None) -> str:
+    if not value:
+        return "Unknown"
+    cleaned = value.replace("_", " ").replace("-", " ").strip().lower()
+    return cleaned[:1].upper() + cleaned[1:] if cleaned else "Unknown"
+
+
 def _build_metrics(db: Session) -> dict[str, int | float]:
     tenant_count = db.query(Organization).count()
     user_count = db.query(User).count()
@@ -139,13 +146,50 @@ def _serialize_audit_logs(db: Session, logs: list[AuditLog]) -> list[dict[str, o
         user.id: user
         for user in db.query(User).filter(User.id.in_(user_ids)).all()
     } if user_ids else {}
+    entity_ids = {log.entity_public_id for log in logs if log.entity_public_id}
+    entity_users = {
+        str(user.public_id): user
+        for user in db.query(User).filter(User.public_id.in_(entity_ids)).all()
+    } if entity_ids else {}
+    entity_organizations = {
+        str(organization.public_id): organization
+        for organization in db.query(Organization).filter(Organization.public_id.in_(entity_ids)).all()
+    } if entity_ids else {}
+    platform_team_rows = (
+        db.query(PlatformTeamMember, User)
+        .join(User, User.id == PlatformTeamMember.user_id)
+        .filter(PlatformTeamMember.public_id.in_(entity_ids))
+        .all()
+    ) if entity_ids else []
+    entity_platform_team = {
+        str(member.public_id): user
+        for member, user in platform_team_rows
+    }
+
+    def entity_label(log: AuditLog) -> str:
+        if log.entity_type == "user" and log.entity_public_id in entity_users:
+            user = entity_users[log.entity_public_id]
+            return f"{_user_label(user)} ({user.email})"
+        if log.entity_type == "organization" and log.entity_public_id in entity_organizations:
+            return entity_organizations[log.entity_public_id].name
+        if log.entity_type == "platform_team_member" and log.entity_public_id in entity_platform_team:
+            user = entity_platform_team[log.entity_public_id]
+            return f"{_user_label(user)} ({user.email})"
+        if log.entity_type == "platform_settings":
+            return "Platform settings"
+        return f"{_humanize_label(log.entity_type)} {log.entity_public_id}"
+
     return [
         {
             "public_id": log.public_id,
             "action": log.action,
+            "action_label": _humanize_label(log.action),
             "entity_type": log.entity_type,
             "entity_public_id": log.entity_public_id,
+            "entity_label": entity_label(log),
+            "actor_name": _user_label(users[log.actor_id]) if users.get(log.actor_id) else None,
             "actor_email": users.get(log.actor_id).email if users.get(log.actor_id) else None,
+            "acting_as_name": _user_label(users[log.acting_as_user_id]) if users.get(log.acting_as_user_id) else None,
             "acting_as_email": users.get(log.acting_as_user_id).email if users.get(log.acting_as_user_id) else None,
             "before_state": log.before_state,
             "after_state": log.after_state,
