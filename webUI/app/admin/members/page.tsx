@@ -83,8 +83,8 @@ export default function AdminMembersPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Members</h2>
-          <p className="text-textSecondary">Search and filter members, drill into activity, or impersonate.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Members</h2>
+          <p className="text-text-2">Search and filter members, drill into activity, or impersonate.</p>
         </div>
         <Card className="p-4">
           <div className="flex flex-col gap-3">
@@ -99,14 +99,14 @@ export default function AdminMembersPage() {
                 Search
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-textMuted">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-text-3">
               <label className="flex items-center gap-2">
                 Signup from
                 <input
                   type="date"
                   value={signupFrom}
                   onChange={(e) => setSignupFrom(e.target.value)}
-                  className="h-9 rounded-sm border border-border bg-white px-2 text-sm text-textPrimary"
+                  className="h-9 rounded-sm border border-line bg-white px-2 text-sm text-text"
                 />
               </label>
               <label className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export default function AdminMembersPage() {
                   type="date"
                   value={signupTo}
                   onChange={(e) => setSignupTo(e.target.value)}
-                  className="h-9 rounded-sm border border-border bg-white px-2 text-sm text-textPrimary"
+                  className="h-9 rounded-sm border border-line bg-white px-2 text-sm text-text"
                 />
               </label>
               {(["all", "subscribed", "not_subscribed", "failed_payments"] as Filter[]).map((f) => (
@@ -125,8 +125,8 @@ export default function AdminMembersPage() {
                   onClick={() => setFilter(f)}
                   className={`rounded-full px-3 py-1 ${
                     filter === f
-                      ? "bg-accentSubtle text-accent"
-                      : "border border-border text-textSecondary hover:bg-surface2"
+                      ? "bg-brandSubtle text-brand"
+                      : "border border-line text-text-2 hover:bg-surface-2"
                   }`}
                 >
                   {f.replace("_", " ")}
@@ -135,7 +135,7 @@ export default function AdminMembersPage() {
             </div>
           </div>
         </Card>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-3">
           {members.map((member) => (
             <Card key={member.public_id} className="p-4">
@@ -143,19 +143,19 @@ export default function AdminMembersPage() {
                 <div>
                   <Link
                     href={`/admin/members/_?id=${encodeURIComponent(member.public_id)}`}
-                    className="font-semibold text-textPrimary hover:underline"
+                    className="font-semibold text-text hover:underline"
                   >
                     {member.name}
                   </Link>
-                  <div className="text-sm text-textMuted">{member.email}</div>
-                  <div className="text-sm text-textMuted">
+                  <div className="text-sm text-text-3">{member.email}</div>
+                  <div className="text-sm text-text-3">
                     Bookings {member.bookings} • Payments {member.payments} • Subscriptions {member.subscriptions}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
                     href={`/admin/members/_?id=${encodeURIComponent(member.public_id)}`}
-                    className="rounded-sm border border-border px-3 py-2 text-sm text-textSecondary hover:bg-surface2"
+                    className="rounded-sm border border-line px-3 py-2 text-sm text-text-2 hover:bg-surface-2"
                   >
                     View details
                   </Link>
@@ -169,7 +169,7 @@ export default function AdminMembersPage() {
               </div>
             </Card>
           ))}
-          {members.length === 0 ? <Card className="p-4 text-sm text-textMuted">No members found.</Card> : null}
+          {members.length === 0 ? <Card className="p-4 text-sm text-text-3">No members found.</Card> : null}
         </div>
       </div>
     </AdminShell>

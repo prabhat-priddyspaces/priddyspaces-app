@@ -42,10 +42,10 @@ export default function AdminPaymentsPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Payments & Earnings</h2>
-          <p className="text-textSecondary">Platform GMV, commission earned, and owner net snapshot totals.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Payments & Earnings</h2>
+          <p className="text-text-2">Platform GMV, commission earned, and owner net snapshot totals.</p>
         </div>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         {data ? (
           <div className="grid gap-4 md:grid-cols-4">
             {[
@@ -55,8 +55,8 @@ export default function AdminPaymentsPage() {
               ["Failed Payments", data.summary.failed_payments],
             ].map(([label, value]) => (
               <Card key={label} className="p-4">
-                <div className="text-sm text-textMuted">{label}</div>
-                <div className="mt-2 text-2xl font-semibold">{value}</div>
+                <div className="text-sm text-text-3">{label}</div>
+                <div className="mt-2 text-[22px] font-semibold tracking-[-0.02em]">{value}</div>
               </Card>
             ))}
           </div>
@@ -64,16 +64,16 @@ export default function AdminPaymentsPage() {
         <div className="grid gap-3">
           {data?.results.map((payment) => (
             <Card key={payment.public_id} className="p-4">
-              <div className="font-semibold text-textPrimary">{payment.public_id}</div>
-              <div className="text-sm text-textMuted">
+              <div className="font-semibold text-text">{payment.public_id}</div>
+              <div className="text-sm text-text-3">
                 {payment.organization_name || "No org"} • {payment.member_email}
               </div>
-              <div className="text-sm text-textMuted">
+              <div className="text-sm text-text-3">
                 {payment.status} • Amount {payment.amount} • Fee {payment.platform_fee_amount ?? 0} • Net {payment.owner_net_amount ?? 0}
               </div>
             </Card>
           ))}
-          {data?.results.length === 0 ? <Card className="p-4 text-sm text-textMuted">No payments found.</Card> : null}
+          {data?.results.length === 0 ? <Card className="p-4 text-sm text-text-3">No payments found.</Card> : null}
         </div>
       </div>
     </AdminShell>

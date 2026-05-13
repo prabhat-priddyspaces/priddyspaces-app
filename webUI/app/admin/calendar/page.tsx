@@ -121,21 +121,21 @@ export default function AdminCalendarPage() {
     <AdminShell>
       <div className="grid gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Platform Calendar</h2>
-          <p className="text-textSecondary">
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Platform Calendar</h2>
+          <p className="text-text-2">
             All bookings across every org. Filter by organization or location for support tasks.
           </p>
         </div>
-        {error ? <div className="text-sm text-error">{error}</div> : null}
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface p-3">
-          <label className="text-xs text-textMuted">Organization</label>
+        {error ? <div className="text-sm text-danger">{error}</div> : null}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface p-3">
+          <label className="text-xs text-text-3">Organization</label>
           <select
             value={orgPublicId}
             onChange={(e) => {
               setOrgPublicId(e.target.value);
               setFilters((f) => ({ ...f, locationPublicId: null, spacePublicIds: [] }));
             }}
-            className="h-9 rounded-sm border border-border bg-white px-2 text-sm text-textPrimary"
+            className="h-9 rounded-sm border border-line bg-white px-2 text-sm text-text"
           >
             <option value="">All organizations</option>
             {orgs.map((org) => (

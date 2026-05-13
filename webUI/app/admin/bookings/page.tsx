@@ -57,53 +57,53 @@ export default function AdminBookingsPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Bookings & Requests</h2>
-          <p className="text-textSecondary">Recent booking and request activity across the platform.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Bookings & Requests</h2>
+          <p className="text-text-2">Recent booking and request activity across the platform.</p>
         </div>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="p-4">
-            <div className="font-semibold text-textPrimary">Bookings</div>
+            <div className="font-semibold text-text">Bookings</div>
             <div className="mt-4 grid gap-3">
               {data?.bookings.length ? (
                 data.bookings.map((booking) => (
-                  <div key={booking.public_id} className="rounded-md border border-border p-3 text-sm">
-                    <div className="font-medium text-textPrimary">{personLabel(booking)}</div>
-                    <div className="text-textMuted">{booking.member_email || "No email"}</div>
-                    <div className="mt-2 text-textSecondary">{inventoryLabel(booking) || "No location details"}</div>
-                    <div className="text-textMuted">{formatAdminLabel(booking.status)} • {timeWindowLabel(booking)}</div>
-                    <div className="mt-1 text-xs text-textMuted">
+                  <div key={booking.public_id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="font-medium text-text">{personLabel(booking)}</div>
+                    <div className="text-text-3">{booking.member_email || "No email"}</div>
+                    <div className="mt-2 text-text-2">{inventoryLabel(booking) || "No location details"}</div>
+                    <div className="text-text-3">{formatAdminLabel(booking.status)} • {timeWindowLabel(booking)}</div>
+                    <div className="mt-1 text-xs text-text-3">
                       Created {formatAdminDateTime(booking.created_at)} • ID {booking.public_id}
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-textMuted">No bookings found.</div>
+                <div className="text-sm text-text-3">No bookings found.</div>
               )}
             </div>
           </Card>
           <Card className="p-4">
-            <div className="font-semibold text-textPrimary">Booking Requests</div>
+            <div className="font-semibold text-text">Booking Requests</div>
             <div className="mt-4 grid gap-3">
               {data?.booking_requests.length ? (
                 data.booking_requests.map((request) => (
-                  <div key={request.public_id} className="rounded-md border border-border p-3 text-sm">
-                    <div className="font-medium text-textPrimary">{personLabel(request)}</div>
-                    <div className="text-textMuted">{request.member_email || "No email"}</div>
-                    <div className="mt-2 text-textSecondary">{inventoryLabel(request) || "No location details"}</div>
-                    <div className="text-textMuted">
+                  <div key={request.public_id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="font-medium text-text">{personLabel(request)}</div>
+                    <div className="text-text-3">{request.member_email || "No email"}</div>
+                    <div className="mt-2 text-text-2">{inventoryLabel(request) || "No location details"}</div>
+                    <div className="text-text-3">
                       {formatAdminLabel(request.status)} • {formatAdminLabel(request.request_kind)} • {timeWindowLabel(request)}
                     </div>
                     {request.operator_notes ? (
-                      <div className="mt-1 text-textSecondary">Notes: {request.operator_notes}</div>
+                      <div className="mt-1 text-text-2">Notes: {request.operator_notes}</div>
                     ) : null}
-                    <div className="mt-1 text-xs text-textMuted">
+                    <div className="mt-1 text-xs text-text-3">
                       Created {formatAdminDateTime(request.created_at)} • ID {request.public_id}
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-textMuted">No booking requests found.</div>
+                <div className="text-sm text-text-3">No booking requests found.</div>
               )}
             </div>
           </Card>

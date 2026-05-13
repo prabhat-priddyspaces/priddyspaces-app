@@ -70,17 +70,17 @@ export function AdminOwnerUserDetailClient() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <Link href="/admin/owner-users" className="text-xs text-accent hover:underline">
+          <Link href="/admin/owner-users" className="text-xs text-brand hover:underline">
             ← Back to owner users
           </Link>
         </div>
-        {error ? <div className="text-sm text-error">{error}</div> : null}
+        {error ? <div className="text-sm text-danger">{error}</div> : null}
         {data ? (
           <>
             <Card className="p-4">
-              <h2 className="text-xl font-semibold text-textPrimary">{data.profile.name}</h2>
-              <div className="text-sm text-textSecondary">{data.profile.email}</div>
-              <div className="mt-2 flex flex-wrap gap-3 text-xs text-textMuted">
+              <h2 className="text-xl font-semibold text-text">{data.profile.name}</h2>
+              <div className="text-sm text-text-2">{data.profile.email}</div>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-text-3">
                 <span>Role: {formatAdminLabel(data.profile.role)}</span>
                 <span>Active: {data.profile.is_active ? "yes" : "no"}</span>
                 <span>Created: {data.profile.created_at?.slice(0, 10) ?? "—"}</span>
@@ -88,10 +88,10 @@ export function AdminOwnerUserDetailClient() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Organizations ({data.organizations.length})</div>
+              <div className="mb-3 text-sm font-semibold text-text">Organizations ({data.organizations.length})</div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
-                  <thead className="text-left text-textMuted">
+                  <thead className="text-left text-text-3">
                     <tr>
                       <th className="p-2">Organization</th>
                       <th className="p-2">Review</th>
@@ -102,17 +102,17 @@ export function AdminOwnerUserDetailClient() {
                   </thead>
                   <tbody>
                     {data.organizations.map((o) => (
-                      <tr key={o.organization_public_id} className="border-t border-border">
-                        <td className="p-2 text-textPrimary">{o.organization_name}</td>
-                        <td className="p-2 text-textSecondary">{formatAdminLabel(o.review_status)}</td>
-                        <td className="p-2 text-textSecondary">{formatAdminLabel(o.role)}</td>
-                        <td className="p-2 text-textSecondary">{o.can_override_pricing ? "yes" : "no"}</td>
-                        <td className="p-2 text-textSecondary">{o.is_active ? "yes" : "no"}</td>
+                      <tr key={o.organization_public_id} className="border-t border-line">
+                        <td className="p-2 text-text">{o.organization_name}</td>
+                        <td className="p-2 text-text-2">{formatAdminLabel(o.review_status)}</td>
+                        <td className="p-2 text-text-2">{formatAdminLabel(o.role)}</td>
+                        <td className="p-2 text-text-2">{o.can_override_pricing ? "yes" : "no"}</td>
+                        <td className="p-2 text-text-2">{o.is_active ? "yes" : "no"}</td>
                       </tr>
                     ))}
                     {data.organizations.length === 0 ? (
                       <tr>
-                        <td className="p-2 text-textMuted" colSpan={5}>
+                        <td className="p-2 text-text-3" colSpan={5}>
                           No organizations.
                         </td>
                       </tr>
@@ -123,19 +123,19 @@ export function AdminOwnerUserDetailClient() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-3 text-sm font-semibold text-textPrimary">Audit trail ({data.audit_logs.length})</div>
+              <div className="mb-3 text-sm font-semibold text-text">Audit trail ({data.audit_logs.length})</div>
               <div className="grid gap-2">
                 {data.audit_logs.map((log) => (
-                  <div key={log.public_id} className="rounded-sm border border-border p-2 text-xs">
-                    <div className="text-textPrimary">{log.action_label || formatAdminLabel(log.action)}</div>
-                    <div className="text-textMuted">
+                  <div key={log.public_id} className="rounded-sm border border-line p-2 text-xs">
+                    <div className="text-text">{log.action_label || formatAdminLabel(log.action)}</div>
+                    <div className="text-text-3">
                       {formatAdminLabel(log.entity_type)} · {log.entity_label || log.entity_public_id} · {log.actor_email ?? "system"} ·{" "}
                       {formatAdminDateTime(log.created_at)}
                     </div>
                   </div>
                 ))}
                 {data.audit_logs.length === 0 ? (
-                  <div className="text-xs text-textMuted">No audit entries.</div>
+                  <div className="text-xs text-text-3">No audit entries.</div>
                 ) : null}
               </div>
             </Card>

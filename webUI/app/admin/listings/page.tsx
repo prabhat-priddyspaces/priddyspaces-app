@@ -44,8 +44,8 @@ export default function AdminListingsPage() {
     <AdminShell>
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Listings</h2>
-          <p className="text-textSecondary">Track listing visibility and approval dependency across the marketplace.</p>
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Listings</h2>
+          <p className="text-text-2">Track listing visibility and approval dependency across the marketplace.</p>
         </div>
         <Card className="p-4">
           <div className="flex gap-3">
@@ -55,20 +55,20 @@ export default function AdminListingsPage() {
             </Button>
           </div>
         </Card>
-        {message ? <div className="text-sm text-error">{message}</div> : null}
+        {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-3">
           {rows.map((row) => (
             <Card key={row.space_public_id} className="p-4">
-              <div className="font-semibold text-textPrimary">{row.space_name}</div>
-              <div className="text-sm text-textMuted">
+              <div className="font-semibold text-text">{row.space_name}</div>
+              <div className="text-sm text-text-3">
                 {row.organization_name} • {row.location_name} • {formatAdminLabel(row.space_type)} • {formatAdminLabel(row.visibility)}
               </div>
-              <div className="text-sm text-textMuted">
+              <div className="text-sm text-text-3">
                 Approval {formatAdminLabel(row.organization_review_status)} • Bookings {row.bookings} • Requests {row.booking_requests}
               </div>
             </Card>
           ))}
-          {rows.length === 0 ? <Card className="p-4 text-sm text-textMuted">No listings found.</Card> : null}
+          {rows.length === 0 ? <Card className="p-4 text-sm text-text-3">No listings found.</Card> : null}
         </div>
       </div>
     </AdminShell>

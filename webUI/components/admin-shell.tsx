@@ -2,8 +2,13 @@
 
 import { ReactNode, useEffect, useState } from "react";
 
-import { AdminSideNav } from "@/components/admin-side-nav";
+import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { Button } from "@/components/ui/button";
+import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { Topbar } from "@/components/shell/topbar";
+import { WorkspaceShell } from "@/components/shell/workspace-shell";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import type { MeResponse } from "@/lib/me";
@@ -18,8 +23,19 @@ const emptyImpersonation = {
   reason: null,
 };
 
-export function AdminShell({ children }: { children: ReactNode }) {
+export interface AdminShellProps {
+  children: ReactNode;
+  title?: string;
+  breadcrumb?: string[];
+}
+
+export function AdminShell({
+  children,
+  title = "Platform",
+  breadcrumb,
+}: AdminShellProps) {
   const [me, setMe] = useState<MeResponse | null>(null);
+  const appSignOut = useAppSignOut();
 
   useEffect(() => {
     const token = getAccessToken();
@@ -31,23 +47,53 @@ export function AdminShell({ children }: { children: ReactNode }) {
       .catch(() => null);
   }, []);
 
+  const profile = me
+    ? {
+        name:
+          [me.first_name, me.last_name].filter(Boolean).join(" ") ||
+          me.email ||
+          "Admin",
+        email: me.email || "",
+        workspace: me.platform_role
+          ? `Platform · ${me.platform_role}`
+          : "Platform",
+      }
+    : undefined;
+
+  const topbar = (
+    <Topbar
+      title={title}
+      breadcrumb={breadcrumb}
+      actions={
+        <>
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void appSignOut()}
+            aria-label="Sign out"
+          >
+            Logout
+          </Button>
+        </>
+      }
+    />
+  );
+
   return (
-    <div className="min-h-screen bg-background">
-      <ImpersonationBanner impersonation={me?.impersonation ?? emptyImpersonation} />
-      <div className="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
-        <div>
-          <div className="text-sm text-textMuted">Priddyspaces</div>
-          <h1 className="text-lg font-semibold text-textPrimary">Platform Console</h1>
-        </div>
-        <div className="text-sm text-textSecondary">
-          {me?.email || "Loading..."}
-          {me?.platform_role ? ` • ${me.platform_role}` : ""}
-        </div>
-      </div>
-      <div className="mx-auto flex max-w-7xl gap-6 px-6 py-8">
-        <AdminSideNav platformRole={me?.platform_role ?? null} />
-        <div className="flex-1">{children}</div>
-      </div>
-    </div>
+    <WorkspaceShell
+      sidebar="admin"
+      sidebarProfile={profile}
+      isSuperadmin={me?.platform_role === "superadmin"}
+      topbar={topbar}
+      banner={
+        <ImpersonationBanner
+          impersonation={me?.impersonation ?? emptyImpersonation}
+        />
+      }
+    >
+      {children}
+      <MobileBottomNav variant="owner" />
+    </WorkspaceShell>
   );
 }
