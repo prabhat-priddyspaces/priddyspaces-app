@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from app.core.jwt import issue_token
+from app.db.deps import get_db
+from app.main import app
 from app.core.password import verify_password
 from app.models.booking_request import BookingRequest
 from app.models.enums import BookingRequestStatus, OrganizationReviewStatus, PlatformTeamRole, SpaceType, SpaceVisibility, UserAppRole, UserRole
@@ -351,6 +355,62 @@ def test_me_infers_impersonated_owner_role_from_membership(db_session, client_fa
     assert response.status_code == 200
     assert response.json()["app_role"] == "owner"
     assert response.json()["default_route"] == "/owner"
+
+
+def test_impersonation_internal_token_round_trip(db_session):
+    admin = _create_platform_member(db_session, email="real-token-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    owner = _create_user(db_session, email="real-token-owner@example.com", role=None)
+    org = Organization(name="Real Token Owner Org", owner_id=owner.id, review_status=OrganizationReviewStatus.APPROVED)
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+    db_session.add(OrganizationMember(
+        organization_id=org.id,
+        tenant_id=org.id,
+        user_id=owner.id,
+        role=UserRole.OWNER,
+        is_active=True,
+    ))
+    db_session.commit()
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        admin_token = issue_token(
+            str(admin.public_id),
+            admin.email,
+            admin.role.value if admin.role else None,
+            email_verified=True,
+        )
+        start = client.post(
+            "/api/admin/impersonation/start",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"user_public_id": str(owner.public_id), "reason": "Owner support review"},
+        )
+        assert start.status_code == 200
+        start_data = start.json()
+        assert start_data["default_route"] == "/owner"
+
+        me = client.get("/api/me", headers={"Authorization": f"Bearer {start_data['access_token']}"})
+        assert me.status_code == 200
+        me_data = me.json()
+        assert me_data["app_role"] == "owner"
+        assert me_data["default_route"] == "/owner"
+        assert me_data["impersonation"]["is_impersonating"] is True
+        assert me_data["impersonation"]["actor_email"] == admin.email
+        assert me_data["impersonation"]["target_email"] == owner.email
+
+        stop = client.post(
+            "/api/admin/impersonation/stop",
+            headers={"Authorization": f"Bearer {start_data['access_token']}"},
+        )
+        assert stop.status_code == 200
+        assert stop.json()["default_route"] == "/admin"
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_admin_booking_activity_includes_member_and_inventory_context(db_session, client_factory):

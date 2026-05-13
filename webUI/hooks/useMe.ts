@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
 import { apiFetch } from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
+import { getAccessToken, getActiveImpersonationToken } from "@/lib/auth";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 import type { MeResponse } from "@/lib/me";
 
@@ -12,16 +12,19 @@ import type { MeResponse } from "@/lib/me";
 // Calling updateMeCache() after onboarding ensures the guard never reads stale data.
 let _cache: MeResponse | null = null;
 let _cacheTime = 0;
+let _cacheToken: string | null = null;
 const CACHE_TTL_MS = 30_000;
 
-export function updateMeCache(me: MeResponse): void {
+export function updateMeCache(me: MeResponse, token?: string | null): void {
   _cache = me;
   _cacheTime = Date.now();
+  _cacheToken = token ?? null;
 }
 
 export function invalidateMeCache(): void {
   _cache = null;
   _cacheTime = 0;
+  _cacheToken = null;
 }
 
 type MeState = {
@@ -33,24 +36,27 @@ type MeState = {
 
 function useMeClerk(): MeState {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const initialImpersonationToken = getActiveImpersonationToken();
+  const initialMe =
+    initialImpersonationToken && _cacheToken !== initialImpersonationToken ? null : _cache;
 
-  const [me, setMe] = useState<MeResponse | null>(_cache);
-  const [loading, setLoading] = useState(_cache === null);
+  const [me, setMe] = useState<MeResponse | null>(initialMe);
+  const [loading, setLoading] = useState(initialMe === null);
   const [error, setError] = useState(false);
 
   const doFetch = useCallback(
     async (force = false) => {
-      if (!force && _cache && Date.now() - _cacheTime < CACHE_TTL_MS) {
-        setMe(_cache);
-        setLoading(false);
-        return;
-      }
       setLoading(true);
       setError(false);
       try {
-        const token = await getToken();
+        const token = getActiveImpersonationToken() ?? await getToken();
+        if (!force && token && _cache && _cacheToken === token && Date.now() - _cacheTime < CACHE_TTL_MS) {
+          setMe(_cache);
+          setLoading(false);
+          return;
+        }
         const data = await apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined);
-        updateMeCache(data);
+        updateMeCache(data, token);
         setMe(data);
       } catch {
         setError(true);
@@ -76,22 +82,24 @@ function useMeClerk(): MeState {
 }
 
 function useMeLocal(): MeState {
-  const [me, setMe] = useState<MeResponse | null>(_cache);
-  const [loading, setLoading] = useState(_cache === null);
+  const initialToken = getAccessToken();
+  const initialMe = initialToken && _cacheToken !== initialToken ? null : _cache;
+  const [me, setMe] = useState<MeResponse | null>(initialMe);
+  const [loading, setLoading] = useState(initialMe === null);
   const [error, setError] = useState(false);
 
   const doFetch = useCallback(async (force = false) => {
-    if (!force && _cache && Date.now() - _cacheTime < CACHE_TTL_MS) {
-      setMe(_cache);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     setError(false);
     try {
       const token = getAccessToken();
+      if (!force && token && _cache && _cacheToken === token && Date.now() - _cacheTime < CACHE_TTL_MS) {
+        setMe(_cache);
+        setLoading(false);
+        return;
+      }
       const data = await apiFetch<MeResponse>("/api/me", { method: "GET" }, token ?? undefined);
-      updateMeCache(data);
+      updateMeCache(data, token);
       setMe(data);
     } catch {
       setError(true);

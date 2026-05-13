@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { invalidateMeCache } from "@/hooks/useMe";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, setAccessToken } from "@/lib/auth";
 import type { ImpersonationContext } from "@/lib/me";
@@ -37,6 +38,7 @@ export function ImpersonationBanner({
         token
       );
       setAccessToken(response.access_token);
+      invalidateMeCache();
       router.replace(response.default_route);
     } finally {
       setStopping(false);

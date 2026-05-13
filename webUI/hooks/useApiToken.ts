@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-import { clearAccessToken, getAccessToken, setAccessToken } from "@/lib/auth";
+import { clearAccessToken, getAccessToken, getActiveImpersonationToken, setAccessToken } from "@/lib/auth";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
 type ApiTokenState = {
@@ -15,6 +15,8 @@ function useClerkApiToken(): ApiTokenState {
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const getApiToken = useCallback(async () => {
+    const impersonationToken = getActiveImpersonationToken();
+    if (impersonationToken) return impersonationToken;
     if (!isLoaded || !isSignedIn) return null;
     const token = await getToken({ skipCache: true });
     if (token) {

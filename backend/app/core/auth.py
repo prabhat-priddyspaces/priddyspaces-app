@@ -1,4 +1,4 @@
-"""API auth: verify Clerk JWT (RS256, JWKS) on every protected request."""
+"""API auth: verify Clerk JWTs and internal impersonation JWTs."""
 import time
 from functools import lru_cache
 from typing import Any
@@ -44,18 +44,23 @@ def _get_clerk_jwks() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="Auth service temporarily unavailable") from exc
 
 
-def verify_token(token: str) -> dict[str, Any]:
-    """Verify a Clerk-issued JWT and return its payload.
-
-    Clerk JWTs use RS256 and include: sub (user_xxx), email, metadata.role,
-    metadata.platform_role, org_id, org_role, etc.
-    """
-    jwks = _get_clerk_jwks()
+def _verify_internal_token(token: str) -> dict[str, Any]:
     try:
-        unverified_header = jwt.get_unverified_header(token)
+        return jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=["HS256"],
+            audience=settings.JWT_AUDIENCE,
+            issuer=settings.JWT_ISSUER,
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token expired") from exc
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail="Invalid token header") from exc
+        raise HTTPException(status_code=401, detail="Token verification failed") from exc
 
+
+def _verify_clerk_token(token: str, unverified_header: dict[str, Any]) -> dict[str, Any]:
+    jwks = _get_clerk_jwks()
     kid = unverified_header.get("kid")
     key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if not key:
@@ -68,10 +73,10 @@ def verify_token(token: str) -> dict[str, Any]:
 
     public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
     try:
-        payload = jwt.decode(
+        return jwt.decode(
             token,
             public_key,
-            algorithms=[unverified_header.get("alg", "RS256")],
+            algorithms=["RS256"],
             options={"verify_aud": False},  # Clerk JWTs have no audience by default
         )
     except jwt.ExpiredSignatureError as exc:
@@ -79,7 +84,20 @@ def verify_token(token: str) -> dict[str, Any]:
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Token verification failed") from exc
 
-    return payload
+
+def verify_token(token: str) -> dict[str, Any]:
+    """Verify a Clerk RS256 JWT or an internal HS256 impersonation token."""
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid token header") from exc
+
+    alg = unverified_header.get("alg")
+    if alg == "HS256":
+        return _verify_internal_token(token)
+    if alg == "RS256":
+        return _verify_clerk_token(token, unverified_header)
+    raise HTTPException(status_code=401, detail="Unsupported token algorithm")
 
 
 def get_current_user(

@@ -48,6 +48,7 @@ vi.mock("../lib/api", () => ({
 
 vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => "token"),
+  getActiveImpersonationToken: vi.fn(() => null),
 }));
 
 describe("AssistantQualityPage", () => {

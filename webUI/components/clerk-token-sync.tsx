@@ -19,7 +19,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-import { clearAccessToken, setAccessToken } from "@/lib/auth";
+import { clearAccessToken, getActiveImpersonationToken, setAccessToken } from "@/lib/auth";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -38,6 +38,7 @@ export function ClerkTokenSync() {
 
     const sync = async () => {
       try {
+        if (getActiveImpersonationToken()) return;
         const token = await getToken();
         if (!cancelled) {
           if (token) setAccessToken(token);

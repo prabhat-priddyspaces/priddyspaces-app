@@ -53,6 +53,43 @@ describe("getDefaultRoute", () => {
     ).toBe("/admin");
   });
 
+  it("routes impersonated owner to owner dashboard even when actor is platform admin", () => {
+    expect(
+      getDefaultRoute(makeMe({
+        app_role: "owner",
+        platform_role: "superadmin",
+        has_organization: true,
+        impersonation: {
+          is_impersonating: true,
+          actor_public_id: "admin_1",
+          actor_email: "admin@example.com",
+          actor_platform_role: "superadmin",
+          target_public_id: "owner_1",
+          target_email: "owner@example.com",
+          reason: "Owner support review",
+        },
+      }))
+    ).toBe("/owner");
+  });
+
+  it("routes impersonated member to member app even when actor is platform admin", () => {
+    expect(
+      getDefaultRoute(makeMe({
+        app_role: "member",
+        platform_role: "superadmin",
+        impersonation: {
+          is_impersonating: true,
+          actor_public_id: "admin_1",
+          actor_email: "admin@example.com",
+          actor_platform_role: "superadmin",
+          target_public_id: "member_1",
+          target_email: "member@example.com",
+          reason: "Member support review",
+        },
+      }))
+    ).toBe("/member");
+  });
+
   it("routes platform support to /admin", () => {
     expect(getDefaultRoute(makeMe({ platform_role: "support" }))).toBe("/admin");
   });

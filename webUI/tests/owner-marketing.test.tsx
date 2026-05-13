@@ -6,6 +6,7 @@ import OwnerMarketingHome from "../app/owner/marketing/page";
 
 vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => "token"),
+  getActiveImpersonationToken: vi.fn(() => null),
   clearAccessToken: vi.fn(),
 }));
 

@@ -21,6 +21,7 @@ vi.mock("../lib/api", async () => {
 
 vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => null),
+  getActiveImpersonationToken: vi.fn(() => null),
 }));
 
 vi.mock("next/navigation", () => ({

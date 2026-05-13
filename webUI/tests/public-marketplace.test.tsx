@@ -26,6 +26,7 @@ vi.mock("../lib/api", () => ({
 
 vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => null),
+  getActiveImpersonationToken: vi.fn(() => null),
 }));
 
 vi.mock("../components/public-marketplace-map", () => ({

@@ -40,7 +40,8 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("../lib/auth", () => ({
-  getAccessToken: vi.fn(() => "token")
+  getAccessToken: vi.fn(() => "token"),
+  getActiveImpersonationToken: vi.fn(() => null)
 }));
 
 vi.mock("next/navigation", () => ({

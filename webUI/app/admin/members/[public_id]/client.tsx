@@ -8,6 +8,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { formatCents } from "@/components/charts";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { invalidateMeCache } from "@/hooks/useMe";
 import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, setAccessToken } from "@/lib/auth";
@@ -132,7 +133,8 @@ export function AdminMemberDetailClient() {
         token
       );
       setAccessToken(response.access_token);
-      router.push(response.default_route);
+      invalidateMeCache();
+      router.replace(response.default_route);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }

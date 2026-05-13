@@ -23,6 +23,7 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/auth", () => ({
   clearAccessToken: vi.fn(),
+  getActiveImpersonationToken: vi.fn(() => null),
   getAccessToken: getAccessTokenMock,
 }));
 

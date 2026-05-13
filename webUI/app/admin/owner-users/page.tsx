@@ -8,6 +8,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { invalidateMeCache } from "@/hooks/useMe";
 import { formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken, setAccessToken } from "@/lib/auth";
@@ -60,7 +61,8 @@ export default function AdminOwnerUsersPage() {
       token
     );
     setAccessToken(response.access_token);
-    router.push(response.default_route);
+    invalidateMeCache();
+    router.replace(response.default_route);
   }
 
   return (

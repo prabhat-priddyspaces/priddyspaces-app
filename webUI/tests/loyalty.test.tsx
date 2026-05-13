@@ -7,6 +7,7 @@ import OwnerLoyaltyPage from "../app/owner/loyalty/page";
 
 vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => "token"),
+  getActiveImpersonationToken: vi.fn(() => null),
   clearAccessToken: vi.fn(),
 }));
 

@@ -24,6 +24,12 @@ export interface MeResponse {
 }
 
 export function getDefaultRoute(me: MeResponse): string {
+  if (me.impersonation.is_impersonating) {
+    if (me.app_role === "owner") return "/owner";
+    if (me.app_role === "member") return "/member";
+    return me.default_route || "/onboarding/personal";
+  }
+
   // Platform admins
   if (me.platform_role) return "/admin";
 
@@ -43,6 +49,11 @@ export function getDefaultRoute(me: MeResponse): string {
 }
 
 export function getDashboardHref(me: MeResponse): string {
+  if (me.impersonation.is_impersonating) {
+    if (me.app_role === "owner") return "/owner";
+    if (me.app_role === "member") return "/member/requests";
+    return me.default_route || "/onboarding/personal";
+  }
   if (me.platform_role) return "/admin";
   if (me.app_role === "owner") return "/owner";
   if (me.app_role === "member") return "/member/requests";
