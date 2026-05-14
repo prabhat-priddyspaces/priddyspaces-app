@@ -16,6 +16,7 @@ from app.models.booking_series import BookingSeries
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.marketing import OutboundMessage
+from app.services.booking_email_delivery import safe_error_label
 from app.services.payment_providers import ChargeResult
 from app.api.booking_requests import _owner_notification_emails_for_space
 
@@ -434,6 +435,29 @@ def test_booking_email_sendgrid_failure_records_failed_outbound(
     submitted = _booking_outbounds(db_session, req_id, "request_submitted")
     assert submitted[0].status == "failed"
     assert "bad sender" in submitted[0].error
+
+
+def test_booking_email_safe_error_label_identifies_sender_rejection(db_session):
+    outbound = OutboundMessage(
+        organization_id=1,
+        tenant_id=1,
+        email="customer@example.com",
+        subject="Booking request submitted",
+        html_body="<p>Body</p>",
+        text_body="Body",
+        sender_lane="transactional",
+        from_email="no-reply@priddyspaces.com",
+        from_name="Priddyspaces",
+        provider="sendgrid",
+        status="failed",
+        source="booking",
+        source_context={"notification_type": "request_submitted"},
+        error='{"errors":[{"message":"The from address does not match a verified Sender Identity."}]}',
+    )
+    db_session.add(outbound)
+    db_session.commit()
+
+    assert safe_error_label(outbound) == "Sender address is not verified"
 
 
 def test_booking_email_resend_endpoint_creates_new_attempt(

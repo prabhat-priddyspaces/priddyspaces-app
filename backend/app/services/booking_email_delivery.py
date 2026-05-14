@@ -122,6 +122,11 @@ def safe_error_label(row: OutboundMessage | None) -> str | None:
         return "Email provider is not configured"
     if row.status == "bounced":
         return "Email bounced"
+    error = (row.error or "").lower()
+    if "sender identity" in error or "from address" in error or "\"from\"" in error:
+        return "Sender address is not verified"
+    if "permission denied" in error or "forbidden" in error or "unauthorized" in error:
+        return "Email provider rejected the request"
     return "Send failed"
 
 
