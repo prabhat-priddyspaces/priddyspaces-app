@@ -10,6 +10,7 @@ from app.core.password import verify_password
 from app.models.booking_request import BookingRequest
 from app.models.enums import BookingRequestStatus, OrganizationReviewStatus, PlatformTeamRole, SpaceType, SpaceVisibility, UserAppRole, UserRole
 from app.models.location import Location
+from app.models.marketing import OutboundMessage
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.platform_team_member import PlatformTeamMember
@@ -120,6 +121,42 @@ def test_me_returns_platform_role_and_admin_default_route(db_session, client_fac
     data = response.json()
     assert data["platform_role"] == "superadmin"
     assert data["default_route"] == "/admin"
+
+
+def test_admin_email_health_reports_booking_failures(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="email-health-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.APPROVED)
+    outbound = OutboundMessage(
+        organization_id=org.id,
+        tenant_id=org.id,
+        email="customer11@mailinator.com",
+        subject="Booking confirmed",
+        sender_lane="transactional",
+        from_email="no-reply@example.com",
+        provider="sendgrid",
+        status="failed",
+        error="bad sender",
+        source="booking",
+        source_context={
+            "notification_type": "booking_confirmed",
+            "booking_request_public_id": "req_123",
+        },
+    )
+    db_session.add(outbound)
+    db_session.commit()
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    response = client.get("/api/admin/email-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["booking_email_status_counts"]["failed"] == 1
+    assert body["recent_booking_failures"][0]["email"] == "customer11@mailinator.com"
+    assert body["recent_booking_failures"][0]["error"] == "bad sender"
 
 
 def test_superadmin_can_invite_platform_team_member_but_admin_cannot(db_session, client_factory):

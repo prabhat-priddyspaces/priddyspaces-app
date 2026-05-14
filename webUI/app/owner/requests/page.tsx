@@ -12,6 +12,7 @@ import {
   Mail,
   MessageSquare,
   Phone,
+  RefreshCw,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -81,6 +82,19 @@ interface BookingRequest {
   rate_basis: string | null;
   units: number | null;
   request_kind: string;
+  email_delivery_summary: EmailDeliverySummary[];
+}
+
+interface EmailDeliverySummary {
+  notification_type: string;
+  label: string;
+  status: string;
+  attempt_count: number;
+  recipient_count: number;
+  failed_count: number;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  recipients: string[];
 }
 
 type StatusFilter =
@@ -301,6 +315,43 @@ function ageOf(req: BookingRequest): string {
   }
 }
 
+function emailStatusLabel(status: string): string {
+  switch (status) {
+    case "not_sent":
+      return "Not sent";
+    case "sent":
+      return "Sent";
+    case "delivered":
+      return "Delivered";
+    case "opened":
+      return "Opened";
+    case "clicked":
+      return "Clicked";
+    case "bounced":
+      return "Bounced";
+    case "failed":
+      return "Failed";
+    case "queued":
+      return "Queued";
+    default:
+      return status || "Unknown";
+  }
+}
+
+function emailStatusClass(status: string): string {
+  if (status === "failed" || status === "bounced" || status === "not_sent") {
+    return "border-danger/30 bg-danger-soft text-danger";
+  }
+  if (status === "delivered" || status === "opened" || status === "clicked") {
+    return "border-success/30 bg-success-soft text-success";
+  }
+  return "border-line bg-surface-2 text-text-3";
+}
+
+function canResendEmail(status: string): boolean {
+  return status === "failed" || status === "bounced" || status === "not_sent";
+}
+
 export default function OwnerRequestsPage() {
   const searchParams = useSearchParams();
   const { getApiToken, isAuthReady } = useApiToken();
@@ -308,6 +359,7 @@ export default function OwnerRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [pendingDecision, setPendingDecision] = useState<{
@@ -430,6 +482,32 @@ export default function OwnerRequestsPage() {
     }
   }
 
+  async function resendEmail(publicId: string, notificationType: string) {
+    const token = (await getApiToken()) ?? undefined;
+    if (!token) {
+      setError("Sign in to resend booking emails.");
+      return;
+    }
+    const key = `${publicId}:${notificationType}`;
+    setResending(key);
+    try {
+      setError(null);
+      await apiFetch(
+        `/api/booking-requests/${publicId}/emails/resend`,
+        {
+          method: "POST",
+          body: JSON.stringify({ notification_type: notificationType }),
+        },
+        token
+      );
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Resend failed");
+    } finally {
+      setResending(null);
+    }
+  }
+
   async function confirmPendingDecision() {
     if (!pendingDecision) return;
     const decision = pendingDecision;
@@ -528,6 +606,7 @@ export default function OwnerRequestsPage() {
             const paymentLine = `${request.payment_status || "Not charged"}${
               request.payment_provider ? ` · ${request.payment_provider}` : ""
             }`;
+            const emailSummaries = request.email_delivery_summary || [];
             return (
               <div
                 key={request.public_id}
@@ -675,6 +754,66 @@ export default function OwnerRequestsPage() {
                   )}
                 </div>
                 <div className="lg:col-span-6 mt-1 grid gap-2">
+                  {emailSummaries.length > 0 ? (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {emailSummaries.map((summary) => {
+                        const resendKey = `${request.public_id}:${summary.notification_type}`;
+                        const recipients =
+                          summary.recipients.length > 0
+                            ? summary.recipients.join(", ")
+                            : summary.recipient_count > 0
+                            ? `${summary.recipient_count} recipient${summary.recipient_count === 1 ? "" : "s"}`
+                            : "No recipient recorded";
+                        return (
+                          <div
+                            key={summary.notification_type}
+                            className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-[12px]"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Mail size={13} className="text-text-3 flex-none" />
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-text truncate">
+                                  {summary.label}
+                                </div>
+                                <div className="text-[11px] text-text-3 truncate">
+                                  {recipients}
+                                </div>
+                              </div>
+                              <span
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                                  emailStatusClass(summary.status)
+                                )}
+                              >
+                                {emailStatusLabel(summary.status)}
+                              </span>
+                              {canResendEmail(summary.status) ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="w-auto px-2"
+                                  onClick={() =>
+                                    resendEmail(request.public_id, summary.notification_type)
+                                  }
+                                  disabled={resending === resendKey}
+                                  title="Resend email"
+                                >
+                                  <RefreshCw size={12} />
+                                  Resend
+                                </Button>
+                              ) : null}
+                            </div>
+                            {summary.last_error ? (
+                              <div className="mt-1 text-[11px] text-danger">
+                                {summary.last_error}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   {request.is_guest_checkout &&
                     (request.guest_email ||
                       request.guest_full_name ||

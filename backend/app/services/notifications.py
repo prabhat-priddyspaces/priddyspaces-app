@@ -2,14 +2,26 @@ import base64
 import logging
 from datetime import datetime, timezone
 from html import escape
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.marketing import OutboundMessage
 from app.models.email_subscription_group import EmailSubscriptionGroup
 from app.models.user import User
+from app.services.booking_email_delivery import (
+    BOOKING_EMAIL_CANCELLED,
+    BOOKING_EMAIL_CONFIRMED,
+    BOOKING_EMAIL_OWNER_CONFIRMED,
+    BOOKING_EMAIL_OWNER_REQUEST,
+    BOOKING_EMAIL_PAYMENT_FAILED,
+    BOOKING_EMAIL_REJECTED,
+    BOOKING_EMAIL_REQUEST_CANCELLED,
+    BOOKING_EMAIL_REQUEST_SUBMITTED,
+    now_utc,
+)
 
 if TYPE_CHECKING:
     from app.models.booking import Booking
@@ -92,6 +104,177 @@ def send_email(
             logger.warning("send_email failed status=%s body=%s", resp.status_code, resp.text)
     except Exception as exc:
         logger.exception("send_email exception: %s", exc)
+
+
+def _booking_source_context(
+    *,
+    notification_type: str,
+    recipient_role: str,
+    req: "BookingRequest | None" = None,
+    booking: "Booking | None" = None,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+    resend_of_public_id: str | None = None,
+    attachments: list[EmailAttachment] | None = None,
+) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "notification_type": notification_type,
+        "recipient_role": recipient_role,
+        "booking_request_public_id": req.public_id if req else None,
+        "booking_public_id": booking.public_id if booking else None,
+        "actor_user_id": actor_user_id,
+        "resend": resend,
+    }
+    if resend_of_public_id:
+        context["resend_of_public_id"] = resend_of_public_id
+    if resend:
+        context["resent_at"] = now_utc().isoformat()
+        if actor_user_id:
+            context["resent_by_user_id"] = actor_user_id
+    if attachments:
+        context["attachments"] = [
+            {"filename": attachment.get("filename"), "type": attachment.get("type")}
+            for attachment in attachments
+        ]
+    return context
+
+
+def send_booking_transactional_email(
+    db: Session,
+    *,
+    to_email: str,
+    subject: str,
+    body: str,
+    html_body: str | None = None,
+    attachments: list[EmailAttachment] | None = None,
+    req: "BookingRequest | None" = None,
+    booking: "Booking | None" = None,
+    space: "Space | None" = None,
+    location: "Location | None" = None,
+    notification_type: str,
+    recipient_role: str,
+    recipient_user_id: int | None = None,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+    resend_of_public_id: str | None = None,
+) -> OutboundMessage:
+    user_id = recipient_user_id
+    if user_id is None and to_email:
+        user = db.query(User).filter(User.email == to_email).first()
+        user_id = user.id if user else None
+
+    organization_id = None
+    tenant_id = None
+    if location:
+        organization_id = location.organization_id
+        tenant_id = location.tenant_id
+    if space:
+        tenant_id = tenant_id or space.tenant_id
+        organization_id = organization_id or space.tenant_id
+    if req:
+        tenant_id = tenant_id or req.tenant_id
+    if booking:
+        tenant_id = tenant_id or booking.tenant_id
+    organization_id = organization_id or tenant_id or 0
+    tenant_id = tenant_id or organization_id
+
+    context = _booking_source_context(
+        notification_type=notification_type,
+        recipient_role=recipient_role,
+        req=req,
+        booking=booking,
+        actor_user_id=actor_user_id,
+        resend=resend,
+        resend_of_public_id=resend_of_public_id,
+        attachments=attachments,
+    )
+    outbound = OutboundMessage(
+        organization_id=organization_id,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        email=to_email,
+        subject=subject,
+        html_body=html_body,
+        text_body=body,
+        sender_lane="transactional",
+        from_email=settings.SENDGRID_FROM_EMAIL or "no-reply@priddyspaces.local",
+        from_name="Priddyspaces",
+        provider="sendgrid",
+        status="queued",
+        source="booking",
+        source_context=context,
+    )
+    db.add(outbound)
+    db.commit()
+    db.refresh(outbound)
+
+    if not settings.SENDGRID_API_KEY or not settings.SENDGRID_FROM_EMAIL:
+        outbound.status = "failed"
+        outbound.error = "SendGrid is not configured for transactional email"
+        outbound.source_context = {
+            **(outbound.source_context or {}),
+            "diagnostic": "sendgrid_not_configured",
+        }
+        db.add(outbound)
+        db.commit()
+        db.refresh(outbound)
+        logger.warning(
+            "booking transactional email failed (not configured) to=%s subject=%s outbound=%s",
+            to_email,
+            subject,
+            outbound.public_id,
+        )
+        return outbound
+
+    content = [{"type": "text/plain", "value": body}]
+    if html_body:
+        content.append({"type": "text/html", "value": html_body})
+    custom_args = {
+        "outbound_public_id": outbound.public_id,
+        "source": "booking",
+        "notification_type": notification_type,
+    }
+    if req:
+        custom_args["booking_request_public_id"] = req.public_id
+    if booking:
+        custom_args["booking_public_id"] = booking.public_id
+    payload: dict[str, Any] = {
+        "personalizations": [
+            {
+                "to": [{"email": to_email}],
+                "custom_args": custom_args,
+            }
+        ],
+        "from": {"email": settings.SENDGRID_FROM_EMAIL, "name": "Priddyspaces"},
+        "subject": subject,
+        "content": content,
+    }
+    if attachments:
+        payload["attachments"] = attachments
+
+    try:
+        resp = httpx.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {settings.SENDGRID_API_KEY}"},
+            json=payload,
+            timeout=10.0,
+        )
+        if resp.status_code >= 400:
+            outbound.status = "failed"
+            outbound.error = resp.text[:2000]
+        else:
+            outbound.status = "sent"
+            outbound.provider_message_id = resp.headers.get("X-Message-Id") or resp.headers.get("x-message-id")
+            outbound.sent_at = now_utc()
+    except Exception as exc:
+        logger.exception("booking transactional email exception: %s", exc)
+        outbound.status = "failed"
+        outbound.error = str(exc)
+
+    db.add(outbound)
+    db.commit()
+    db.refresh(outbound)
+    return outbound
 
 
 def _frontend_url(path: str) -> str:
@@ -209,7 +392,12 @@ def send_owner_booking_request_notification(
     req: "BookingRequest",
     space: "Space",
     location: "Location",
-) -> None:
+    *,
+    recipient_role: str = "owner",
+    recipient_user_id: int | None = None,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage:
     requester_email = _requester_email(db, req)
     requester = _requester_name(db, req)
     if requester_email:
@@ -240,7 +428,21 @@ def send_owner_booking_request_notification(
             ("Review and reject", reject_url, "#991b1b"),
         ],
     )
-    send_email(owner_email, "New booking request", body, db=db, html_body=html)
+    return send_booking_transactional_email(
+        db,
+        to_email=owner_email,
+        subject="New booking request",
+        body=body,
+        html_body=html,
+        req=req,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_OWNER_REQUEST,
+        recipient_role=recipient_role,
+        recipient_user_id=recipient_user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
+    )
 
 
 def send_owner_confirmed_booking_notification(
@@ -250,7 +452,12 @@ def send_owner_confirmed_booking_notification(
     booking: "Booking",
     space: "Space",
     location: "Location",
-) -> None:
+    *,
+    recipient_role: str = "owner",
+    recipient_user_id: int | None = None,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage:
     requester_email = _requester_email(db, req)
     requester = _requester_name(db, req)
     if requester_email:
@@ -266,7 +473,22 @@ def send_owner_confirmed_booking_notification(
     dashboard_url = _frontend_url("/owner/calendar")
     body = "\n".join(lines + ["", f"View calendar: {dashboard_url}"])
     html = _html_shell("New confirmed booking", lines, [("View calendar", dashboard_url, "#0f766e")])
-    send_email(owner_email, "New confirmed booking", body, db=db, html_body=html)
+    return send_booking_transactional_email(
+        db,
+        to_email=owner_email,
+        subject="New confirmed booking",
+        body=body,
+        html_body=html,
+        req=req,
+        booking=booking,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_OWNER_CONFIRMED,
+        recipient_role=recipient_role,
+        recipient_user_id=recipient_user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
+    )
 
 
 def send_booking_request_submitted_email(
@@ -274,7 +496,10 @@ def send_booking_request_submitted_email(
     req: "BookingRequest",
     space: "Space",
     location: "Location",
-) -> None:
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage | None:
     to_email = _requester_email(db, req)
     if not to_email:
         return
@@ -292,7 +517,21 @@ def send_booking_request_submitted_email(
     subject = "Booking request submitted"
     if req.request_kind in {"membership_purchase", "lease_purchase"}:
         subject = "Membership request submitted"
-    send_email(to_email, subject, "\n".join(lines), db=db, html_body=_html_shell(subject, lines))
+    return send_booking_transactional_email(
+        db,
+        to_email=to_email,
+        subject=subject,
+        body="\n".join(lines),
+        html_body=_html_shell(subject, lines),
+        req=req,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_REQUEST_SUBMITTED,
+        recipient_role="guest" if req.is_guest_checkout else "member",
+        recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
+    )
 
 
 def send_booking_confirmed_email(
@@ -301,7 +540,10 @@ def send_booking_confirmed_email(
     booking: "Booking | None",
     space: "Space",
     location: "Location",
-) -> None:
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage | None:
     to_email = _requester_email(db, req)
     if not to_email:
         return
@@ -328,13 +570,22 @@ def send_booking_confirmed_email(
                 method="REQUEST",
             )
         )
-    send_email(
-        to_email,
-        "Booking confirmed",
-        "\n".join(lines),
+    return send_booking_transactional_email(
         db=db,
+        to_email=to_email,
+        subject="Booking confirmed",
+        body="\n".join(lines),
         html_body=_html_shell("Booking confirmed", lines),
         attachments=attachments or None,
+        req=req,
+        booking=booking,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_CONFIRMED,
+        recipient_role="guest" if req.is_guest_checkout else "member",
+        recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
     )
 
 
@@ -342,7 +593,11 @@ def send_booking_rejected_email(
     db: Session,
     req: "BookingRequest",
     space: "Space",
-) -> None:
+    location: "Location | None" = None,
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage | None:
     to_email = _requester_email(db, req)
     if not to_email:
         return
@@ -353,16 +608,32 @@ def send_booking_rejected_email(
         f"Reference: {req.public_id}",
         "You're welcome to browse other available spaces at Priddyspaces.",
     ]
-    send_email(
-        to_email,
-        "Booking request update",
-        "\n".join(lines),
+    return send_booking_transactional_email(
         db=db,
+        to_email=to_email,
+        subject="Booking request update",
+        body="\n".join(lines),
         html_body=_html_shell("Booking request update", lines),
+        req=req,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_REJECTED,
+        recipient_role="guest" if req.is_guest_checkout else "member",
+        recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
     )
 
 
-def send_booking_payment_failed_email(db: Session, req: "BookingRequest", space: "Space") -> None:
+def send_booking_payment_failed_email(
+    db: Session,
+    req: "BookingRequest",
+    space: "Space",
+    location: "Location | None" = None,
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage | None:
     to_email = _requester_email(db, req)
     if not to_email:
         return
@@ -373,12 +644,20 @@ def send_booking_payment_failed_email(db: Session, req: "BookingRequest", space:
         f"Reference: {req.public_id}",
         "The owner can retry the charge after the payment method is updated.",
     ]
-    send_email(
-        to_email,
-        "Booking payment failed",
-        "\n".join(lines),
+    return send_booking_transactional_email(
         db=db,
+        to_email=to_email,
+        subject="Booking payment failed",
+        body="\n".join(lines),
         html_body=_html_shell("Booking payment failed", lines),
+        req=req,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_PAYMENT_FAILED,
+        recipient_role="guest" if req.is_guest_checkout else "member",
+        recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
     )
 
 
@@ -388,7 +667,10 @@ def send_booking_cancelled_email(
     req: "BookingRequest | None",
     space: "Space",
     location: "Location",
-) -> None:
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage | None:
     to_email = _requester_email(db, req) if req else None
     if not to_email:
         user = db.query(User).filter(User.id == booking.user_id).first()
@@ -405,11 +687,11 @@ def send_booking_cancelled_email(
         f"From: {booking.start_datetime}",
         f"To: {booking.end_datetime}",
     ]
-    send_email(
-        to_email,
-        "Booking canceled",
-        "\n".join(lines),
+    return send_booking_transactional_email(
         db=db,
+        to_email=to_email,
+        subject="Booking canceled",
+        body="\n".join(lines),
         html_body=_html_shell("Booking canceled", lines),
         attachments=[
             _ics_attachment(
@@ -422,10 +704,27 @@ def send_booking_cancelled_email(
                 method="CANCEL",
             )
         ],
+        req=req,
+        booking=booking,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_CANCELLED,
+        recipient_role=("guest" if req and req.is_guest_checkout else "member"),
+        recipient_user_id=req.user_id if req else booking.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
     )
 
 
-def send_booking_request_cancelled_email(db: Session, req: "BookingRequest", space: "Space") -> None:
+def send_booking_request_cancelled_email(
+    db: Session,
+    req: "BookingRequest",
+    space: "Space",
+    location: "Location | None" = None,
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage | None:
     to_email = _requester_email(db, req)
     if not to_email:
         return
@@ -438,12 +737,20 @@ def send_booking_request_cancelled_email(db: Session, req: "BookingRequest", spa
         f"From: {req.start_datetime}",
         f"To: {req.end_datetime}",
     ]
-    send_email(
-        to_email,
-        "Booking request canceled",
-        "\n".join(lines),
+    return send_booking_transactional_email(
         db=db,
+        to_email=to_email,
+        subject="Booking request canceled",
+        body="\n".join(lines),
         html_body=_html_shell("Booking request canceled", lines),
+        req=req,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_REQUEST_CANCELLED,
+        recipient_role="guest" if req.is_guest_checkout else "member",
+        recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
     )
 
 

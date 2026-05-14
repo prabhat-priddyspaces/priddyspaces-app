@@ -39,6 +39,8 @@ from app.models.feature_flag import FeatureFlag
 from app.models.user import User
 from sqlalchemy.exc import IntegrityError
 from app.schemas.booking_request import (
+    BookingEmailDeliveryOut,
+    BookingEmailResendRequest,
     BookingPaymentSummary,
     BookingRequestCreate,
     BookingRequestDecision,
@@ -50,6 +52,19 @@ from app.schemas.booking_request import (
 )
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids, require_location_roles, user_can_access_location
+from app.services.booking_email_delivery import (
+    BOOKING_EMAIL_CANCELLED,
+    BOOKING_EMAIL_CONFIRMED,
+    BOOKING_EMAIL_OWNER_CONFIRMED,
+    BOOKING_EMAIL_OWNER_REQUEST,
+    BOOKING_EMAIL_PAYMENT_FAILED,
+    BOOKING_EMAIL_REJECTED,
+    BOOKING_EMAIL_REQUEST_CANCELLED,
+    BOOKING_EMAIL_REQUEST_SUBMITTED,
+    BOOKING_EMAIL_TYPES,
+    delivery_details_for_request,
+    delivery_summary_for_request,
+)
 from app.services.availability import booking_overlaps, booking_request_overlaps, subscription_overlaps
 from app.services.booking_inventory import (
     create_pending_booking_hold,
@@ -221,7 +236,8 @@ def _to_out(
     req: BookingRequest,
     space: Space | None,
     booking: Booking | None = None,
-    db: Session | None = None
+    db: Session | None = None,
+    include_email_delivery: bool = False,
 ) -> BookingRequestOut:
     price_daily = space.price_daily if space else None
     price_monthly = space.price_monthly if space else None
@@ -339,6 +355,11 @@ def _to_out(
             redemption_lock_public_id = lock.public_id
             loyalty_points_used = lock.points or 0
             loyalty_discount_cents = lock.discount_cents or 0
+    email_delivery_summary = (
+        delivery_summary_for_request(db, req, include_recipients=True)
+        if db is not None and include_email_delivery
+        else []
+    )
     return BookingRequestOut(
         public_id=req.public_id,
         created_at=req.created_at,
@@ -405,6 +426,7 @@ def _to_out(
         payment_attempt_count=req.payment_attempt_count,
         failure_reason=failure_reason,
         last_payment=last_payment_summary,
+        email_delivery_summary=email_delivery_summary,
         request_kind=BookingRequestKind(request_kind),
         membership_plan_public_id=membership_plan_public_id,
         membership_plan_name=membership_plan_name,
@@ -606,7 +628,7 @@ def _create_membership_purchase_request(
     return req
 
 
-def _owner_notification_emails_for_space(db: Session, space: Space) -> list[str]:
+def _owner_notification_recipients_for_space(db: Session, space: Space) -> list[tuple[str, str, int]]:
     """Return opted-in owner-side users who can access this space's location."""
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
@@ -622,20 +644,51 @@ def _owner_notification_emails_for_space(db: Session, space: Space) -> list[str]
         )
         .all()
     )
-    user_ids = {
-        member.user_id
+    accessible_members = [
+        member
         for member in members
         if user_can_access_location(db, member.user_id, location, roles)
-    }
+    ]
+    user_ids = {member.user_id for member in accessible_members}
     if not user_ids:
         return []
-    users = db.query(User).filter(User.id.in_(user_ids)).all()
-    return sorted({user.email for user in users if user.email})
+    users = {user.id: user for user in db.query(User).filter(User.id.in_(user_ids)).all()}
+    recipients = []
+    seen_emails: set[str] = set()
+    for member in accessible_members:
+        user = users.get(member.user_id)
+        if not user or not user.email or user.email in seen_emails:
+            continue
+        seen_emails.add(user.email)
+        recipients.append((user.email, member.role.value, user.id))
+    return sorted(recipients, key=lambda item: item[0])
 
 
-def _notify_owner_team_of_request(db: Session, req: BookingRequest, space: Space, location: Location) -> None:
-    for owner_email in _owner_notification_emails_for_space(db, space):
-        send_owner_booking_request_notification(db, owner_email, req, space, location)
+def _owner_notification_emails_for_space(db: Session, space: Space) -> list[str]:
+    return [email for email, _role, _user_id in _owner_notification_recipients_for_space(db, space)]
+
+
+def _notify_owner_team_of_request(
+    db: Session,
+    req: BookingRequest,
+    space: Space,
+    location: Location,
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> None:
+    for owner_email, role, user_id in _owner_notification_recipients_for_space(db, space):
+        send_owner_booking_request_notification(
+            db,
+            owner_email,
+            req,
+            space,
+            location,
+            recipient_role=role,
+            recipient_user_id=user_id,
+            actor_user_id=actor_user_id,
+            resend=resend,
+        )
 
 
 def _send_booking_request_notifications(
@@ -643,16 +696,18 @@ def _send_booking_request_notifications(
     req: BookingRequest,
     space: Space,
     location: Location,
+    *,
+    actor_user_id: int | None = None,
 ) -> None:
     try:
-        send_booking_request_submitted_email(db, req, space, location)
+        send_booking_request_submitted_email(db, req, space, location, actor_user_id=actor_user_id)
     except Exception:
         logger.exception(
             "Failed to send booking request submitted email request_public_id=%s",
             req.public_id,
         )
     try:
-        _notify_owner_team_of_request(db, req, space, location)
+        _notify_owner_team_of_request(db, req, space, location, actor_user_id=actor_user_id)
     except Exception:
         logger.exception(
             "Failed to notify owner team for booking request request_public_id=%s",
@@ -666,11 +721,25 @@ def _notify_owner_team_of_confirmed_booking(
     booking: Booking | None,
     space: Space,
     location: Location,
+    *,
+    actor_user_id: int | None = None,
+    resend: bool = False,
 ) -> None:
     if not booking:
         return
-    for owner_email in _owner_notification_emails_for_space(db, space):
-        send_owner_confirmed_booking_notification(db, owner_email, req, booking, space, location)
+    for owner_email, role, user_id in _owner_notification_recipients_for_space(db, space):
+        send_owner_confirmed_booking_notification(
+            db,
+            owner_email,
+            req,
+            booking,
+            space,
+            location,
+            recipient_role=role,
+            recipient_user_id=user_id,
+            actor_user_id=actor_user_id,
+            resend=resend,
+        )
 
 
 def _audit_context_with_actor_email(db: Session, actor_id: int, context: dict | None) -> dict:
@@ -679,6 +748,28 @@ def _audit_context_with_actor_email(db: Session, actor_id: int, context: dict | 
     if actor and actor.email:
         merged.setdefault("actor_email", actor.email)
     return merged
+
+
+def _owner_accessible_request(
+    db: Session,
+    public_id: str,
+    user: User,
+) -> tuple[BookingRequest, Space, Location]:
+    req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    space = db.query(Space).filter(Space.id == req.space_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
+    return req, space, location
+
+
+def _booking_for_request(db: Session, req: BookingRequest) -> Booking | None:
+    return db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
 
 
 @router.post("/guest/booking-requests", response_model=GuestBookingRequestOut)
@@ -801,7 +892,7 @@ def create_booking_request(
         if space:
             location = db.query(Location).filter(Location.id == space.location_id).first()
             if location:
-                _send_booking_request_notifications(db, req, space, location)
+                _send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
         return _to_out(req, space, None, db)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
@@ -923,12 +1014,12 @@ def create_booking_request(
                     series.status = "active"
                     db.add(series)
                     db.commit()
-            send_booking_confirmed_email(db, req, booking, space, location)
-            _notify_owner_team_of_confirmed_booking(db, req, booking, space, location)
+            send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=user.id)
+            _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=user.id)
         elif req.status == BookingRequestStatus.PAYMENT_FAILED:
-            send_booking_payment_failed_email(db, req, space)
+            send_booking_payment_failed_email(db, req, space, location, actor_user_id=user.id)
         return _to_out(req, space, booking, db)
-    _send_booking_request_notifications(db, req, space, location)
+    _send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
     return _to_out(req, space, None, db)
 
 
@@ -959,12 +1050,13 @@ def list_booking_requests(
         query = query.filter(BookingRequest.status == status)
 
     results: list[BookingRequestOut] = []
+    include_email_delivery = user.role != UserAppRole.MEMBER
     for req in query.all():
         space = db.query(Space).filter(Space.id == req.space_id).first()
         booking = None
         if req.booking_id:
             booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-        results.append(_to_out(req, space, booking, db))
+        results.append(_to_out(req, space, booking, db, include_email_delivery=include_email_delivery))
     return results
 
 
@@ -1003,7 +1095,64 @@ def get_booking_request(
     booking = None
     if req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-    return _to_out(req, space, booking, db)
+    return _to_out(req, space, booking, db, include_email_delivery=True)
+
+
+@router.get("/booking-requests/{public_id}/email-deliveries", response_model=list[BookingEmailDeliveryOut])
+def list_booking_request_email_deliveries(
+    public_id: str,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    req, _space, _location = _owner_accessible_request(db, public_id, user)
+    return delivery_details_for_request(db, req, include_raw_error=False)
+
+
+@router.post("/booking-requests/{public_id}/emails/resend", response_model=list[BookingEmailDeliveryOut])
+def resend_booking_request_email(
+    public_id: str,
+    payload: BookingEmailResendRequest,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    req, space, location = _owner_accessible_request(db, public_id, user)
+    notification_type = payload.notification_type
+    if notification_type not in BOOKING_EMAIL_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported email notification type")
+
+    actor_id, _acting_as_user_id, _context = get_audit_actor_context(db, token)
+    booking = _booking_for_request(db, req)
+    if notification_type == BOOKING_EMAIL_REQUEST_SUBMITTED:
+        send_booking_request_submitted_email(db, req, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_OWNER_REQUEST:
+        _notify_owner_team_of_request(db, req, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_OWNER_CONFIRMED:
+        if not booking:
+            raise HTTPException(status_code=400, detail="No confirmed booking exists for this request")
+        _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_CONFIRMED:
+        if req.status != BookingRequestStatus.APPROVED:
+            raise HTTPException(status_code=400, detail="Only approved requests can resend confirmation email")
+        send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_REJECTED:
+        if req.status != BookingRequestStatus.REJECTED:
+            raise HTTPException(status_code=400, detail="Only rejected requests can resend rejection email")
+        send_booking_rejected_email(db, req, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_PAYMENT_FAILED:
+        if req.status != BookingRequestStatus.PAYMENT_FAILED:
+            raise HTTPException(status_code=400, detail="Only payment failed requests can resend payment failure email")
+        send_booking_payment_failed_email(db, req, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_CANCELLED:
+        if not booking:
+            raise HTTPException(status_code=400, detail="No booking exists for cancellation email")
+        send_booking_cancelled_email(db, booking, req, space, location, actor_user_id=actor_id, resend=True)
+    elif notification_type == BOOKING_EMAIL_REQUEST_CANCELLED:
+        if req.status != BookingRequestStatus.CANCELLED:
+            raise HTTPException(status_code=400, detail="Only cancelled requests can resend cancellation email")
+        send_booking_request_cancelled_email(db, req, space, location, actor_user_id=actor_id, resend=True)
+    return delivery_details_for_request(db, req, include_raw_error=False)
 
 
 @router.post("/booking-requests/{public_id}/approve", response_model=BookingRequestOut)
@@ -1032,11 +1181,11 @@ def approve_booking_request(
 
     if req.status == BookingRequestStatus.APPROVED and req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-        return _to_out(req, space, booking, db)
+        return _to_out(req, space, booking, db, include_email_delivery=True)
 
     if req.status == BookingRequestStatus.APPROVED and is_membership_request:
         # Already approved memberships have no booking row; just return.
-        return _to_out(req, space, None, db)
+        return _to_out(req, space, None, db, include_email_delivery=True)
 
     if req.status not in (BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED):
         raise HTTPException(status_code=400, detail="Request already processed")
@@ -1116,12 +1265,12 @@ def approve_booking_request(
         db.commit()
         db.refresh(req)
         after_status = req.status
+    actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     if req.status == BookingRequestStatus.APPROVED:
         booking_for_email = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
-        send_booking_confirmed_email(db, req, booking_for_email, space, location)
+        send_booking_confirmed_email(db, req, booking_for_email, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
-        send_booking_payment_failed_email(db, req, space)
-    actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
+        send_booking_payment_failed_email(db, req, space, location, actor_user_id=actor_id)
     write_audit_log(
         db,
         actor_id=actor_id,
@@ -1136,7 +1285,7 @@ def approve_booking_request(
     booking = None
     if req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-    return _to_out(req, space, booking, db)
+    return _to_out(req, space, booking, db, include_email_delivery=True)
 
 
 @router.post("/booking-requests/{public_id}/retry-payment", response_model=BookingRequestOut)
@@ -1180,11 +1329,12 @@ def retry_booking_request_payment(
         db.commit()
         db.refresh(req)
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
+    actor_id, _acting_as_user_id, _context = get_audit_actor_context(db, token)
     if req.status == BookingRequestStatus.APPROVED:
-        send_booking_confirmed_email(db, req, booking, space, location)
+        send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
-        send_booking_payment_failed_email(db, req, space)
-    return _to_out(req, space, booking, db)
+        send_booking_payment_failed_email(db, req, space, location, actor_user_id=actor_id)
+    return _to_out(req, space, booking, db, include_email_delivery=True)
 
 
 @router.post("/booking-requests/{public_id}/reject", response_model=BookingRequestOut)
@@ -1216,8 +1366,8 @@ def reject_booking_request(
     db.add(req)
     db.commit()
     db.refresh(req)
-    send_booking_rejected_email(db, req, space)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
+    send_booking_rejected_email(db, req, space, location, actor_user_id=actor_id)
     write_audit_log(
         db,
         actor_id=actor_id,
@@ -1232,7 +1382,7 @@ def reject_booking_request(
     booking = None
     if req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-    return _to_out(req, space, booking, db)
+    return _to_out(req, space, booking, db, include_email_delivery=True)
 
 
 @router.post("/booking-requests/{public_id}/cancel", response_model=BookingRequestOut)
@@ -1260,7 +1410,7 @@ def cancel_booking_request(
         require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
 
     if req.status in (BookingRequestStatus.CANCELLED, BookingRequestStatus.REJECTED):
-        return _to_out(req, space, None, db)
+        return _to_out(req, space, None, db, include_email_delivery=not is_member)
 
     now = datetime.now(timezone.utc)
     booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
@@ -1284,7 +1434,7 @@ def cancel_booking_request(
     if booking:
         db.refresh(booking)
     if booking:
-        send_booking_cancelled_email(db, booking, req, space, location)
+        send_booking_cancelled_email(db, booking, req, space, location, actor_user_id=user.id)
     else:
-        send_booking_request_cancelled_email(db, req, space)
-    return _to_out(req, space, booking, db)
+        send_booking_request_cancelled_email(db, req, space, location, actor_user_id=user.id)
+    return _to_out(req, space, booking, db, include_email_delivery=not is_member)

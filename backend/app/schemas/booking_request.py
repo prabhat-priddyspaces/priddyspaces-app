@@ -105,6 +105,38 @@ class BookingPaymentSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BookingEmailDeliverySummary(BaseModel):
+    notification_type: str
+    label: str
+    status: str
+    attempt_count: int = 0
+    recipient_count: int = 0
+    failed_count: int = 0
+    last_attempt_at: datetime | None = None
+    last_error: str | None = None
+    recipients: list[str] = Field(default_factory=list)
+
+
+class BookingEmailDeliveryOut(BaseModel):
+    public_id: str
+    notification_type: str
+    label: str
+    recipient_email: str
+    recipient_role: str | None = None
+    subject: str
+    status: str
+    provider_message_id: str | None = None
+    error_label: str | None = None
+    error: str | None = None
+    sent_at: datetime | None = None
+    last_event_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class BookingEmailResendRequest(BaseModel):
+    notification_type: str
+
+
 class BookingRequestSupportContact(BaseModel):
     name: str
     title: str
@@ -173,6 +205,7 @@ class BookingRequestOut(BaseModel):
     payment_attempt_count: int | None = None
     failure_reason: str | None = None
     last_payment: BookingPaymentSummary | None = None
+    email_delivery_summary: list[BookingEmailDeliverySummary] = Field(default_factory=list)
 
     request_kind: BookingRequestKind = BookingRequestKind.HOURLY_BOOKING
     membership_plan_public_id: str | None = None

@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.config import settings
 from app.core.password import hash_password, verify_password
 from app.db.deps import get_db
 from app.models.audit_log import AuditLog
@@ -23,6 +24,7 @@ from app.models.enums import (
 from app.models.invoice import Invoice
 from app.models.location import Location
 from app.models.location_admin import LocationAdmin
+from app.models.marketing import OutboundMessage
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.payment import Payment
@@ -40,6 +42,7 @@ from app.schemas.admin import (
     PlatformTeamUpdateIn,
 )
 from app.services.audit import write_audit_log
+from app.services.booking_email_delivery import BOOKING_EMAIL_LABELS
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.notifications import send_email
 from app.services.platform_auth import (
@@ -247,6 +250,56 @@ def get_admin_dashboard(
     return {
         "metrics": _build_metrics(db),
         "recent_activity": _serialize_audit_logs(db, recent_logs),
+    }
+
+
+@router.get("/admin/email-health")
+def get_admin_email_health(
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    require_platform_roles(db, token, READ_ROLES)
+    recent_failures = (
+        db.query(OutboundMessage)
+        .filter(
+            OutboundMessage.source == "booking",
+            OutboundMessage.status.in_(["failed", "bounced"]),
+        )
+        .order_by(OutboundMessage.created_at.desc(), OutboundMessage.id.desc())
+        .limit(25)
+        .all()
+    )
+    status_counts = dict(
+        db.query(OutboundMessage.status, func.count(OutboundMessage.id))
+        .filter(OutboundMessage.source == "booking")
+        .group_by(OutboundMessage.status)
+        .all()
+    )
+    return {
+        "sendgrid_configured": bool(settings.SENDGRID_API_KEY and settings.SENDGRID_FROM_EMAIL),
+        "sendgrid_api_key_configured": bool(settings.SENDGRID_API_KEY),
+        "from_email_configured": bool(settings.SENDGRID_FROM_EMAIL),
+        "from_email": settings.SENDGRID_FROM_EMAIL if settings.SENDGRID_FROM_EMAIL else None,
+        "booking_email_status_counts": status_counts,
+        "recent_booking_failures": [
+            {
+                "public_id": row.public_id,
+                "email": row.email,
+                "subject": row.subject,
+                "status": row.status,
+                "notification_type": (row.source_context or {}).get("notification_type"),
+                "label": BOOKING_EMAIL_LABELS.get(
+                    str((row.source_context or {}).get("notification_type") or ""),
+                    str((row.source_context or {}).get("notification_type") or "").replace("_", " ").title(),
+                ),
+                "booking_request_public_id": (row.source_context or {}).get("booking_request_public_id"),
+                "provider_message_id": row.provider_message_id,
+                "error": row.error,
+                "created_at": row.created_at,
+                "last_event_at": row.last_event_at,
+            }
+            for row in recent_failures
+        ],
     }
 
 

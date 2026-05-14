@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
+from app.core.config import settings
 from app.models.enums import UserAppRole, UserRole, SpaceType, AvailabilityStatus, BookingRequestStatus, BookingStatus
 from app.models.user import User
 from app.models.organization import Organization
@@ -13,6 +15,7 @@ from app.models.audit_log import AuditLog
 from app.models.booking_series import BookingSeries
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
+from app.models.marketing import OutboundMessage
 from app.services.payment_providers import ChargeResult
 from app.api.booking_requests import _owner_notification_emails_for_space
 
@@ -107,6 +110,39 @@ def _seed_payment_method(db, member: User, space: Space) -> MemberOwnerPaymentMe
 class FakeProvider:
     def charge_saved_method(self, **kwargs):
         return ChargeResult(status="succeeded", provider_payment_id="pi_owner_test", raw_response={"ok": True})
+
+
+def _booking_outbounds(db, req_id: str, notification_type: str | None = None):
+    rows = db.query(OutboundMessage).filter(OutboundMessage.source == "booking").all()
+    rows = [
+        row
+        for row in rows
+        if (row.source_context or {}).get("booking_request_public_id") == req_id
+    ]
+    if notification_type:
+        rows = [
+            row
+            for row in rows
+            if (row.source_context or {}).get("notification_type") == notification_type
+        ]
+    return rows
+
+
+def _mock_sendgrid(monkeypatch):
+    monkeypatch.setattr(settings, "SENDGRID_API_KEY", "SG.test")
+    monkeypatch.setattr(settings, "SENDGRID_FROM_EMAIL", "no-reply@priddyspaces.test")
+    response = MagicMock()
+    response.status_code = 202
+    response.text = ""
+    response.headers = {"X-Message-Id": "sg-message"}
+    sent: list[dict] = []
+
+    def fake_post(*args, **kwargs):
+        sent.append(kwargs["json"])
+        return response
+
+    monkeypatch.setattr("app.services.notifications.httpx.post", fake_post)
+    return sent
 
 
 def _request_payload(space: Space, method: MemberOwnerPaymentMethod | None, day: int = 10):
@@ -277,6 +313,219 @@ def test_owner_notification_recipients_require_opt_in_and_location_access(db_ses
     ]
 
 
+def test_booking_request_submission_records_requester_and_owner_email_attempts(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "SENDGRID_API_KEY", "")
+    monkeypatch.setattr(settings, "SENDGRID_FROM_EMAIL", "no-reply@priddyspaces.test")
+    owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="submitted-member@example.com",
+        auth_subject="sub-submitted-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=2))
+
+    assert create.status_code == 200
+    req_id = create.json()["public_id"]
+    submitted = _booking_outbounds(db_session, req_id, "request_submitted")
+    owner_notices = _booking_outbounds(db_session, req_id, "owner_booking_request")
+    assert len(submitted) == 1
+    assert submitted[0].email == member.email
+    assert submitted[0].status == "failed"
+    assert submitted[0].source_context["diagnostic"] == "sendgrid_not_configured"
+    assert len(owner_notices) == 1
+    assert owner_notices[0].email == owner.email
+
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    owner_list = owner_client.get("/api/booking-requests?status=requested")
+    assert owner_list.status_code == 200
+    summary = owner_list.json()[0]["email_delivery_summary"]
+    assert {item["notification_type"] for item in summary} >= {"request_submitted", "owner_booking_request"}
+    assert any(item["status"] == "failed" for item in summary)
+
+
+def test_booking_transactional_email_bypasses_unsubscribe(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    sent = _mock_sendgrid(monkeypatch)
+    _owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="unsubscribed-booking@example.com",
+        auth_subject="sub-unsubscribed-booking",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+        email_unsubscribed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=3))
+
+    assert create.status_code == 200
+    assert any(
+        payload["personalizations"][0]["to"][0]["email"] == member.email
+        for payload in sent
+    )
+
+
+def test_booking_email_sendgrid_failure_records_failed_outbound(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "SENDGRID_API_KEY", "SG.test")
+    monkeypatch.setattr(settings, "SENDGRID_FROM_EMAIL", "no-reply@priddyspaces.test")
+    response = MagicMock()
+    response.status_code = 400
+    response.text = "bad sender"
+    response.headers = {}
+    monkeypatch.setattr("app.services.notifications.httpx.post", lambda *args, **kwargs: response)
+    _owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="bad-sendgrid@example.com",
+        auth_subject="sub-bad-sendgrid",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=7))
+
+    assert create.status_code == 200
+    req_id = create.json()["public_id"]
+    submitted = _booking_outbounds(db_session, req_id, "request_submitted")
+    assert submitted[0].status == "failed"
+    assert "bad sender" in submitted[0].error
+
+
+def test_booking_email_resend_endpoint_creates_new_attempt(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "SENDGRID_API_KEY", "")
+    monkeypatch.setattr(settings, "SENDGRID_FROM_EMAIL", "no-reply@priddyspaces.test")
+    owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="resend-member@example.com",
+        auth_subject="sub-resend-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=6))
+    req_id = create.json()["public_id"]
+    assert len(_booking_outbounds(db_session, req_id, "request_submitted")) == 1
+
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    resend = owner_client.post(
+        f"/api/booking-requests/{req_id}/emails/resend",
+        json={"notification_type": "request_submitted"},
+    )
+
+    assert resend.status_code == 200
+    attempts = _booking_outbounds(db_session, req_id, "request_submitted")
+    assert len(attempts) == 2
+    assert any((attempt.source_context or {}).get("resend") is True for attempt in attempts)
+
+
+def test_sendgrid_webhook_updates_booking_outbound(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    sent = _mock_sendgrid(monkeypatch)
+    _owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="booking-webhook@example.com",
+        auth_subject="sub-booking-webhook",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=8))
+    req_id = create.json()["public_id"]
+    outbound_public_id = sent[0]["personalizations"][0]["custom_args"]["outbound_public_id"]
+    outbound = db_session.query(OutboundMessage).filter(OutboundMessage.public_id == outbound_public_id).one()
+
+    response = member_client.post(
+        "/api/webhooks/sendgrid",
+        json=[
+            {
+                "event": "delivered",
+                "email": member.email,
+                "sg_event_id": "evt-booking-delivered",
+                "outbound_public_id": outbound.public_id,
+            }
+        ],
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(outbound)
+    assert outbound.status == "delivered"
+    assert _booking_outbounds(db_session, req_id, "request_submitted")[0].status == "delivered"
+
+
 def test_guest_booking_request_survives_notification_failure(db_session, client_factory, monkeypatch):
     _owner, space = _seed_owner_space(db_session)
 
@@ -394,19 +643,7 @@ def test_booking_request_approval_sends_one_calendar_email_and_audits_actor(
     monkeypatch,
 ):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
-    sent: list[dict] = []
-
-    def fake_send_email(to_email, subject, body, **kwargs):
-        sent.append(
-            {
-                "to_email": to_email,
-                "subject": subject,
-                "body": body,
-                "attachments": kwargs.get("attachments") or [],
-            }
-        )
-
-    monkeypatch.setattr("app.services.notifications.send_email", fake_send_email)
+    sent = _mock_sendgrid(monkeypatch)
     owner, space = _seed_owner_space(db_session)
     member = User(
         email="calendar-member@example.com",
@@ -439,11 +676,18 @@ def test_booking_request_approval_sends_one_calendar_email_and_audits_actor(
 
     confirmed = [email for email in sent if email["subject"] == "Booking confirmed"]
     assert len(confirmed) == 1
-    assert confirmed[0]["to_email"] == member.email
+    assert confirmed[0]["personalizations"][0]["to"][0]["email"] == member.email
     assert len(confirmed[0]["attachments"]) == 1
     attachment = confirmed[0]["attachments"][0]
     assert attachment["filename"].endswith(".ics")
     assert "text/calendar" in attachment["type"]
+    assert confirmed[0]["personalizations"][0]["custom_args"]["outbound_public_id"]
+
+    outbounds = _booking_outbounds(db_session, req_id, "booking_confirmed")
+    assert len(outbounds) == 1
+    assert outbounds[0].email == member.email
+    assert outbounds[0].status == "sent"
+    assert outbounds[0].source_context["recipient_role"] == "member"
 
     audit = (
         db_session.query(AuditLog)
@@ -503,18 +747,7 @@ def test_booking_request_rejection_sends_update_without_calendar_attachment(
     client_factory,
     monkeypatch,
 ):
-    sent: list[dict] = []
-
-    def fake_send_email(to_email, subject, body, **kwargs):
-        sent.append(
-            {
-                "to_email": to_email,
-                "subject": subject,
-                "attachments": kwargs.get("attachments") or [],
-            }
-        )
-
-    monkeypatch.setattr("app.services.notifications.send_email", fake_send_email)
+    sent = _mock_sendgrid(monkeypatch)
     owner, space = _seed_owner_space(db_session)
     member = User(
         email="reject-member@example.com",
@@ -547,8 +780,11 @@ def test_booking_request_rejection_sends_update_without_calendar_attachment(
 
     updates = [email for email in sent if email["subject"] == "Booking request update"]
     assert len(updates) == 1
-    assert updates[0]["to_email"] == member.email
-    assert updates[0]["attachments"] == []
+    assert updates[0]["personalizations"][0]["to"][0]["email"] == member.email
+    assert "attachments" not in updates[0]
+    outbounds = _booking_outbounds(db_session, req_id, "booking_rejected")
+    assert len(outbounds) == 1
+    assert outbounds[0].email == member.email
 
 
 def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypatch):
