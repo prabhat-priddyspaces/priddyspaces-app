@@ -9,6 +9,7 @@ const nextConfig = {
   reactStrictMode: true,
   distDir,
   ...(isStaticExport ? { output: "export" } : {}),
+  ...(process.env.NEXT_ASSET_PREFIX ? { assetPrefix: process.env.NEXT_ASSET_PREFIX } : {}),
 };
 
 module.exports = nextConfig;
