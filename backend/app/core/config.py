@@ -79,9 +79,9 @@ class Settings(BaseSettings):
     MARKETING_LINK_SECRET: str = ""
     PLATFORM_ADMIN_EMAILS: str = ""
 
-    # Assistant V1. Disabled by default; web/mobile hide the assistant until this
-    # is explicitly enabled in the runtime environment.
-    ASSISTANT_ENABLED: bool = False
+    # Assistant V1 is on by default. Set ASSISTANT_ENABLED=false in the env to
+    # hide the widget for a given deployment.
+    ASSISTANT_ENABLED: bool = True
     OPENAI_API_KEY: str = ""
     ASSISTANT_PRIMARY_MODEL: str = "gpt-4o"
     ASSISTANT_SUMMARY_MODEL: str = "gpt-4o-mini"
