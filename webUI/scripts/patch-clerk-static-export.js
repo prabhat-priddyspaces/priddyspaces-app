@@ -8,10 +8,15 @@
  * Static-deployed builds run Clerk fully client-side (`<SignIn />`, `useAuth`,
  * `useUser`) and have the JWT verified by the FastAPI backend on every API
  * call — none of these stubbed actions are reachable in that mode. This
- * runs as a `postinstall` step so it's idempotent across `npm ci`.
+ * This is intentionally opt-in so normal server builds keep Clerk's runtime
+ * modules intact. `npm run build:export` enables the patch before exporting.
  */
 const fs = require("fs");
 const path = require("path");
+
+if (process.env.PATCH_CLERK_STATIC_EXPORT !== "1") {
+  process.exit(0);
+}
 
 const CLERK_DIR = path.join(__dirname, "..", "node_modules", "@clerk", "nextjs", "dist");
 

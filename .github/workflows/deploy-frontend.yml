@@ -44,57 +44,186 @@ jobs:
           set -euo pipefail
           PREFIX="/priddyspaces/${{ inputs.environment }}/deploy"
 
-          echo "frontend_bucket=$(aws ssm get-parameter --name "$PREFIX/frontend_bucket_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
-          echo "cloudfront_distribution_id=$(aws ssm get-parameter --name "$PREFIX/cloudfront_distribution_id" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecr_repo_uri=$(aws ssm get-parameter --name "$PREFIX/ecr_frontend_repo_uri" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecs_cluster=$(aws ssm get-parameter --name "$PREFIX/ecs_cluster_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "ecs_service=$(aws ssm get-parameter --name "$PREFIX/ecs_frontend_service_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "frontend_asset_bucket=$(aws ssm get-parameter --name "$PREFIX/frontend_asset_bucket" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          echo "frontend_asset_prefix=$(aws ssm get-parameter --name "$PREFIX/frontend_asset_prefix" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
           echo "api_origin=$(aws ssm get-parameter --name "$PREFIX/api_origin" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
 
-          # Optional: Google Maps key. Empty if the SSM parameter doesn't exist yet.
           GMAPS_KEY=$(aws ssm get-parameter --name "$PREFIX/google_maps_api_key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
           echo "::add-mask::$GMAPS_KEY"
           echo "google_maps_api_key=$GMAPS_KEY" >> "$GITHUB_OUTPUT"
 
-          # Clerk publishable key (public, safe to embed in static bundle)
-          CLERK_PK=$(aws ssm get-parameter --name "$PREFIX/clerk_publishable_key" --query 'Parameter.Value' --output text 2>/dev/null || echo "")
+          CLERK_PK=$(aws ssm get-parameter --name "$PREFIX/clerk_publishable_key" --query 'Parameter.Value' --output text)
           echo "clerk_publishable_key=$CLERK_PK" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: webUI/package-lock.json
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Install dependencies
-        working-directory: webUI
-        run: npm ci
-
-      - name: Build static export
-        working-directory: webUI
+      - name: Build builder stage and extract static assets
+        id: builder
+        shell: bash
         env:
-          NEXT_PUBLIC_API_BASE_URL: ${{ steps.meta.outputs.api_origin }}
-          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
-          NEXT_OUTPUT_MODE: export
-        run: npm run build:export
+          API_ORIGIN: ${{ steps.meta.outputs.api_origin }}
+          CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
+          GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
+          ASSET_PREFIX: ${{ steps.meta.outputs.frontend_asset_prefix }}
+        run: |
+          set -euo pipefail
+          REPO="${{ steps.meta.outputs.ecr_repo_uri }}"
+          BUILDER_IMAGE="$REPO:builder-${GITHUB_SHA}"
+          CONTAINER_NAME="frontend-static-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          docker build --target builder \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="$API_ORIGIN" \
+            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
+            --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
+            --build-arg NEXT_ASSET_PREFIX="$ASSET_PREFIX" \
+            -t "$BUILDER_IMAGE" webUI
+
+          rm -rf next-static
+          docker create --name "$CONTAINER_NAME" "$BUILDER_IMAGE" >/dev/null
+          trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT
+          docker cp "$CONTAINER_NAME:/app/.next/static" ./next-static
 
       - name: Upload static assets to S3
         shell: bash
         run: |
           set -euo pipefail
-          aws s3 sync webUI/out "s3://${{ steps.meta.outputs.frontend_bucket }}" --delete
+          aws s3 sync ./next-static "s3://${{ steps.meta.outputs.frontend_asset_bucket }}/_next/static" \
+            --cache-control "public,max-age=31536000,immutable" \
+            --size-only
 
-      - name: Upload extensionless route aliases
+      - name: Build and push frontend image
+        id: image
+        shell: bash
+        env:
+          API_ORIGIN: ${{ steps.meta.outputs.api_origin }}
+          CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
+          GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
+          ASSET_PREFIX: ${{ steps.meta.outputs.frontend_asset_prefix }}
+        run: |
+          set -euo pipefail
+          REPO="${{ steps.meta.outputs.ecr_repo_uri }}"
+          IMAGE_URI="$REPO:${GITHUB_SHA}"
+          LATEST_URI="$REPO:latest"
+
+          docker build \
+            --build-arg NEXT_PUBLIC_API_BASE_URL="$API_ORIGIN" \
+            --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
+            --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
+            --build-arg NEXT_ASSET_PREFIX="$ASSET_PREFIX" \
+            -t "$IMAGE_URI" \
+            -t "$LATEST_URI" \
+            webUI
+
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Register new task definition revision
+        id: taskdef
+        shell: bash
+        env:
+          API_ORIGIN: ${{ steps.meta.outputs.api_origin }}
+          CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
+          GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
+          ASSET_PREFIX: ${{ steps.meta.outputs.frontend_asset_prefix }}
+        run: |
+          set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_service }}"
+          IMAGE_URI="${{ steps.image.outputs.image_uri }}"
+
+          CURRENT_TASK_DEF=$(aws ecs describe-services \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          aws ecs describe-task-definition --task-definition "$CURRENT_TASK_DEF" --query 'taskDefinition' > taskdef.json
+
+          jq \
+            --arg IMAGE_URI "$IMAGE_URI" \
+            --arg API_ORIGIN "$API_ORIGIN" \
+            --arg GMAPS_KEY "$GOOGLE_MAPS_API_KEY" \
+            --arg CLERK_PK "$CLERK_PUBLISHABLE_KEY" \
+            --arg ASSET_PREFIX "$ASSET_PREFIX" '
+            def base_arn:
+              (.[0].valueFrom // "") | split(":") | .[0:7] | join(":");
+            def ensure_secret(name; baseArn):
+              if any(.[]; .name == name) then .
+              else . + [{name: name, valueFrom: (baseArn + ":" + name + "::")}]
+              end;
+            def ensure_env(name; value):
+              if any(.[]; .name == name) then
+                map(if .name == name then .value = value else . end)
+              else
+                . + [{name: name, value: value}]
+              end;
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .deregisteredAt,
+              .registeredBy
+            )
+            | .containerDefinitions |= map(
+                if .name == "frontend" then
+                  .image = $IMAGE_URI
+                  | ((.secrets // []) | base_arn) as $arn
+                  | if $arn == "" then
+                      error("frontend task definition has no base secret ARN")
+                    else
+                      .secrets = ((.secrets // []) | ensure_secret("CLERK_SECRET_KEY"; $arn))
+                    end
+                  | .environment = (
+                      (.environment // [])
+                      | ensure_env("NODE_ENV"; "production")
+                      | ensure_env("PORT"; "3000")
+                      | ensure_env("NEXT_PUBLIC_API_BASE_URL"; $API_ORIGIN)
+                      | ensure_env("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"; $GMAPS_KEY)
+                      | ensure_env("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"; $CLERK_PK)
+                      | ensure_env("NEXT_ASSET_PREFIX"; $ASSET_PREFIX)
+                    )
+                else . end
+              )
+          ' taskdef.json > taskdef-updated.json
+
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://taskdef-updated.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Update ECS service
         shell: bash
         run: |
           set -euo pipefail
-          node webUI/scripts/static-route-aliases.js upload \
-            webUI/out \
-            "s3://${{ steps.meta.outputs.frontend_bucket }}"
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_service }}"
 
-      - name: Invalidate CloudFront cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws cloudfront create-invalidation \
-            --distribution-id "${{ steps.meta.outputs.cloudfront_distribution_id }}" \
-            --paths "/*"
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
+            --task-definition "${{ steps.taskdef.outputs.task_definition_arn }}"
+
+          if ! aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"; then
+            echo "===== Service failed to stabilize. Recent events: ====="
+            aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].events[0:25]' --output table || true
+
+            echo "===== Stopped task (most recent) describe: ====="
+            STOPPED_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+              --desired-status STOPPED --query 'taskArns[0]' --output text 2>/dev/null || echo None)
+            if [ -n "$STOPPED_ARN" ] && [ "$STOPPED_ARN" != "None" ]; then
+              aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$STOPPED_ARN" \
+                --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,exitCode:exitCode,reason:reason}}' || true
+            fi
+            exit 1
+          fi
