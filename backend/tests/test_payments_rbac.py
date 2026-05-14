@@ -114,6 +114,7 @@ def test_payments_rbac_list_and_get(db_session, client_factory):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["public_id"] == payment_one.public_id
+    assert data[0]["member_email"] == "member@example.com"
     assert data[0]["booking_public_id"] == booking_one.public_id
     assert data[0]["space_name"] == "OrgOne Board Room"
     assert data[0]["location_name"] == "OrgOne HQ"

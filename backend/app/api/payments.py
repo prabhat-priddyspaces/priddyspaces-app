@@ -11,6 +11,7 @@ from app.models.booking import Booking
 from app.models.location import Location
 from app.models.subscription import Subscription
 from app.models.space import Space
+from app.models.user import User
 from app.models.enums import AvailabilityStatus
 from app.models.organization import Organization
 from app.schemas.payment import (
@@ -56,6 +57,7 @@ def _payment_context(
 
 def _to_out(db: Session, payment: Payment) -> PaymentOut:
     booking, subscription, space, location = _payment_context(db, payment)
+    member = db.query(User).filter(User.id == payment.user_id).first() if payment.user_id else None
     return PaymentOut(
         id=payment.id,
         public_id=payment.public_id,
@@ -63,6 +65,13 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
         provider=payment.provider,
         status=payment.status.value if payment.status else "",
         tenant_id=payment.tenant_id,
+        member_public_id=member.public_id if member else None,
+        member_name=(
+            member.full_name
+            or " ".join(part for part in [member.first_name, member.last_name] if part)
+            or None
+        ) if member else None,
+        member_email=member.email if member else None,
         booking_id=payment.booking_id,
         booking_public_id=booking.public_id if booking else None,
         booking_start_datetime=booking.start_datetime if booking else None,

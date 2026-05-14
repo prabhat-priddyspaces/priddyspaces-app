@@ -922,6 +922,8 @@ def list_admin_payments(
 
     user_ids = [payment.user_id for payment in payments]
     tenant_ids = [payment.tenant_id for payment in payments if payment.tenant_id is not None]
+    booking_ids = [payment.booking_id for payment in payments if payment.booking_id is not None]
+    subscription_ids = [payment.subscription_id for payment in payments if payment.subscription_id is not None]
     users = {
         user.id: user
         for user in db.query(User).filter(User.id.in_(user_ids)).all()
@@ -930,8 +932,91 @@ def list_admin_payments(
         organization.id: organization
         for organization in db.query(Organization).filter(Organization.id.in_(tenant_ids)).all()
     } if tenant_ids else {}
+    bookings = {
+        booking.id: booking
+        for booking in db.query(Booking).filter(Booking.id.in_(booking_ids)).all()
+    } if booking_ids else {}
+    subscriptions = {
+        subscription.id: subscription
+        for subscription in db.query(Subscription).filter(Subscription.id.in_(subscription_ids)).all()
+    } if subscription_ids else {}
+    space_ids = {
+        booking.space_id
+        for booking in bookings.values()
+        if booking.space_id is not None
+    } | {
+        subscription.space_id
+        for subscription in subscriptions.values()
+        if subscription.space_id is not None
+    }
+    spaces = {
+        space.id: space
+        for space in db.query(Space).filter(Space.id.in_(space_ids)).all()
+    } if space_ids else {}
+    location_ids = {
+        space.location_id
+        for space in spaces.values()
+        if space.location_id is not None
+    }
+    locations = {
+        location.id: location
+        for location in db.query(Location).filter(Location.id.in_(location_ids)).all()
+    } if location_ids else {}
     succeeded = [payment for payment in payments if payment.status == PaymentStatus.SUCCEEDED]
     failed_count = len([payment for payment in payments if payment.status == PaymentStatus.FAILED])
+    results = []
+    for payment in payments:
+        user = users.get(payment.user_id)
+        organization = organizations.get(payment.tenant_id)
+        booking = bookings.get(payment.booking_id)
+        subscription = subscriptions.get(payment.subscription_id)
+        space_id = booking.space_id if booking else subscription.space_id if subscription else None
+        space = spaces.get(space_id)
+        location = locations.get(space.location_id) if space else None
+        results.append({
+            "public_id": payment.public_id,
+            "status": payment.status.value,
+            "amount": payment.amount,
+            "amount_cents": payment.amount_cents,
+            "subtotal_cents": payment.subtotal_cents,
+            "tax_cents": payment.tax_cents,
+            "refunded_amount_cents": payment.refunded_amount_cents,
+            "currency": payment.currency,
+            "provider": payment.provider,
+            "provider_payment_id": payment.provider_payment_id,
+            "provider_reference_id": payment.provider_reference_id,
+            "failure_reason": payment.failure_reason,
+            "commission_rate_pct": payment.commission_rate_pct,
+            "platform_fee_amount": payment.platform_fee_amount,
+            "owner_net_amount": payment.owner_net_amount,
+            "member_public_id": user.public_id if user else None,
+            "member_name": _user_label(user) if user else None,
+            "member_email": user.email if user else None,
+            "organization_public_id": organization.public_id if organization else None,
+            "organization_name": organization.name if organization else None,
+            "booking_public_id": booking.public_id if booking else None,
+            "booking_start_datetime": booking.start_datetime.isoformat() if booking else None,
+            "booking_end_datetime": booking.end_datetime.isoformat() if booking else None,
+            "subscription_public_id": subscription.public_id if subscription else None,
+            "subscription_start_date": (
+                subscription.start_date.isoformat()
+                if subscription and subscription.start_date
+                else None
+            ),
+            "subscription_end_date": (
+                subscription.end_date.isoformat()
+                if subscription and subscription.end_date
+                else None
+            ),
+            "space_public_id": space.public_id if space else None,
+            "space_name": _space_label(space),
+            "space_type": space.space_type.value if space and space.space_type else None,
+            "location_public_id": location.public_id if location else None,
+            "location_name": location.name if location else None,
+            "location_city": location.city if location else None,
+            "created_at": payment.created_at.isoformat() if payment.created_at else None,
+        })
+
     return {
         "summary": {
             "gmv": sum(payment.amount or 0 for payment in succeeded),
@@ -939,20 +1024,7 @@ def list_admin_payments(
             "owner_net": sum(payment.owner_net_amount or 0 for payment in succeeded),
             "failed_payments": failed_count,
         },
-        "results": [
-            {
-                "public_id": payment.public_id,
-                "status": payment.status.value,
-                "amount": payment.amount,
-                "commission_rate_pct": payment.commission_rate_pct,
-                "platform_fee_amount": payment.platform_fee_amount,
-                "owner_net_amount": payment.owner_net_amount,
-                "member_email": users.get(payment.user_id).email if users.get(payment.user_id) else None,
-                "organization_name": organizations.get(payment.tenant_id).name if organizations.get(payment.tenant_id) else None,
-                "created_at": payment.created_at.isoformat() if payment.created_at else None,
-            }
-            for payment in payments
-        ],
+        "results": results,
     }
 
 
