@@ -36,7 +36,9 @@ export function EditSpaceClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const routeSpaceId = params?.spaceId || "";
-  const spaceId = searchParams.get("spaceId") || (routeSpaceId === "_" ? "" : routeSpaceId);
+  const spaceId =
+    searchParams.get("spaceId") ||
+    (routeSpaceId === "_" || routeSpaceId === "_.html" ? "" : routeSpaceId);
   const [form, setForm] = useState({
     name: "",
     space_type: "conference_room",

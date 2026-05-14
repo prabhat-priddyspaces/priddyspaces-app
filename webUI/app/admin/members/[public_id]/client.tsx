@@ -85,7 +85,10 @@ export function AdminMemberDetailClient() {
   const params = useParams<{ public_id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const memberPublicId = searchParams.get("id") || (params.public_id === "_" ? "" : params.public_id);
+  const routePublicId = params.public_id;
+  const memberPublicId =
+    searchParams.get("id") ||
+    (routePublicId === "_" || routePublicId === "_.html" ? "" : routePublicId);
   const [data, setData] = useState<MemberDetail | null>(null);
   const [orgActivity, setOrgActivity] = useState<OrgActivity[]>([]);
   const [error, setError] = useState("");

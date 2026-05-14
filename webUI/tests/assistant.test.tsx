@@ -75,7 +75,15 @@ describe("AssistantMount", () => {
           public_id: "msg_1",
           role: "assistant",
           content: "Review this proposal.",
-          citations: [{ type: "space", id: "space_1", url: "/spaces/space_1", title: "Space" }],
+          citations: [
+            { type: "space", id: "space_1", url: "/spaces/space_1", title: "Space" },
+            {
+              type: "location",
+              id: "loc_1",
+              url: "/meeting-rooms/_.html?id=loc_1&lat=26.132029&lng=-80.262418&radius_miles=50",
+              title: "Legacy room",
+            },
+          ],
           client_actions: [],
           proposals: [
             {
@@ -107,7 +115,11 @@ describe("AssistantMount", () => {
     expect(screen.getByText("Space")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Space/ })).toHaveAttribute(
       "href",
-      "/spaces/_.html?id=space_1&back=%2Fspaces",
+      "/spaces/space_1",
+    );
+    expect(screen.getByRole("link", { name: /Legacy room/ })).toHaveAttribute(
+      "href",
+      "/locations/loc_1?route=meeting-rooms&lat=26.132029&lng=-80.262418&radius_miles=50",
     );
     expect(screen.getByText("Talk to a human")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();

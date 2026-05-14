@@ -111,6 +111,30 @@ test("public marketplace redirects to /spaces and supports route-driven location
       return;
     }
 
+    if (key === "GET /api/marketplace/locations/loc_public_2") {
+      await json(route, {
+        ...coworkingResults.results[1],
+        spaces: [
+          {
+            public_id: "space_public_3",
+            name: "Conference 14-B",
+            space_type: "conference_room",
+            capacity: 8,
+            availability_status: "available",
+            availability_start_time: "09:00:00",
+            availability_end_time: "18:00:00",
+            price_daily: 220,
+            price_monthly: null,
+            hourly_price: 60,
+            membership_price: null,
+            amenities: ["WiFi", "Whiteboard", "TV Display"],
+            image_url: "https://images.example.com/harbor.jpg",
+          },
+        ],
+      });
+      return;
+    }
+
     if (key === "GET /api/marketplace/spaces/space_public_1") {
       await json(route, {
         space: {
@@ -307,7 +331,7 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
   await page.locator('[data-selected="true"]').filter({ hasText: "Harbor Rooms" }).click();
-  await expect(page).toHaveURL(/\/spaces\/_\?.*id=space_public_3/);
+  await expect(page).toHaveURL(/\/spaces\/space_public_3\?/);
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
   await expect(page.getByRole("button", { name: /April 15, 2026/ })).toBeVisible();
   const timeSelects = page.locator("aside select");
@@ -326,17 +350,22 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
   await page.getByRole("link", { name: "View location" }).first().click();
-  await expect(page).toHaveURL(/\/locations\/_\?.*id=loc_public_1/);
+  await expect(page).toHaveURL(/\/locations\/loc_public_1\?/);
   await expect(page).toHaveURL(/route=spaces/);
   await expect(page).toHaveURL(/q=Miami/);
   await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
   await page.getByRole("link", { name: "View space" }).first().click();
 
-  await expect(page).toHaveURL(/\/spaces\/_\?.*id=space_public_1/);
+  await expect(page).toHaveURL(/\/spaces\/space_public_1\?/);
   await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to search" }).click();
   await expect(page).toHaveURL(/\/spaces\?/);
   await expect(page).toHaveURL(/q=Miami/);
   await expect(page).toHaveURL(/date=2026-04-15/);
+
+  await page.goto("/meeting-rooms/_.html?id=loc_public_2&lat=26.132029&lng=-80.262418&radius_miles=50");
+  await expect(page).toHaveURL(/\/locations\/loc_public_2\?/);
+  await expect(page).toHaveURL(/route=meeting-rooms/);
+  await expect(page.getByRole("heading", { name: "Harbor Rooms" })).toBeVisible();
 });

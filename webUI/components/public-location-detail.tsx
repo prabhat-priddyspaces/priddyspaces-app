@@ -34,11 +34,10 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
     requestedRoute && requestedRoute in PUBLIC_MARKETPLACE_CONFIGS
       ? (requestedRoute as PublicMarketplaceRoute)
       : routeKey;
-  // The static export only ships /locations/_/index.html, so production URLs
-  // route through the placeholder with the real id in ?id=. Path param wins
-  // for dev mode.
+  const isLegacyPlaceholder =
+    !locationId || locationId === "_" || locationId === "_.html";
   const effectiveLocationId =
-    !locationId || locationId === "_" ? searchParams.get("id") || "" : locationId;
+    isLegacyPlaceholder ? searchParams.get("id") || "" : locationId;
   const filterQueryString = useMemo(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("id");

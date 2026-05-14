@@ -116,8 +116,10 @@ function decisionLine(booking: BookingRequest) {
 
 export default function BookingDetailClient({ bookingId }: { bookingId: string }) {
   const searchParams = useSearchParams();
+  const isLegacyPlaceholder =
+    !bookingId || bookingId === "_" || bookingId === "_.html";
   const effectiveBookingId =
-    !bookingId || bookingId === "_" ? searchParams.get("id") || "" : bookingId;
+    isLegacyPlaceholder ? searchParams.get("id") || "" : bookingId;
   const [booking, setBooking] = useState<BookingRequest | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);

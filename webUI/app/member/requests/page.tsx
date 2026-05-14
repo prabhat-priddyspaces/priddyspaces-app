@@ -40,8 +40,7 @@ interface BookingRequest {
 }
 
 function memberRequestDetailHref(publicId: string) {
-  const params = new URLSearchParams({ id: publicId });
-  return `/member/requests/_?${params.toString()}`;
+  return `/member/requests/${encodeURIComponent(publicId)}`;
 }
 
 function formatDateTime(value: string | null | undefined) {
