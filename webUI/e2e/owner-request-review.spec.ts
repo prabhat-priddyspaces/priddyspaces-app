@@ -5,6 +5,17 @@ import { json, meResponse, mockSession } from "./helpers/mock-api";
 test("owner can review a request and approve it with notes", async ({ page }) => {
   const requestState = {
     public_id: "req_2",
+    space_public_id: "space_boardroom_1",
+    space_name: "Board Room",
+    space_type: "conference_room",
+    location_public_id: "loc_main",
+    location_name: "Main Street Hub",
+    location_city: "Miami",
+    member_public_id: "member_riley",
+    member_name: "Riley Ortiz",
+    member_email: "riley@example.com",
+    member_phone: "555-0100",
+    member_company_name: "Northstar Labs",
     booking_id: null as number | null,
     booking_public_id: null as string | null,
     start_datetime: "2026-04-11T14:00:00.000Z",
@@ -14,7 +25,22 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
     payment_provider: "stripe",
     cancellation_deadline_at: "2026-04-10T14:00:00.000Z",
     estimated_amount: 180,
+    price_daily: 640,
+    price_monthly: null,
+    price_hourly: 120,
+    base_amount_cents: 18000,
+    rate_basis: "hourly",
+    units: 1.5,
     operator_notes: null as string | null,
+    failure_reason: null,
+    request_kind: "hourly_booking",
+    membership_plan_name: null,
+    is_guest_checkout: false,
+    guest_email: null,
+    guest_full_name: null,
+    guest_phone: null,
+    guest_company_name: null,
+    guest_notes: null,
   };
 
   await mockSession(page, "owner");
@@ -50,7 +76,11 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
   await page.goto("/owner/requests");
 
   await expect(page.getByRole("heading", { name: "Requests" })).toBeVisible();
-  await expect(page.getByText("$180").first()).toBeVisible();
+  await expect(page.getByTestId("request-member-req_2")).toHaveText("Riley Ortiz");
+  await expect(page.getByTestId("request-space-req_2")).toHaveText("Board Room");
+  await expect(page.getByText("Main Street Hub · Miami · Conference Room")).toBeVisible();
+  await expect(page.getByTestId("request-price-req_2")).toHaveText("$180");
+  await expect(page.getByText("$120/hr")).toBeVisible();
 
   const notes = page.locator("textarea").first();
   await notes.fill("Approved for the afternoon block");
@@ -67,6 +97,17 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
 test("owner request email deep link opens approve confirmation", async ({ page }) => {
   const requestState = {
     public_id: "req_email_1",
+    space_public_id: "space_training_a",
+    space_name: "Training Room A",
+    space_type: "conference_room",
+    location_public_id: "loc_training",
+    location_name: "Training Center",
+    location_city: "Austin",
+    member_public_id: "member_taylor",
+    member_name: "Taylor Kim",
+    member_email: "taylor@example.com",
+    member_phone: null,
+    member_company_name: "Brightline Co",
     booking_id: null as number | null,
     booking_public_id: null as string | null,
     start_datetime: "2026-04-12T14:00:00.000Z",
@@ -76,8 +117,16 @@ test("owner request email deep link opens approve confirmation", async ({ page }
     payment_provider: "stripe",
     cancellation_deadline_at: null,
     estimated_amount: 180,
+    price_daily: 640,
+    price_monthly: null,
+    price_hourly: 120,
+    base_amount_cents: 18000,
+    rate_basis: "hourly",
+    units: 1.5,
     operator_notes: null as string | null,
     failure_reason: null,
+    request_kind: "hourly_booking",
+    membership_plan_name: null,
     is_guest_checkout: false,
     guest_email: null,
     guest_full_name: null,
@@ -117,6 +166,8 @@ test("owner request email deep link opens approve confirmation", async ({ page }
   await page.goto("/owner/requests?request=req_email_1&decision=approve");
 
   await expect(page.getByRole("heading", { name: "Requests" })).toBeVisible();
+  await expect(page.getByTestId("request-member-req_email_1")).toHaveText("Taylor Kim");
+  await expect(page.getByTestId("request-space-req_email_1")).toHaveText("Training Room A");
   await expect(page.getByText("Approve request")).toBeVisible();
   // Deep-link opens the confirmation modal — its Approve button is the
   // last "Approve" on the page (after the row's inline Approve).

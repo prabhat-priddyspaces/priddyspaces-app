@@ -192,6 +192,10 @@ def test_booking_request_create_and_list(db_session, client_factory):
     owner_list = owner_client.get("/api/booking-requests?status=requested")
     assert owner_list.status_code == 200
     assert len(owner_list.json()) == 1
+    owner_request = owner_list.json()[0]
+    assert owner_request["member_email"] == "member@example.com"
+    assert owner_request["space_public_id"] == space.public_id
+    assert owner_request["location_name"] == "Main"
 
 
 def test_owner_notification_recipients_require_opt_in_and_location_access(db_session):

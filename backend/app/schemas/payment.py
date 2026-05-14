@@ -37,8 +37,20 @@ class PaymentOut(BaseModel):
     status: str
     tenant_id: int | None
     booking_id: int | None
+    booking_public_id: str | None = None
+    booking_start_datetime: datetime | None = None
+    booking_end_datetime: datetime | None = None
     booking_request_id: int | None = None
     subscription_id: int | None
+    subscription_public_id: str | None = None
+    subscription_start_date: str | None = None
+    subscription_end_date: str | None = None
+    space_public_id: str | None = None
+    space_name: str | None = None
+    space_type: str | None = None
+    location_public_id: str | None = None
+    location_name: str | None = None
+    location_city: str | None = None
     payment_method_id: int | None = None
     amount_cents: int | None = None
     subtotal_cents: int | None = None

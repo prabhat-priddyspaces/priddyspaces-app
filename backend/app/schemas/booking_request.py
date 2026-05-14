@@ -128,6 +128,11 @@ class BookingRequestOut(BaseModel):
     location_public_email: str | None = None
     support_contacts: list[BookingRequestSupportContact] = Field(default_factory=list)
     user_id: int | None = None
+    member_public_id: str | None = None
+    member_name: str | None = None
+    member_email: str | None = None
+    member_phone: str | None = None
+    member_company_name: str | None = None
     booking_id: int | None = None
     booking_public_id: str | None = None
     start_datetime: datetime
@@ -171,6 +176,7 @@ class BookingRequestOut(BaseModel):
 
     request_kind: BookingRequestKind = BookingRequestKind.HOURLY_BOOKING
     membership_plan_public_id: str | None = None
+    membership_plan_name: str | None = None
     desired_start_date: date | None = None
     seats_requested: int = 1
     commitment_months_snapshot: int | None = None

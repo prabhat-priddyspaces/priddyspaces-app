@@ -2,21 +2,37 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { Building2, CalendarDays, CreditCard, Download } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { downloadInvoicePdf } from "@/lib/invoice-download";
 
 interface Payment {
   id: number;
   public_id: string;
   amount: number;
+  amount_cents: number | null;
   provider: string;
   status: string;
   booking_id: number | null;
+  booking_public_id: string | null;
+  booking_start_datetime: string | null;
+  booking_end_datetime: string | null;
   subscription_id: number | null;
-  created_at: string;
+  subscription_public_id: string | null;
+  subscription_start_date: string | null;
+  subscription_end_date: string | null;
+  space_public_id: string | null;
+  space_name: string | null;
+  space_type: string | null;
+  location_name: string | null;
+  location_city: string | null;
+  failure_reason: string | null;
+  created_at: string | null;
 }
 
 interface Invoice {
@@ -30,10 +46,82 @@ const currency = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+function paymentAmount(payment: Payment): number {
+  if (payment.amount_cents != null) return payment.amount_cents / 100;
+  return payment.amount || 0;
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function titleize(value: string | null): string | null {
+  if (!value) return null;
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function statusVariant(status: string): "success" | "warning" | "danger" | "default" {
+  if (status === "succeeded" || status === "refunded" || status === "voided") return "success";
+  if (status === "failed" || status === "payment_failed") return "danger";
+  if (status === "requires_payment" || status === "pending") return "warning";
+  return "default";
+}
+
+function paymentTitle(payment: Payment): string {
+  if (payment.booking_id != null) return `Booking payment${payment.space_name ? ` · ${payment.space_name}` : ""}`;
+  if (payment.subscription_id != null) {
+    return `Membership charge${payment.space_name ? ` · ${payment.space_name}` : ""}`;
+  }
+  return "Payment";
+}
+
+function paymentWhere(payment: Payment): string {
+  const location = [payment.location_name, payment.location_city].filter(Boolean).join(" · ");
+  const type = titleize(payment.space_type);
+  return [location, type].filter(Boolean).join(" · ") || payment.public_id;
+}
+
+function paymentWhen(payment: Payment): string {
+  if (payment.booking_start_datetime && payment.booking_end_datetime) {
+    return `${formatDateTime(payment.booking_start_datetime)} - ${formatDateTime(payment.booking_end_datetime)}`;
+  }
+  if (payment.subscription_start_date) {
+    const end = payment.subscription_end_date ? ` - ${formatDate(payment.subscription_end_date)}` : "";
+    return `Membership period: ${formatDate(payment.subscription_start_date)}${end}`;
+  }
+  return `Charged: ${formatDateTime(payment.created_at)}`;
+}
+
 export default function MemberPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   useEffect(() => {
     const token = getAccessToken() ?? undefined;
@@ -45,7 +133,8 @@ export default function MemberPaymentsPage() {
         setPayments(paymentsResp);
         setInvoices(invoicesResp);
       })
-      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payments"));
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payments"))
+      .finally(() => setLoading(false));
   }, []);
 
   const invoiceByPaymentId = useMemo(() => {
@@ -67,16 +156,29 @@ export default function MemberPaymentsPage() {
       {
         label: "Total Paid",
         value: currency.format(
-          succeeded.reduce((sum, payment) => sum + (payment.amount || 0), 0)
+          succeeded.reduce((sum, payment) => sum + paymentAmount(payment), 0)
         ),
       },
     ];
   }, [payments]);
 
+  async function handleDownload(publicId: string) {
+    const token = getAccessToken() ?? undefined;
+    setDownloading(publicId);
+    setMessage("");
+    try {
+      await downloadInvoicePdf(publicId, token);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to download invoice PDF");
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background px-6 py-8">
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-textPrimary">Payments</h1>
             <p className="mt-1 text-textSecondary">
@@ -105,31 +207,58 @@ export default function MemberPaymentsPage() {
         </div>
 
         <Card className="mt-6 p-4">
-          {payments.length === 0 ? (
+          {loading ? (
+            <div className="text-sm text-textMuted">Loading payments...</div>
+          ) : payments.length === 0 ? (
             <div className="text-sm text-textMuted">No payments yet.</div>
           ) : (
             <div className="grid gap-3">
               {payments.map((payment) => {
                 const invoice = invoiceByPaymentId.get(payment.id);
                 return (
-                  <div key={payment.public_id} className="rounded-md border border-border p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-textPrimary">{payment.public_id}</div>
-                        <div className="mt-1 text-xs text-textMuted">
-                          {currency.format(payment.amount)} • {payment.status} • {payment.provider}
+                  <div key={payment.public_id} className="rounded-lg border border-border p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CreditCard size={16} className="text-accent" />
+                          <div className="text-sm font-semibold text-textPrimary">{paymentTitle(payment)}</div>
+                          <Badge variant={statusVariant(payment.status)} dot>
+                            {payment.status.replace(/_/g, " ")}
+                          </Badge>
                         </div>
                         <div className="mt-1 text-xs text-textMuted">
-                          {payment.subscription_id != null
-                            ? "Membership charge"
-                            : payment.booking_id != null
-                              ? "Booking payment"
-                              : "General payment"}
-                          {" • "}
-                          {new Date(payment.created_at).toLocaleString()}
+                          {payment.public_id} · {payment.provider}
+                        </div>
+                        <div className="mt-3 grid gap-1.5 text-sm text-textSecondary">
+                          <div className="flex items-start gap-2">
+                            <Building2 size={14} className="mt-0.5 flex-none text-textMuted" />
+                            <span>{paymentWhere(payment)}</span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <CalendarDays size={14} className="mt-0.5 flex-none text-textMuted" />
+                            <span>{paymentWhen(payment)}</span>
+                          </div>
+                          {invoice ? <div>Invoice {invoice.public_id}</div> : null}
+                          {payment.failure_reason ? (
+                            <div className="text-error">{payment.failure_reason}</div>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-col items-start gap-2 sm:items-end">
+                        <div className="font-mono text-lg font-semibold text-textPrimary">
+                          {currency.format(paymentAmount(payment))}
+                        </div>
+                        {invoice ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleDownload(invoice.public_id)}
+                            disabled={downloading === invoice.public_id}
+                          >
+                            <Download size={14} />
+                            {downloading === invoice.public_id ? "Preparing..." : "Download invoice"}
+                          </Button>
+                        ) : null}
                         {invoice ? (
                           <Link href="/member/invoices">
                             <Button size="sm" variant="secondary">

@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.db.deps import get_db
 from app.models.payment import Payment
 from app.models.booking import Booking
+from app.models.location import Location
 from app.models.subscription import Subscription
 from app.models.space import Space
 from app.models.enums import AvailabilityStatus
@@ -36,6 +37,62 @@ from app.services.stripe_payments import (
 from app.models.subscription_plan import SubscriptionPlan
 
 router = APIRouter()
+
+
+def _payment_context(
+    db: Session, payment: Payment
+) -> tuple[Booking | None, Subscription | None, Space | None, Location | None]:
+    booking = db.query(Booking).filter(Booking.id == payment.booking_id).first() if payment.booking_id else None
+    subscription = (
+        db.query(Subscription).filter(Subscription.id == payment.subscription_id).first()
+        if payment.subscription_id
+        else None
+    )
+    space_id = booking.space_id if booking else subscription.space_id if subscription else None
+    space = db.query(Space).filter(Space.id == space_id).first() if space_id else None
+    location = db.query(Location).filter(Location.id == space.location_id).first() if space else None
+    return booking, subscription, space, location
+
+
+def _to_out(db: Session, payment: Payment) -> PaymentOut:
+    booking, subscription, space, location = _payment_context(db, payment)
+    return PaymentOut(
+        id=payment.id,
+        public_id=payment.public_id,
+        amount=payment.amount,
+        provider=payment.provider,
+        status=payment.status.value if payment.status else "",
+        tenant_id=payment.tenant_id,
+        booking_id=payment.booking_id,
+        booking_public_id=booking.public_id if booking else None,
+        booking_start_datetime=booking.start_datetime if booking else None,
+        booking_end_datetime=booking.end_datetime if booking else None,
+        booking_request_id=payment.booking_request_id,
+        subscription_id=payment.subscription_id,
+        subscription_public_id=subscription.public_id if subscription else None,
+        subscription_start_date=subscription.start_date.isoformat() if subscription and subscription.start_date else None,
+        subscription_end_date=subscription.end_date.isoformat() if subscription and subscription.end_date else None,
+        space_public_id=space.public_id if space else None,
+        space_name=space.name if space else None,
+        space_type=space.space_type.value if space and space.space_type else None,
+        location_public_id=location.public_id if location else None,
+        location_name=location.name if location else None,
+        location_city=location.city if location else None,
+        payment_method_id=payment.payment_method_id,
+        amount_cents=payment.amount_cents,
+        subtotal_cents=payment.subtotal_cents,
+        discount_cents=payment.discount_cents,
+        tax_cents=payment.tax_cents,
+        refunded_amount_cents=payment.refunded_amount_cents,
+        currency=payment.currency,
+        provider_payment_id=payment.provider_payment_id,
+        provider_reference_id=payment.provider_reference_id,
+        failure_reason=payment.failure_reason,
+        commission_rate_pct=payment.commission_rate_pct,
+        platform_fee_amount=payment.platform_fee_amount,
+        owner_net_amount=payment.owner_net_amount,
+        created_at=payment.created_at,
+    )
 
 
 def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -261,7 +318,7 @@ def list_payments(
 
     if status is not None:
         payments = [payment for payment in payments if payment.status == status]
-    return payments
+    return [_to_out(db, payment) for payment in payments]
 
 
 @router.get("/payments/{public_id}", response_model=PaymentOut)
@@ -277,11 +334,11 @@ def get_payment(
     if user.role == UserAppRole.MEMBER:
         if payment.user_id != user.id:
             raise HTTPException(status_code=404, detail="Payment not found")
-        return payment
+        return _to_out(db, payment)
 
     if not _payment_visible_to_member(db, user.id, payment):
         raise HTTPException(status_code=404, detail="Payment not found")
-    return payment
+    return _to_out(db, payment)
 
 
 @router.get("/owner/payout-summary", response_model=OwnerPayoutSummaryOut)

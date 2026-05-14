@@ -231,16 +231,23 @@ def _to_out(
         location = db.query(Location).filter(Location.id == space.location_id).first()
     estimated = None
     estimate: EstimateResult | None = None
+    member = None
     request_kind = req.request_kind or BookingRequestKind.HOURLY_BOOKING.value
     is_membership = request_kind in (
         BookingRequestKind.MEMBERSHIP_PURCHASE.value,
         BookingRequestKind.LEASE_PURCHASE.value,
     )
     membership_plan_public_id = None
+    membership_plan_name = None
+    if db and space:
+        location = db.query(Location).filter(Location.id == space.location_id).first()
+    if db and req.user_id:
+        member = db.query(User).filter(User.id == req.user_id).first()
     if db and is_membership and req.membership_plan_id:
         plan = db.query(MembershipPlan).filter(MembershipPlan.id == req.membership_plan_id).first()
         if plan:
             membership_plan_public_id = plan.public_id
+            membership_plan_name = plan.name
             estimated = cents_to_money(plan.price_cents)
     if space and not is_membership:
         rate_type = None
@@ -350,6 +357,15 @@ def _to_out(
         location_public_email=location.public_email if location else None,
         support_contacts=_support_contacts_for_location(db, location),
         user_id=req.user_id,
+        member_public_id=member.public_id if member else None,
+        member_name=(
+            member.full_name
+            or " ".join(part for part in [member.first_name, member.last_name] if part)
+            or None
+        ) if member else None,
+        member_email=member.email if member else None,
+        member_phone=member.phone if member else None,
+        member_company_name=member.company_name if member else None,
         booking_id=req.booking_id,
         booking_public_id=booking.public_id if booking else None,
         start_datetime=req.start_datetime,
@@ -391,6 +407,7 @@ def _to_out(
         last_payment=last_payment_summary,
         request_kind=BookingRequestKind(request_kind),
         membership_plan_public_id=membership_plan_public_id,
+        membership_plan_name=membership_plan_name,
         desired_start_date=req.desired_start_date,
         seats_requested=req.seats_requested or 1,
         commitment_months_snapshot=req.commitment_months_snapshot,

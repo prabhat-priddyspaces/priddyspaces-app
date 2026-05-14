@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { Download } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { downloadInvoicePdf } from "@/lib/invoice-download";
 import { formatUsd, type MoneyValue } from "@/lib/money";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,6 +124,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   async function load() {
     if (!effectiveBookingId) {
@@ -194,6 +197,19 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
       setError(err instanceof Error ? err.message : "Unable to cancel request");
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function handleInvoiceDownload(publicId: string) {
+    const token = getAccessToken() ?? undefined;
+    setDownloadingInvoice(true);
+    setError("");
+    try {
+      await downloadInvoicePdf(publicId, token);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to download invoice PDF");
+    } finally {
+      setDownloadingInvoice(false);
     }
   }
 
@@ -396,11 +412,14 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                         View all invoices
                       </Button>
                     </Link>
-                    {relatedInvoice.pdf_url ? (
-                      <a href={relatedInvoice.pdf_url} target="_blank" rel="noreferrer">
-                        <Button size="sm">Download PDF</Button>
-                      </a>
-                    ) : null}
+                    <Button
+                      size="sm"
+                      onClick={() => handleInvoiceDownload(relatedInvoice.public_id)}
+                      disabled={downloadingInvoice}
+                    >
+                      <Download size={14} />
+                      {downloadingInvoice ? "Preparing..." : "Download PDF"}
+                    </Button>
                   </div>
                 </>
               ) : (

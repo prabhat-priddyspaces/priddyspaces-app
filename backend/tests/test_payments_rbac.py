@@ -50,6 +50,7 @@ def _seed_tenant(db, owner: User, name: str):
     space = Space(
         location_id=location.id,
         tenant_id=org.id,
+        name=f"{name} Board Room",
         space_type=SpaceType.CONFERENCE_ROOM,
         capacity=4,
         availability_status=AvailabilityStatus.AVAILABLE
@@ -113,6 +114,9 @@ def test_payments_rbac_list_and_get(db_session, client_factory):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["public_id"] == payment_one.public_id
+    assert data[0]["booking_public_id"] == booking_one.public_id
+    assert data[0]["space_name"] == "OrgOne Board Room"
+    assert data[0]["location_name"] == "OrgOne HQ"
 
     other_owner_client = client_factory({
         "sub": "sub-owner-2",
@@ -132,3 +136,4 @@ def test_payments_rbac_list_and_get(db_session, client_factory):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["public_id"] == payment_one.public_id
+    assert data[0]["space_name"] == "OrgOne Board Room"

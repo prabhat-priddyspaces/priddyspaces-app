@@ -45,6 +45,17 @@ import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface BookingRequest {
   public_id: string;
+  space_public_id: string | null;
+  space_name: string | null;
+  space_type: string | null;
+  location_public_id: string | null;
+  location_name: string | null;
+  location_city: string | null;
+  member_public_id: string | null;
+  member_name: string | null;
+  member_email: string | null;
+  member_phone: string | null;
+  member_company_name: string | null;
   booking_id: number | null;
   booking_public_id: string | null;
   start_datetime: string;
@@ -62,6 +73,14 @@ interface BookingRequest {
   guest_phone: string | null;
   guest_company_name: string | null;
   guest_notes: string | null;
+  membership_plan_name: string | null;
+  price_daily: MoneyValue | null;
+  price_monthly: MoneyValue | null;
+  price_hourly: MoneyValue | null;
+  base_amount_cents: number | null;
+  rate_basis: string | null;
+  units: number | null;
+  request_kind: string;
 }
 
 type StatusFilter =
@@ -102,19 +121,144 @@ function statusToBadge(status: string): {
   }
 }
 
+function present(value: string | null | undefined): value is string {
+  return Boolean(value);
+}
+
 function requesterDisplay(req: BookingRequest): {
   name: string;
   sub: string;
 } {
   if (req.is_guest_checkout) {
+    const guestSub = [req.guest_company_name, req.guest_email]
+      .filter(present)
+      .join(" · ");
     return {
       name: req.guest_full_name || req.guest_email || "Guest",
-      sub: req.guest_company_name || req.guest_email || "Guest checkout",
+      sub: guestSub || "Guest checkout",
     };
   }
+  const memberSub = [
+    req.member_company_name,
+    req.member_email,
+    req.booking_public_id ? `Booking ${req.booking_public_id}` : null,
+  ]
+    .filter(present)
+    .join(" · ");
   return {
-    name: `Request ${req.public_id.slice(0, 8)}…`,
-    sub: req.booking_public_id ? `Booking ${req.booking_public_id}` : "Member",
+    name: req.member_name || req.member_email || "Member",
+    sub: memberSub || (req.booking_public_id ? `Booking ${req.booking_public_id}` : "Member"),
+  };
+}
+
+function titleize(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function spaceDisplay(req: BookingRequest): {
+  name: string;
+  sub: string;
+  type: string | null;
+} {
+  const type = titleize(req.space_type);
+  const location = [req.location_name, req.location_city]
+    .filter(present)
+    .filter((part, index, parts) => parts.indexOf(part) === index)
+    .join(" · ");
+  const fallbackSpace = req.space_public_id ? `Space ${req.space_public_id.slice(0, 8)}…` : "Space";
+
+  if (req.membership_plan_name) {
+    return {
+      name: req.membership_plan_name,
+      sub: [req.space_name || fallbackSpace, location].filter(present).join(" · ") || type || "Membership",
+      type,
+    };
+  }
+
+  return {
+    name: req.space_name || fallbackSpace,
+    sub: [location, type].filter(present).join(" · ") || "Room request",
+    type,
+  };
+}
+
+function compactNumber(value: number): string {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function requestKindLabel(req: BookingRequest): string {
+  switch (req.request_kind) {
+    case "daily_booking":
+      return "Day pass";
+    case "membership_purchase":
+      return "Membership";
+    case "lease_purchase":
+      return "Lease";
+    default:
+      return "Booking";
+  }
+}
+
+function rateBasisLabel(rateBasis: string | null): string | null {
+  switch (rateBasis) {
+    case "hourly":
+      return "Hourly";
+    case "rule_hourly":
+      return "Hourly promo";
+    case "daily":
+      return "Day rate";
+    case "rule_daily":
+      return "Day promo";
+    case "capped_to_daily":
+      return "Daily cap";
+    case "monthly_fallback":
+      return "Monthly fallback";
+    default:
+      return null;
+  }
+}
+
+function priceDisplay(req: BookingRequest): {
+  total: string;
+  rate: string;
+  detail: string;
+} {
+  const total = req.estimated_amount != null ? formatUsd(req.estimated_amount) : "—";
+  const basis = req.rate_basis;
+  const basePerUnit =
+    req.base_amount_cents != null && req.units != null && req.units > 0
+      ? req.base_amount_cents / 100 / req.units
+      : null;
+  const isRuleRate = basis === "rule_hourly" || basis === "rule_daily";
+  const isHourly = basis === "hourly" || basis === "rule_hourly";
+  const isMonthly = basis === "monthly_fallback";
+  const unitSuffix = isMonthly ? "mo" : isHourly ? "hr" : "day";
+  const unitLabel = isHourly ? "hour" : "day";
+  const rateAmount: MoneyValue | null =
+    isRuleRate && basePerUnit != null
+      ? basePerUnit
+      : isHourly
+      ? req.price_hourly ?? basePerUnit
+      : isMonthly
+      ? req.price_monthly ?? basePerUnit
+      : req.price_daily ?? basePerUnit;
+  const rate = rateAmount != null ? `${formatUsd(rateAmount)}/${unitSuffix}` : "Rate unavailable";
+  const basisLabel = rateBasisLabel(basis) || requestKindLabel(req);
+  const units =
+    req.units != null && req.units > 0
+      ? `${compactNumber(req.units)} ${unitLabel}${req.units === 1 ? "" : "s"}`
+      : null;
+  return {
+    total,
+    rate,
+    detail: [basisLabel, units].filter(Boolean).join(" · "),
   };
 }
 
@@ -296,6 +440,8 @@ export default function OwnerRequestsPage() {
   const pendingRequest = pendingDecision
     ? bookings.find((request) => request.public_id === pendingDecision.publicId)
     : null;
+  const pendingRequester = pendingRequest ? requesterDisplay(pendingRequest) : null;
+  const pendingRoom = pendingRequest ? spaceDisplay(pendingRequest) : null;
 
   return (
     <AppShell
@@ -363,34 +509,43 @@ export default function OwnerRequestsPage() {
         </Card>
       ) : (
         <Card padded={false} className="overflow-hidden">
-          <div className="hidden md:grid grid-cols-[1.6fr_1.2fr_1fr_120px_120px_140px] px-4 py-2.5 border-b border-line text-[11px] text-text-3 font-semibold uppercase tracking-[0.06em] bg-surface-2">
-            <div>Requester</div>
-            <div>Space &amp; time</div>
-            <div>Note</div>
-            <div>Payment</div>
+          <div className="hidden lg:grid grid-cols-[1.35fr_1.6fr_1.15fr_1fr_110px_145px] gap-4 px-4 py-2.5 border-b border-line text-[11px] text-text-3 font-semibold uppercase tracking-[0.06em] bg-surface-2">
+            <div>Member</div>
+            <div>Space / room</div>
+            <div>Date &amp; time</div>
+            <div>Price / rate</div>
             <div>Status</div>
             <div className="text-right">Actions</div>
           </div>
           {filtered.map((request, i) => {
             const reqDisplay = requesterDisplay(request);
+            const roomDisplay = spaceDisplay(request);
+            const price = priceDisplay(request);
             const badge = statusToBadge(request.status);
             const range = timeRange(request);
             const isPending = request.status === "requested";
             const isFailed = request.status === "payment_failed";
+            const paymentLine = `${request.payment_status || "Not charged"}${
+              request.payment_provider ? ` · ${request.payment_provider}` : ""
+            }`;
             return (
               <div
                 key={request.public_id}
                 id={`request-${request.public_id}`}
+                data-testid={`request-row-${request.public_id}`}
                 className={cn(
-                  "grid md:grid-cols-[1.6fr_1.2fr_1fr_120px_120px_140px] grid-cols-1 px-4 py-3 items-center gap-2",
+                  "grid lg:grid-cols-[1.35fr_1.6fr_1.15fr_1fr_110px_145px] grid-cols-1 px-4 py-4 items-start gap-3 lg:gap-4",
                   i > 0 && "border-t border-line"
                 )}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Avatar name={reqDisplay.name} size={32} />
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <Avatar name={reqDisplay.name} size={36} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-semibold truncate">
+                      <span
+                        className="text-[13px] font-semibold truncate"
+                        data-testid={`request-member-${request.public_id}`}
+                      >
                         {reqDisplay.name}
                       </span>
                       {request.is_guest_checkout && (
@@ -402,8 +557,34 @@ export default function OwnerRequestsPage() {
                     </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[12px] font-medium">{range || "—"}</div>
+
+                <div className="min-w-0">
+                  <div className="lg:hidden mb-1 text-[10px] uppercase tracking-[0.06em] text-text-3 font-semibold">
+                    Space / room
+                  </div>
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-lg bg-brand-soft text-brand">
+                      <Building2 size={14} />
+                    </div>
+                    <div className="min-w-0">
+                      <div
+                        className="text-[13px] font-semibold text-text truncate"
+                        data-testid={`request-space-${request.public_id}`}
+                      >
+                        {roomDisplay.name}
+                      </div>
+                      <div className="text-[11px] text-text-3 truncate">
+                        {roomDisplay.sub}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <div className="lg:hidden mb-1 text-[10px] uppercase tracking-[0.06em] text-text-3 font-semibold">
+                    Date &amp; time
+                  </div>
+                  <div className="text-[12px] font-semibold text-text">{range || "—"}</div>
                   <div className="text-[11px] text-text-3">
                     {ageOf(request)}
                     {formatDeadline(request.cancellation_deadline_at) ? (
@@ -416,40 +597,40 @@ export default function OwnerRequestsPage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="text-[12px] text-text-2 leading-snug min-w-0 truncate">
-                  {request.operator_notes ? (
-                    request.operator_notes
-                  ) : request.guest_notes ? (
-                    request.guest_notes
-                  ) : (
-                    <span className="text-text-4">No note</span>
-                  )}
-                </div>
-                <div>
-                  <div
-                    className="font-mono text-[13px] font-semibold"
-                    style={{ fontVariantNumeric: "tabular-nums" }}
-                  >
-                    {request.estimated_amount != null
-                      ? formatUsd(request.estimated_amount)
-                      : "—"}
+
+                <div className="min-w-0">
+                  <div className="lg:hidden mb-1 text-[10px] uppercase tracking-[0.06em] text-text-3 font-semibold">
+                    Price / rate
                   </div>
                   <div
+                    className="font-mono text-[14px] font-semibold text-text"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                    data-testid={`request-price-${request.public_id}`}
+                  >
+                    {price.total}
+                  </div>
+                  <div className="text-[11px] font-medium text-text-2">{price.rate}</div>
+                  <div
                     className={cn(
-                      "text-[10px] mt-px",
+                      "text-[10px] mt-px truncate",
                       isFailed ? "text-danger" : "text-text-3"
                     )}
                   >
-                    {request.payment_status || "Not charged"}
-                    {request.payment_provider ? ` · ${request.payment_provider}` : ""}
+                    {price.detail}
+                    {" · "}
+                    {paymentLine}
                   </div>
                 </div>
+
                 <div>
+                  <div className="lg:hidden mb-1 text-[10px] uppercase tracking-[0.06em] text-text-3 font-semibold">
+                    Status
+                  </div>
                   <Badge variant={badge.variant} dot>
                     {badge.label}
                   </Badge>
                 </div>
-                <div className="flex gap-1.5 justify-end">
+                <div className="flex gap-1.5 justify-start lg:justify-end">
                   {isPending && (
                     <>
                       <Button
@@ -493,7 +674,7 @@ export default function OwnerRequestsPage() {
                     </Button>
                   )}
                 </div>
-                <div className="md:col-span-6 mt-2 grid gap-1.5">
+                <div className="lg:col-span-6 mt-1 grid gap-2">
                   {request.is_guest_checkout &&
                     (request.guest_email ||
                       request.guest_full_name ||
@@ -565,6 +746,19 @@ export default function OwnerRequestsPage() {
                         </div>
                       </div>
                     )}
+                  {request.operator_notes ? (
+                    <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-[12px] text-text-2">
+                      <span className="font-semibold text-text">Operator note: </span>
+                      <span className="whitespace-pre-line">
+                        {request.operator_notes}
+                      </span>
+                    </div>
+                  ) : !request.is_guest_checkout && request.guest_notes ? (
+                    <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-[12px] text-text-2">
+                      <span className="font-semibold text-text">Request note: </span>
+                      <span className="whitespace-pre-line">{request.guest_notes}</span>
+                    </div>
+                  ) : null}
                   <label
                     className="text-[11px] text-text-3"
                     htmlFor={`note-${request.public_id}`}
@@ -580,14 +774,14 @@ export default function OwnerRequestsPage() {
                         [request.public_id]: e.target.value,
                       }))
                     }
-                    rows={2}
+                    rows={1}
                     disabled={!isPending && !isFailed}
-                    className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full min-h-10 rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring disabled:opacity-60 disabled:cursor-not-allowed"
                     placeholder="Add notes for the member or your internal team"
                   />
                 </div>
                 {isFailed && (
-                  <div className="md:col-span-6 mt-2 rounded-xl border border-danger/30 bg-danger-soft p-3 text-[12px] text-danger">
+                  <div className="lg:col-span-6 mt-2 rounded-xl border border-danger/30 bg-danger-soft p-3 text-[12px] text-danger">
                     <div className="font-semibold">Payment failed</div>
                     <div className="mt-1">
                       {request.failure_reason || FAILURE_FALLBACK}
@@ -645,7 +839,7 @@ export default function OwnerRequestsPage() {
                 : "Reject request"}
             </div>
             <div className="mt-1.5 text-[13px] text-text-3">
-              Request {pendingRequest.public_id.slice(0, 8)}… for{" "}
+              {pendingRequester?.name}&apos;s request for {pendingRoom?.name} on{" "}
               {timeRange(pendingRequest)}.
             </div>
             <div className="mt-4 flex justify-end gap-2">
