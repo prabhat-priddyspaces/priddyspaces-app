@@ -105,10 +105,28 @@ class BookingPaymentSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BookingRequestSupportContact(BaseModel):
+    name: str
+    title: str
+
+
 class BookingRequestOut(BaseModel):
     public_id: str
+    created_at: datetime | None = None
     space_id: int
     space_public_id: str | None = None
+    space_name: str | None = None
+    space_type: str | None = None
+    location_public_id: str | None = None
+    location_name: str | None = None
+    location_address: str | None = None
+    location_city: str | None = None
+    location_state: str | None = None
+    location_postal_code: str | None = None
+    location_timezone: str | None = None
+    location_public_phone: str | None = None
+    location_public_email: str | None = None
+    support_contacts: list[BookingRequestSupportContact] = Field(default_factory=list)
     user_id: int | None = None
     booking_id: int | None = None
     booking_public_id: str | None = None
@@ -122,6 +140,7 @@ class BookingRequestOut(BaseModel):
     loyalty_points_used: int = 0
     loyalty_discount_cents: int = 0
     approved_at: datetime | None = None
+    rejected_at: datetime | None = None
     cancelled_at: datetime | None = None
     cancellation_deadline_at: datetime | None = None
     payment_authorization_consent_at: datetime | None = None

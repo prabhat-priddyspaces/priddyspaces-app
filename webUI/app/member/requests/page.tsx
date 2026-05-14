@@ -11,20 +11,86 @@ import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface BookingRequest {
   public_id: string;
+  created_at: string | null;
   booking_id: number | null;
   booking_public_id: string | null;
+  space_public_id: string | null;
+  space_name: string | null;
+  space_type: string | null;
+  location_public_id: string | null;
+  location_name: string | null;
+  location_address: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  location_postal_code: string | null;
+  location_timezone: string | null;
+  location_public_phone: string | null;
+  location_public_email: string | null;
+  support_contacts: Array<{ name: string; title: string }>;
   estimated_amount: MoneyValue | null;
   start_datetime: string;
   end_datetime: string;
   status: string;
   payment_status: string | null;
   payment_provider: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  cancelled_at: string | null;
   cancellation_deadline_at: string | null;
 }
 
 function memberRequestDetailHref(publicId: string) {
   const params = new URLSearchParams({ id: publicId });
   return `/member/requests/_?${params.toString()}`;
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return date.toLocaleString();
+}
+
+function formatStatus(value: string | null | undefined) {
+  return (value || "unknown").replaceAll("_", " ");
+}
+
+function formatSpaceType(value: string | null | undefined) {
+  if (!value) return "Space";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatAddress(request: BookingRequest) {
+  const locality = [request.location_city, request.location_state, request.location_postal_code]
+    .filter(Boolean)
+    .join(", ");
+  return [request.location_address, locality].filter(Boolean).join(" ");
+}
+
+function contactLine(request: BookingRequest) {
+  const contact = request.support_contacts?.[0];
+  const parts = [
+    contact ? `${contact.name} (${contact.title})` : null,
+    request.location_public_phone,
+    request.location_public_email,
+  ].filter(Boolean);
+  return parts.join(" • ");
+}
+
+function decisionLine(request: BookingRequest) {
+  if (request.status === "approved" && request.approved_at) {
+    return `Approved at ${formatDateTime(request.approved_at)}`;
+  }
+  if (request.status === "rejected" && request.rejected_at) {
+    return `Rejected at ${formatDateTime(request.rejected_at)}`;
+  }
+  if (request.status === "cancelled" && request.cancelled_at) {
+    return `Cancelled at ${formatDateTime(request.cancelled_at)}`;
+  }
+  return null;
 }
 
 export default function MemberRequestsPage() {
@@ -110,14 +176,29 @@ export default function MemberRequestsPage() {
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="text-sm">
                     <div className="font-medium text-textPrimary">
-                      {new Date(b.start_datetime).toLocaleString()} –{" "}
-                      {new Date(b.end_datetime).toLocaleString()}
+                      {b.space_name || formatSpaceType(b.space_type)}
                     </div>
                     <div className="mt-1 text-textMuted">
-                      Status: <span className="capitalize">{b.status}</span>
+                      {formatSpaceType(b.space_type)}
+                      {b.location_name ? ` • ${b.location_name}` : ""}
+                    </div>
+                    {formatAddress(b) ? (
+                      <div className="mt-1 text-textMuted">Location: {formatAddress(b)}</div>
+                    ) : null}
+                    <div className="mt-1 text-textMuted">
+                      Booking: {formatDateTime(b.start_datetime)} – {formatDateTime(b.end_datetime)}
                     </div>
                     <div className="mt-1 text-textMuted">
-                      Payment: <span className="capitalize">{b.payment_status || "not charged"}</span>
+                      Request sent: {formatDateTime(b.created_at)}
+                    </div>
+                    <div className="mt-1 text-textMuted">
+                      Status: <span className="capitalize">{formatStatus(b.status)}</span>
+                    </div>
+                    {decisionLine(b) ? (
+                      <div className="mt-1 text-textMuted">{decisionLine(b)}</div>
+                    ) : null}
+                    <div className="mt-1 text-textMuted">
+                      Payment: <span className="capitalize">{formatStatus(b.payment_status || "not charged")}</span>
                       {b.payment_provider ? ` • ${b.payment_provider}` : ""}
                     </div>
                     {b.cancellation_deadline_at ? (
@@ -129,6 +210,9 @@ export default function MemberRequestsPage() {
                       <div className="mt-1 text-textMuted">
                         Estimated: {formatUsd(b.estimated_amount)}
                       </div>
+                    ) : null}
+                    {contactLine(b) ? (
+                      <div className="mt-1 text-textMuted">Contact: {contactLine(b)}</div>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">

@@ -44,6 +44,7 @@ from app.schemas.booking_request import (
     BookingRequestDecision,
     BookingRequestOut,
     BookingRequestRetryPayment,
+    BookingRequestSupportContact,
     GuestBookingRequestCreate,
     GuestBookingRequestOut,
 )
@@ -153,6 +154,69 @@ def _instant_booking_enabled(db: Session, space: Space) -> bool:
     return tenant_flag is not None
 
 
+def _user_display_name(user: User) -> str | None:
+    if user.full_name and user.full_name.strip():
+        return user.full_name.strip()
+    parts = [
+        part.strip()
+        for part in [user.first_name or "", user.last_name or ""]
+        if part and part.strip()
+    ]
+    if parts:
+        return " ".join(parts)
+    return None
+
+
+def _contact_title(role: UserRole) -> str:
+    if role == UserRole.OWNER:
+        return "Owner"
+    if role == UserRole.ADMIN:
+        return "Admin"
+    return "Team"
+
+
+def _support_contacts_for_location(
+    db: Session | None,
+    location: Location | None,
+) -> list[BookingRequestSupportContact]:
+    if db is None or location is None:
+        return []
+    contact_rows = (
+        db.query(OrganizationMember, User)
+        .join(User, User.id == OrganizationMember.user_id)
+        .filter(
+            OrganizationMember.organization_id == location.organization_id,
+            OrganizationMember.is_active.is_(True),
+            OrganizationMember.role.in_([UserRole.OWNER, UserRole.ADMIN]),
+        )
+        .all()
+    )
+    role_priority = {UserRole.OWNER: 0, UserRole.ADMIN: 1}
+    contacts: list[BookingRequestSupportContact] = []
+    seen_contacts: set[str] = set()
+    for member, user in sorted(
+        contact_rows,
+        key=lambda item: (role_priority.get(item[0].role, 99), item[0].id),
+    ):
+        name = _user_display_name(user)
+        if not name:
+            continue
+        dedupe_key = name.casefold()
+        if dedupe_key in seen_contacts:
+            continue
+        seen_contacts.add(dedupe_key)
+        contacts.append(BookingRequestSupportContact(name=name, title=_contact_title(member.role)))
+        if len(contacts) == 2:
+            break
+    return contacts
+
+
+def _space_type_value(space: Space | None) -> str | None:
+    if not space:
+        return None
+    return getattr(space.space_type, "value", space.space_type)
+
+
 def _to_out(
     req: BookingRequest,
     space: Space | None,
@@ -162,6 +226,9 @@ def _to_out(
     price_daily = space.price_daily if space else None
     price_monthly = space.price_monthly if space else None
     price_hourly = space.price_hourly if space else None
+    location = None
+    if db and space:
+        location = db.query(Location).filter(Location.id == space.location_id).first()
     estimated = None
     estimate: EstimateResult | None = None
     request_kind = req.request_kind or BookingRequestKind.HOURLY_BOOKING.value
@@ -189,7 +256,6 @@ def _to_out(
             tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
             if tax:
                 tax_rate = tax.rate_percent
-            location = db.query(Location).filter(Location.id == space.location_id).first()
             if location and location.booking_granularity:
                 granularity_minutes = _granularity_to_minutes(location.booking_granularity)
             volume_discounts = _active_volume_discounts(db, space.id)
@@ -268,8 +334,21 @@ def _to_out(
             loyalty_discount_cents = lock.discount_cents or 0
     return BookingRequestOut(
         public_id=req.public_id,
+        created_at=req.created_at,
         space_id=req.space_id,
         space_public_id=space.public_id if space else None,
+        space_name=space.name if space else None,
+        space_type=_space_type_value(space),
+        location_public_id=location.public_id if location else None,
+        location_name=location.name if location else None,
+        location_address=location.address if location else None,
+        location_city=location.city if location else None,
+        location_state=location.state if location else None,
+        location_postal_code=location.postal_code if location else None,
+        location_timezone=location.timezone if location else None,
+        location_public_phone=location.public_phone if location else None,
+        location_public_email=location.public_email if location else None,
+        support_contacts=_support_contacts_for_location(db, location),
         user_id=req.user_id,
         booking_id=req.booking_id,
         booking_public_id=booking.public_id if booking else None,
@@ -283,6 +362,7 @@ def _to_out(
         loyalty_points_used=loyalty_points_used,
         loyalty_discount_cents=loyalty_discount_cents,
         approved_at=req.approved_at,
+        rejected_at=req.rejected_at,
         cancelled_at=req.cancelled_at,
         cancellation_deadline_at=req.cancellation_deadline_at,
         payment_authorization_consent_at=req.payment_authorization_consent_at,
@@ -1115,6 +1195,7 @@ def reject_booking_request(
     release_redemption_for_request(db, req, reason="released")
     req.status = BookingRequestStatus.REJECTED
     req.operator_notes = payload.operator_notes
+    req.rejected_at = datetime.now(timezone.utc)
     db.add(req)
     db.commit()
     db.refresh(req)

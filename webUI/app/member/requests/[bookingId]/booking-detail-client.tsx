@@ -21,7 +21,20 @@ interface PaymentSummary {
 
 interface BookingRequest {
   public_id: string;
+  created_at: string | null;
   space_public_id: string | null;
+  space_name: string | null;
+  space_type: string | null;
+  location_public_id: string | null;
+  location_name: string | null;
+  location_address: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  location_postal_code: string | null;
+  location_timezone: string | null;
+  location_public_phone: string | null;
+  location_public_email: string | null;
+  support_contacts: Array<{ name: string; title: string }>;
   booking_id: number | null;
   booking_public_id: string | null;
   start_datetime: string;
@@ -32,6 +45,7 @@ interface BookingRequest {
   cancellation_deadline_at: string | null;
   cancelled_at: string | null;
   approved_at: string | null;
+  rejected_at: string | null;
   operator_notes: string | null;
   estimated_amount: MoneyValue | null;
   payment_attempt_count: number | null;
@@ -56,7 +70,46 @@ interface Invoice {
   booking_id: number | null;
   payment_id: number | null;
   pdf_url: string | null;
-  created_at: string;
+  created_at: string | null;
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return date.toLocaleString();
+}
+
+function formatStatus(value: string | null | undefined) {
+  return (value || "unknown").replaceAll("_", " ");
+}
+
+function formatSpaceType(value: string | null | undefined) {
+  if (!value) return "Space";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatAddress(booking: BookingRequest) {
+  const locality = [booking.location_city, booking.location_state, booking.location_postal_code]
+    .filter(Boolean)
+    .join(", ");
+  return [booking.location_address, locality].filter(Boolean).join(" ");
+}
+
+function decisionLine(booking: BookingRequest) {
+  if (booking.status === "approved" && booking.approved_at) {
+    return `Approved at ${formatDateTime(booking.approved_at)}`;
+  }
+  if (booking.status === "rejected" && booking.rejected_at) {
+    return `Rejected at ${formatDateTime(booking.rejected_at)}`;
+  }
+  if (booking.status === "cancelled" && booking.cancelled_at) {
+    return `Cancelled at ${formatDateTime(booking.cancelled_at)}`;
+  }
+  return null;
 }
 
 export default function BookingDetailClient({ bookingId }: { bookingId: string }) {
@@ -150,6 +203,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
         <Link href="/member/requests" className="text-sm text-accent hover:underline">
           Back to requests
         </Link>
+        <h1 className="mt-6 text-2xl font-semibold text-textPrimary">Request details</h1>
         {loading ? (
           <div className="mt-6 text-sm text-textMuted">Loading...</div>
         ) : error ? (
@@ -157,48 +211,33 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
         ) : booking ? (
           <div className="mt-6 grid gap-4">
             <Card className="p-6">
-              <div className="text-lg font-semibold text-textPrimary">Request details</div>
+              <div className="text-lg font-semibold text-textPrimary">Space</div>
               <div className="mt-3 text-sm text-textSecondary">
-                Status: <span className="capitalize">{booking.status}</span>
+                Name: {booking.space_name || formatSpaceType(booking.space_type)}
               </div>
               <div className="mt-2 text-sm text-textSecondary">
-                Payment: <span className="capitalize">{booking.payment_status || "not charged"}</span>
-                {booking.payment_provider ? ` • ${booking.payment_provider}` : ""}
+                Type: {formatSpaceType(booking.space_type)}
               </div>
               <div className="mt-2 text-sm text-textSecondary">
-                Start: {new Date(booking.start_datetime).toLocaleString()}
+                Start: {formatDateTime(booking.start_datetime)}
               </div>
               <div className="mt-2 text-sm text-textSecondary">
-                End: {new Date(booking.end_datetime).toLocaleString()}
+                End: {formatDateTime(booking.end_datetime)}
               </div>
               {booking.estimated_amount != null ? (
                 <div className="mt-2 text-sm text-textSecondary">
                   Estimated amount: {formatUsd(booking.estimated_amount)}
                 </div>
               ) : null}
-              {booking.operator_notes ? (
-                <div className="mt-2 text-sm text-textSecondary">
-                  Operator notes: {booking.operator_notes}
-                </div>
-              ) : null}
-              {booking.cancellation_deadline_at ? (
-                <div className="mt-2 text-sm text-textSecondary">
-                  Cancel by {new Date(booking.cancellation_deadline_at).toLocaleString()}
-                  {deadlineCountdown ? ` (${deadlineCountdown})` : ""}
-                </div>
-              ) : null}
-              {booking.cancelled_at ? (
-                <div className="mt-2 text-sm text-textSecondary">
-                  Cancelled at {new Date(booking.cancelled_at).toLocaleString()}
-                </div>
-              ) : null}
-              {booking.space_public_id ? (
+              {(booking.space_public_id || canCancel) ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Link href={`/member/spaces/${booking.space_public_id}`}>
-                    <Button size="sm" variant="secondary">
-                      View space
-                    </Button>
-                  </Link>
+                  {booking.space_public_id ? (
+                    <Link href={`/member/spaces/${booking.space_public_id}`}>
+                      <Button size="sm" variant="secondary">
+                        View space
+                      </Button>
+                    </Link>
+                  ) : null}
                   {canCancel ? (
                     <Button size="sm" variant="secondary" onClick={cancelRequest} disabled={cancelling}>
                       {cancelling ? "Cancelling..." : "Cancel request"}
@@ -209,11 +248,77 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
             </Card>
 
             <Card className="p-6">
+              <div className="text-lg font-semibold text-textPrimary">Location</div>
+              <div className="mt-3 text-sm text-textSecondary">
+                Location: {booking.location_name || "Not available"}
+              </div>
+              {formatAddress(booking) ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Address: {formatAddress(booking)}
+                </div>
+              ) : null}
+              {booking.location_timezone ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Timezone: {booking.location_timezone}
+                </div>
+              ) : null}
+            </Card>
+
+            <Card className="p-6">
+              <div className="text-lg font-semibold text-textPrimary">Contact</div>
+              {booking.support_contacts.length > 0 ? (
+                <div className="mt-3 grid gap-2 text-sm text-textSecondary">
+                  {booking.support_contacts.map((contact) => (
+                    <div key={`${contact.name}-${contact.title}`}>
+                      {contact.name} · {contact.title}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-textMuted">No public contact person listed.</div>
+              )}
+              {booking.location_public_phone ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Phone: {booking.location_public_phone}
+                </div>
+              ) : null}
+              {booking.location_public_email ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Email: {booking.location_public_email}
+                </div>
+              ) : null}
+            </Card>
+
+            <Card className="p-6">
+              <div className="text-lg font-semibold text-textPrimary">Timeline</div>
+              <div className="mt-3 text-sm text-textSecondary">
+                Status: <span className="capitalize">{formatStatus(booking.status)}</span>
+              </div>
+              <div className="mt-2 text-sm text-textSecondary">
+                Request sent: {formatDateTime(booking.created_at)}
+              </div>
+              {decisionLine(booking) ? (
+                <div className="mt-2 text-sm text-textSecondary">{decisionLine(booking)}</div>
+              ) : null}
+              {booking.cancellation_deadline_at ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Cancel by {formatDateTime(booking.cancellation_deadline_at)}
+                  {deadlineCountdown ? ` (${deadlineCountdown})` : ""}
+                </div>
+              ) : null}
+              {booking.operator_notes ? (
+                <div className="mt-2 text-sm text-textSecondary">
+                  Operator notes: {booking.operator_notes}
+                </div>
+              ) : null}
+            </Card>
+
+            <Card className="p-6">
               <div className="text-lg font-semibold text-textPrimary">Payment status</div>
               {booking.last_payment ? (
                 <>
                   <div className="mt-3 text-sm text-textSecondary">
-                    Status: <span className="capitalize">{booking.last_payment.status || "—"}</span>
+                    Status: <span className="capitalize">{formatStatus(booking.last_payment.status || "—")}</span>
                   </div>
                   {booking.last_payment.amount != null ? (
                     <div className="mt-2 text-sm text-textSecondary">
@@ -227,7 +332,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                   ) : null}
                   {booking.last_payment.attempted_at ? (
                     <div className="mt-2 text-sm text-textSecondary">
-                      Last attempt: {new Date(booking.last_payment.attempted_at).toLocaleString()}
+                      Last attempt: {formatDateTime(booking.last_payment.attempted_at)}
                     </div>
                   ) : null}
                 </>
@@ -237,7 +342,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                     Payment: {relatedPayment.public_id}
                   </div>
                   <div className="mt-2 text-sm text-textSecondary">
-                    Status: <span className="capitalize">{relatedPayment.status}</span>
+                    Status: <span className="capitalize">{formatStatus(relatedPayment.status)}</span>
                   </div>
                   <div className="mt-2 text-sm text-textSecondary">
                     Amount: ${relatedPayment.amount}
@@ -267,7 +372,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
               ) : null}
               {(booking.last_payment?.status === "voided" || booking.last_payment?.status === "refunded") ? (
                 <div className="mt-4 rounded-md border border-border bg-surface2 p-3 text-sm text-textSecondary">
-                  Refund processed: <span className="capitalize">{booking.last_payment.status}</span>
+                  Refund processed: <span className="capitalize">{formatStatus(booking.last_payment.status)}</span>
                 </div>
               ) : null}
             </Card>
@@ -280,10 +385,10 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                     Invoice: {relatedInvoice.public_id}
                   </div>
                   <div className="mt-2 text-sm text-textSecondary">
-                    Status: <span className="capitalize">{relatedInvoice.status}</span>
+                    Status: <span className="capitalize">{formatStatus(relatedInvoice.status)}</span>
                   </div>
                   <div className="mt-2 text-sm text-textSecondary">
-                    Created: {new Date(relatedInvoice.created_at).toLocaleString()}
+                    Created: {formatDateTime(relatedInvoice.created_at)}
                   </div>
                   <div className="mt-4 flex gap-2">
                     <Link href="/member/invoices">
