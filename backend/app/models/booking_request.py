@@ -34,6 +34,7 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     pricing_snapshot = Column(String(4096), nullable=True)
     refund_policy_snapshot = Column(String(4096), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancellation_deadline_at = Column(DateTime(timezone=True), nullable=True)
     payment_authorization_consent_at = Column(DateTime(timezone=True), nullable=True)

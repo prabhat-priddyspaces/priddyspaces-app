@@ -123,6 +123,15 @@ def _request_payload(space: Space, method: MemberOwnerPaymentMethod | None, day:
 
 def test_booking_request_create_and_list(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
+    location = db_session.query(Location).filter(Location.id == space.location_id).first()
+    owner.full_name = "Olivia Owner"
+    space.name = "Board Room"
+    location.public_phone = "(555) 010-2026"
+    location.public_email = "frontdesk@example.com"
+    location.state = "TX"
+    location.postal_code = "78701"
+    db_session.add_all([owner, space, location])
+    db_session.commit()
     member = User(
         email="member@example.com",
         auth_subject="sub-member",
@@ -153,10 +162,27 @@ def test_booking_request_create_and_list(db_session, client_factory):
     data = create.json()
     assert data["status"] == BookingRequestStatus.REQUESTED.value
     assert data["estimated_amount"] is not None
+    assert data["created_at"] is not None
+    assert data["space_name"] == "Board Room"
+    assert data["space_type"] == SpaceType.CONFERENCE_ROOM.value
+    assert data["location_public_id"] == location.public_id
+    assert data["location_name"] == "Main"
+    assert data["location_address"] == "123 Main"
+    assert data["location_city"] == "Testville"
+    assert data["location_state"] == "TX"
+    assert data["location_postal_code"] == "78701"
+    assert data["location_timezone"] == "UTC"
+    assert data["location_public_phone"] == "(555) 010-2026"
+    assert data["location_public_email"] == "frontdesk@example.com"
+    assert data["support_contacts"] == [{"name": "Olivia Owner", "title": "Owner"}]
 
     listing = member_client.get("/api/booking-requests")
     assert listing.status_code == 200
-    assert len(listing.json()) == 1
+    listed = listing.json()
+    assert len(listed) == 1
+    assert listed[0]["created_at"] == data["created_at"]
+    assert listed[0]["space_name"] == "Board Room"
+    assert listed[0]["support_contacts"] == [{"name": "Olivia Owner", "title": "Owner"}]
 
     owner_client = client_factory({
         "sub": "sub-owner",
@@ -351,6 +377,7 @@ def test_booking_request_approve_creates_booking(db_session, client_factory, mon
     assert approved["status"] == BookingRequestStatus.APPROVED.value
     assert approved["booking_id"] is not None
     assert approved["estimated_amount"] is not None
+    assert approved["approved_at"] is not None
 
     booking = db_session.query(Booking).filter(Booking.id == approved["booking_id"]).first()
     assert booking is not None
@@ -464,6 +491,7 @@ def test_booking_request_reject(db_session, client_factory):
     reject = owner_client.post(f"/api/booking-requests/{req_id}/reject", json={"operator_notes": "no"})
     assert reject.status_code == 200
     assert reject.json()["status"] == BookingRequestStatus.REJECTED.value
+    assert reject.json()["rejected_at"] is not None
 
 
 def test_booking_request_rejection_sends_update_without_calendar_attachment(

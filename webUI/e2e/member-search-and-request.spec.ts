@@ -5,7 +5,20 @@ import { json, meResponse, mockSession } from "./helpers/mock-api";
 test("member can submit a booking request from a space detail page", async ({ page }) => {
   const bookingRequest = {
     public_id: "req_1",
+    created_at: "2026-04-09T18:45:00.000Z",
     space_public_id: "space_1",
+    space_name: "Conference 14-B",
+    space_type: "conference_room",
+    location_public_id: "loc_1",
+    location_name: "Downtown Hub",
+    location_address: "100 Congress Ave",
+    location_city: "Austin",
+    location_state: "TX",
+    location_postal_code: "78701",
+    location_timezone: "America/Chicago",
+    location_public_phone: "(512) 555-0142",
+    location_public_email: "hello@downtownhub.test",
+    support_contacts: [{ name: "Avery Host", title: "Owner" }],
     booking_id: 101,
     booking_public_id: "book_1",
     estimated_amount: 120,
@@ -15,6 +28,9 @@ test("member can submit a booking request from a space detail page", async ({ pa
     payment_status: "succeeded",
     payment_provider: "stripe",
     member_owner_payment_method_public_id: "pm_owner_1",
+    approved_at: "2026-04-09T19:10:00.000Z",
+    rejected_at: null,
+    cancelled_at: null,
     cancellation_deadline_at: "2026-04-09T14:00:00.000Z",
     operator_notes: null,
   };
@@ -190,13 +206,19 @@ test("member can submit a booking request from a space detail page", async ({ pa
   await page.getByRole("button", { name: "Reserve & Pay" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests$/);
-  await expect(page.getByText("Status:")).toBeVisible();
-  await expect(page.getByText("approved")).toBeVisible();
+  await expect(page.getByText("Conference 14-B").first()).toBeVisible();
+  await expect(page.getByText("Downtown Hub").first()).toBeVisible();
+  await expect(page.getByText("Contact: Avery Host (Owner)")).toBeVisible();
+  await expect(page.getByText(/Request sent:/)).toBeVisible();
+  await expect(page.getByText("Status: approved")).toBeVisible();
 
   await page.getByRole("link", { name: "View details" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests\/_\?id=req_1$/);
   await expect(page.getByText("Request details")).toBeVisible();
+  await expect(page.getByText("Location: Downtown Hub")).toBeVisible();
+  await expect(page.getByText("Avery Host · Owner")).toBeVisible();
+  await expect(page.getByText(/Approved at/)).toBeVisible();
   await expect(page.getByText("Payment: pay_req_1")).toBeVisible();
   await expect(page.getByText("Invoice: inv_req_1")).toBeVisible();
 });
