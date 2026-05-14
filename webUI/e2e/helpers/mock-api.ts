@@ -2,7 +2,9 @@ import { Page, Route } from "@playwright/test";
 
 const AUTH_TOKEN_KEY = "priddyspaces_access_token";
 
-export async function mockSession(page: Page, role: "member" | "owner") {
+type MockRole = "member" | "owner" | "admin";
+
+export async function mockSession(page: Page, role: MockRole) {
   await page.addInitScript((tokenKey: string) => {
     window.localStorage.setItem(tokenKey, "playwright-token");
   }, AUTH_TOKEN_KEY);
@@ -23,16 +25,17 @@ interface MeOverrides {
   last_name?: string | null;
 }
 
-export function meResponse(role: "member" | "owner", overrides: MeOverrides = {}) {
+export function meResponse(role: MockRole, overrides: MeOverrides = {}) {
+  const isAdmin = role === "admin";
   return {
     public_id: overrides.public_id ?? `${role}_user`,
     email: overrides.email ?? `${role}@priddyspaces.test`,
     first_name: overrides.first_name ?? "Test",
-    last_name: overrides.last_name ?? role === "owner" ? "Owner" : "Member",
-    role,
-    app_role: role,
-    platform_role: null,
-    default_route: role === "owner" ? "/owner" : "/member",
+    last_name: overrides.last_name ?? (role === "owner" ? "Owner" : isAdmin ? "Admin" : "Member"),
+    role: isAdmin ? null : role,
+    app_role: isAdmin ? null : role,
+    platform_role: isAdmin ? "superadmin" : null,
+    default_route: isAdmin ? "/admin" : role === "owner" ? "/owner" : "/member",
     impersonation: {
       is_impersonating: false,
       actor_public_id: null,
