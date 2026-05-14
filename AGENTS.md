@@ -20,6 +20,18 @@ This repo contains:
 - App deploys happen through existing GitHub Actions after merge to `main` or through explicit manual workflow dispatch.
 - Do not deploy staging or production without explicit human authorization and the required GitHub Environment approvals.
 
+Full delivery loop:
+1. Fetch the latest `origin/main`.
+2. Create a new branch from `main`.
+3. Make only the intended changes.
+4. Run the relevant local checks.
+5. Commit the intended files with a clear message.
+6. Push the branch and create a PR to `main`.
+7. Wait for CI and required checks to complete.
+8. If anything fails, inspect logs and artifacts, fix the root cause, commit, repush, and repeat until checks pass.
+9. Merge only after CI passes and required repo or human approvals allow it.
+10. Deploy only through the approved app deployment path.
+
 ## Before making code changes
 
 1. Inspect the repo structure.
