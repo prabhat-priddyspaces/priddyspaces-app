@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Bot, ExternalLink, HelpCircle, MapPin, MessageCircle, Send, X } from "lucide-react";
 
 import { useAssistant } from "@/hooks/useAssistant";
@@ -191,6 +191,19 @@ export function AssistantMount() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [escalating, setEscalating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleOpen(event: Event) {
+      const detail = (event as CustomEvent<{ prefill?: string }>).detail;
+      setOpen(true);
+      if (detail?.prefill) setInput(detail.prefill);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    }
+
+    window.addEventListener("priddyspaces:assistant-open", handleOpen);
+    return () => window.removeEventListener("priddyspaces:assistant-open", handleOpen);
+  }, []);
 
   if (!enabled) return null;
 
@@ -352,6 +365,7 @@ export function AssistantMount() {
             </button>
             <form className="flex gap-2" onSubmit={handleSubmit}>
               <input
+                ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Ask PriddySpaces..."

@@ -61,6 +61,15 @@ export function CommandPalette() {
     [router]
   );
 
+  const openAssistant = React.useCallback((prefill: string) => {
+    setOpen(false);
+    window.dispatchEvent(
+      new CustomEvent("priddyspaces:assistant-open", {
+        detail: { prefill },
+      })
+    );
+  }, []);
+
   const groups: PaletteGroup[] = React.useMemo(
     () => [
       {
@@ -89,10 +98,10 @@ export function CommandPalette() {
           },
           {
             id: "ai-summary",
-            label: "Open AI summary",
-            hint: "Quick read on what changed today",
+            label: "Ask AI about dashboard",
+            hint: "Open assistant with a suggested question",
             icon: Sparkles,
-            onSelect: () => navigate("/owner"),
+            onSelect: () => openAssistant("What should I prioritize on my owner dashboard today?"),
             keywords: ["ai", "assistant", "summary"],
           },
         ],
@@ -168,7 +177,7 @@ export function CommandPalette() {
         ],
       },
     ],
-    [navigate]
+    [navigate, openAssistant]
   );
 
   return (

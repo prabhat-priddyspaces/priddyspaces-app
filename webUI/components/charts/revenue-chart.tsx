@@ -12,21 +12,11 @@ export interface RevenueChartProps {
   height?: number;
 }
 
-function syntheticSeries(days: number): RevenueDay[] {
-  return Array.from({ length: days }, (_, i) => {
-    const trend = 800 + i * 50;
-    const wobble = Math.sin(i * 0.7) * 400 + Math.cos(i * 1.3) * 200;
-    return {
-      bookings: Math.max(200, trend + wobble),
-      members: 600 + Math.sin(i * 0.3) * 150 + i * 6,
-    };
-  });
-}
-
 export function RevenueChart({ data, height = 140 }: RevenueChartProps) {
-  const series = data && data.length ? data : syntheticSeries(30);
+  const series = data ?? [];
+  if (series.length === 0) return null;
   const days = series.length;
-  const max = Math.max(...series.map((d) => d.bookings + d.members));
+  const max = Math.max(1, ...series.map((d) => d.bookings + d.members));
   const w = 100;
   const h = height;
   const point = (i: number) => (i / Math.max(1, days - 1)) * w;

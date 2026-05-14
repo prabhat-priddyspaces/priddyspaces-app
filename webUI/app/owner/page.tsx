@@ -8,7 +8,7 @@ import {
   Calendar,
   Check,
   DollarSign,
-  Inbox,
+  MessageCircle,
   Plus,
   Sparkles,
   Users,
@@ -17,11 +17,10 @@ import {
 
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/charts/stat-card";
-import { RevenueChart } from "@/components/charts/revenue-chart";
+import { RevenueChart, type RevenueDay } from "@/components/charts/revenue-chart";
 import {
   TimelineMini,
   type TimelineRoom,
@@ -32,6 +31,11 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { moneyToNumber, type MoneyValue } from "@/lib/money";
+import {
+  type CalendarEvent,
+  type CalendarResponse,
+  SPACE_TYPE_LABEL,
+} from "@/lib/calendar";
 
 interface BookingRequest {
   status: string;
@@ -49,6 +53,10 @@ interface Payment {
   amount: number;
   status: string;
   created_at: string;
+  amount_cents?: number | null;
+  refunded_amount_cents?: number | null;
+  booking_id?: number | null;
+  subscription_id?: number | null;
 }
 
 interface Invoice {
@@ -90,49 +98,148 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-const SAMPLE_TIMELINE: TimelineRoom[] = [
-  {
-    name: "Riverside 3",
-    type: "Conf",
-    events: [
-      { start: 0.08, width: 0.12, label: "Std Up", tone: "violet" },
-      { start: 0.25, width: 0.13, label: "Maya Chen", tone: "pending" },
-      { start: 0.5, width: 0.18, label: "Atlas weekly", tone: "mint" },
-    ],
-  },
-  {
-    name: "Plantation 1",
-    type: "Open",
-    events: [
-      { start: 0.0, width: 0.4, label: "Day pass · 8 desks", tone: "mint" },
-      { start: 0.55, width: 0.3, label: "—", tone: "muted" },
-    ],
-  },
-  {
-    name: "Coral 12B",
-    type: "Office",
-    events: [
-      { start: 0.0, width: 0.95, label: "Foundry Co. · monthly", tone: "violet" },
-    ],
-  },
-  {
-    name: "Brickell A",
-    type: "Conf",
-    events: [
-      { start: 0.12, width: 0.08, label: "—", tone: "muted" },
-      { start: 0.3, width: 0.12, label: "Loop sync", tone: "violet" },
-      { start: 0.6, width: 0.2, label: "Workshop", tone: "violet" },
-    ],
-  },
-  {
-    name: "Plantation 2",
-    type: "Conf",
-    events: [
-      { start: 0.4, width: 0.15, label: "Sales QBR", tone: "violet" },
-      { start: 0.7, width: 0.15, label: "Interview", tone: "warning" },
-    ],
-  },
-];
+const DASHBOARD_TIMELINE_START_HOUR = 8;
+const DASHBOARD_TIMELINE_END_HOUR = 18;
+const DASHBOARD_TIMELINE_ROWS = 6;
+
+function startOfLocalDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function localDateKey(date: Date): string {
+  return [
+    date.getFullYear(),
+    `${date.getMonth() + 1}`.padStart(2, "0"),
+    `${date.getDate()}`.padStart(2, "0"),
+  ].join("-");
+}
+
+function paymentAmount(payment: Payment): number {
+  if (typeof payment.amount_cents === "number") return payment.amount_cents / 100;
+  return payment.amount || 0;
+}
+
+function paymentRefundedAmount(payment: Payment): number {
+  return typeof payment.refunded_amount_cents === "number"
+    ? payment.refunded_amount_cents / 100
+    : payment.status === "refunded"
+    ? paymentAmount(payment)
+    : 0;
+}
+
+function buildRevenueSeries(payments: Payment[]): RevenueDay[] {
+  const today = startOfLocalDay(new Date());
+  const firstDay = addLocalDays(today, -29);
+  const series = Array.from({ length: 30 }, (_, index) => ({
+    key: localDateKey(addLocalDays(firstDay, index)),
+    bookings: 0,
+    members: 0,
+  }));
+  const byKey = new Map(series.map((day) => [day.key, day]));
+
+  for (const payment of payments) {
+    if (payment.status !== "succeeded" || !payment.created_at) continue;
+    const createdAt = new Date(payment.created_at);
+    if (Number.isNaN(createdAt.getTime())) continue;
+    const day = byKey.get(localDateKey(createdAt));
+    if (!day) continue;
+    const netAmount = Math.max(0, paymentAmount(payment) - paymentRefundedAmount(payment));
+    if (payment.subscription_id != null) day.members += netAmount;
+    else day.bookings += netAmount;
+  }
+
+  return series.map(({ bookings, members }) => ({ bookings, members }));
+}
+
+function dashboardTimelineWindow(date: Date): { start: number; end: number } {
+  const start = startOfLocalDay(date);
+  start.setHours(DASHBOARD_TIMELINE_START_HOUR, 0, 0, 0);
+  const end = startOfLocalDay(date);
+  end.setHours(DASHBOARD_TIMELINE_END_HOUR, 0, 0, 0);
+  return { start: start.getTime(), end: end.getTime() };
+}
+
+function timelineNowPosition(): number | undefined {
+  const { start, end } = dashboardTimelineWindow(new Date());
+  const now = Date.now();
+  if (now < start || now > end) return undefined;
+  return (now - start) / (end - start);
+}
+
+function timelineEventTone(event: CalendarEvent): "violet" | "mint" | "pending" | "warning" | "muted" {
+  if (event.kind === "subscription") return "mint";
+  if (event.kind === "request") {
+    return event.status.includes("payment_failed") ? "warning" : "pending";
+  }
+  if (event.status.includes("canceled")) return "muted";
+  return "violet";
+}
+
+function timelineEventLabel(event: CalendarEvent): string {
+  const memberName =
+    event.member?.name && event.member.name !== "Unknown" ? event.member.name : null;
+  if (event.kind === "subscription") {
+    return event.plan_name || (memberName ? `${memberName} membership` : "Membership");
+  }
+  if (event.kind === "request") {
+    return memberName ? `${memberName} request` : "Request";
+  }
+  return memberName || event.space_name || "Booking";
+}
+
+function buildTimelineRooms(calendar: CalendarResponse | null): TimelineRoom[] {
+  if (!calendar) return [];
+  const { start, end } = dashboardTimelineWindow(new Date());
+  const span = end - start;
+  const eventsBySpace = new Map<string, CalendarEvent[]>();
+  for (const event of calendar.events ?? []) {
+    const eventStart = new Date(event.start).getTime();
+    const eventEnd = new Date(event.end).getTime();
+    if (Number.isNaN(eventStart) || Number.isNaN(eventEnd)) continue;
+    if (eventEnd <= start || eventStart >= end) continue;
+    const list = eventsBySpace.get(event.space_public_id) ?? [];
+    list.push(event);
+    eventsBySpace.set(event.space_public_id, list);
+  }
+
+  return (calendar.spaces ?? []).slice(0, DASHBOARD_TIMELINE_ROWS).map((space) => ({
+    name: space.name || "Untitled space",
+    type: SPACE_TYPE_LABEL[space.space_type] || space.space_type,
+    events: (eventsBySpace.get(space.public_id) ?? [])
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+      .map((event) => {
+        const eventStart = new Date(event.start).getTime();
+        const eventEnd = new Date(event.end).getTime();
+        const clampedStart = Math.max(eventStart, start);
+        const clampedEnd = Math.min(eventEnd, end);
+        return {
+          start: (clampedStart - start) / span,
+          width: Math.max((clampedEnd - clampedStart) / span, 0.04),
+          label: timelineEventLabel(event),
+          tone: timelineEventTone(event),
+        };
+      }),
+  }));
+}
+
+function openDashboardAssistant() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("priddyspaces:assistant-open", {
+      detail: {
+        prefill: "What should I prioritize on my owner dashboard today?",
+      },
+    })
+  );
+}
 
 function requesterName(req: BookingRequest): string {
   const name = [req.member?.first_name, req.member?.last_name]
@@ -177,6 +284,7 @@ export default function OwnerDashboard() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [membersCount, setMembersCount] = useState(0);
   const [locationSummaries, setLocationSummaries] = useState<LocationSummary[]>([]);
+  const [todayCalendar, setTodayCalendar] = useState<CalendarResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -189,12 +297,23 @@ export default function OwnerDashboard() {
       setError("");
 
       try {
-        const [requestsResp, paymentsResp, invoicesResp, orgsResp, subscriptionsResp] = await Promise.all([
+        const todayStart = startOfLocalDay(new Date());
+        const todayEnd = addLocalDays(todayStart, 1);
+        const calendarParams = new URLSearchParams();
+        calendarParams.set("start", todayStart.toISOString());
+        calendarParams.set("end", todayEnd.toISOString());
+        calendarParams.set("include", "bookings,requests,subscriptions");
+        const [requestsResp, paymentsResp, invoicesResp, orgsResp, subscriptionsResp, calendarResp] = await Promise.all([
           apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token).catch(() => []),
           apiFetch<Payment[]>("/api/payments", { method: "GET" }, token).catch(() => []),
           apiFetch<Invoice[]>("/api/invoices", { method: "GET" }, token).catch(() => []),
           apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token).catch(() => []),
           apiFetch<Subscription[]>("/api/subscriptions", { method: "GET" }, token).catch(() => []),
+          apiFetch<CalendarResponse>(
+            `/api/owner/calendar?${calendarParams.toString()}`,
+            { method: "GET" },
+            token
+          ).catch(() => null),
         ]);
 
         if (!active) return;
@@ -203,10 +322,12 @@ export default function OwnerDashboard() {
         setPayments(paymentsResp);
         setInvoices(invoicesResp);
         setSubscriptions(subscriptionsResp);
+        setTodayCalendar(calendarResp);
 
         if (orgsResp.length === 0) {
           setMembersCount(0);
           setLocationSummaries([]);
+          setTodayCalendar(null);
           return;
         }
 
@@ -278,7 +399,7 @@ export default function OwnerDashboard() {
           createdAt.getFullYear() === currentYear
         );
       })
-      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+      .reduce((sum, payment) => sum + paymentAmount(payment) - paymentRefundedAmount(payment), 0);
     const activeMemberships = subscriptions.filter((s) =>
       ["active", "trialing", "past_due", "canceling"].includes(s.status)
     ).length;
@@ -287,22 +408,22 @@ export default function OwnerDashboard() {
     const occupancy = totalSpaces === 0 ? null : Math.round((occupiedSpaces / totalSpaces) * 100);
     const grossRevenue = payments
       .filter((p) => p.status === "succeeded")
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-    const refundedRevenue = payments
-      .filter((p) => p.status === "refunded")
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
+      .reduce((sum, p) => sum + paymentAmount(p), 0);
+    const refundedRevenue = payments.reduce((sum, p) => sum + paymentRefundedAmount(p), 0);
     const openRequestValue = requests
       .filter((r) => r.status === "requested")
       .reduce((sum, r) => sum + (moneyToNumber(r.estimated_amount) ?? 0), 0);
-    const todayBookings = requests.filter((r) => {
-      if (!r.starts_at) return false;
-      const start = new Date(r.starts_at);
-      return (
-        start.getDate() === now.getDate() &&
-        start.getMonth() === now.getMonth() &&
-        start.getFullYear() === now.getFullYear()
-      );
-    }).length;
+    const todayBookings =
+      todayCalendar?.events?.filter((event) => event.kind === "booking").length ??
+      requests.filter((r) => {
+        if (!r.starts_at) return false;
+        const start = new Date(r.starts_at);
+        return (
+          start.getDate() === now.getDate() &&
+          start.getMonth() === now.getMonth() &&
+          start.getFullYear() === now.getFullYear()
+        );
+      }).length;
 
     return {
       pendingRequests,
@@ -318,7 +439,12 @@ export default function OwnerDashboard() {
       todayBookings,
       invoiceVolume: invoices.reduce((sum, i) => sum + (i.amount || 0), 0),
     };
-  }, [invoices, locationSummaries, payments, requests, subscriptions]);
+  }, [invoices, locationSummaries, payments, requests, subscriptions, todayCalendar]);
+
+  const revenueSeries = useMemo(() => buildRevenueSeries(payments), [payments]);
+  const hasRevenueSeries = revenueSeries.some((day) => day.bookings > 0 || day.members > 0);
+  const timelineRooms = useMemo(() => buildTimelineRooms(todayCalendar), [todayCalendar]);
+  const currentTimelinePosition = timelineNowPosition();
 
   const pendingPreview = useMemo(
     () =>
@@ -358,10 +484,17 @@ export default function OwnerDashboard() {
               </p>
             </div>
             <div className="hidden lg:flex items-center gap-2">
-              <Badge variant="violet">
-                <Sparkles size={11} strokeWidth={2.5} />
-                AI summary ready
-              </Badge>
+              <Button
+                type="button"
+                variant="default"
+                size="default"
+                onClick={openDashboardAssistant}
+                aria-label="Open assistant for dashboard suggestions"
+              >
+                <Sparkles size={14} strokeWidth={2.5} />
+                Ask AI
+                <MessageCircle size={14} />
+              </Button>
               <Link href="/owner/calendar">
                 <Button variant="default" size="default">
                   <Calendar size={14} />
@@ -410,7 +543,7 @@ export default function OwnerDashboard() {
 
           {/* Main grid */}
           <div className="grid gap-3.5 grid-cols-1 lg:grid-cols-[1.6fr_1fr]">
-            {/* Today timeline (sample geometry — real bookings appear in /owner/calendar) */}
+            {/* Today timeline */}
             <Card padded={false} className="p-5">
               <SectionHead
                 title={`Today · ${locationSummaries.length} ${
@@ -422,15 +555,21 @@ export default function OwnerDashboard() {
                   day: "numeric",
                 })}
                 right={
-                  <>
-                    <Button variant="ghost" size="sm">Day</Button>
-                    <Button variant="default" size="sm">Week</Button>
-                    <Button variant="ghost" size="sm">Month</Button>
-                  </>
+                  <Link href="/owner/calendar">
+                    <Button variant="ghost" size="sm">
+                      Open calendar
+                      <ArrowRight size={12} />
+                    </Button>
+                  </Link>
                 }
               />
-              <TimelineMini rooms={SAMPLE_TIMELINE} now={0.37} />
-              {/* HANDOFF: TimelineMini currently uses sample rooms. Wire to /api/bookings?date=today once endpoint exists. */}
+              {timelineRooms.length === 0 ? (
+                <div className="flex min-h-[140px] items-center justify-center rounded-lg bg-surface-2 text-[13px] text-text-3">
+                  No spaces or calendar items found for today.
+                </div>
+              ) : (
+                <TimelineMini rooms={timelineRooms} now={currentTimelinePosition} />
+              )}
             </Card>
 
             {/* Requests inbox */}
@@ -524,7 +663,13 @@ export default function OwnerDashboard() {
                   </>
                 }
               />
-              <RevenueChart />
+              {hasRevenueSeries ? (
+                <RevenueChart data={revenueSeries} />
+              ) : (
+                <div className="flex h-[140px] items-center justify-center rounded-lg bg-surface-2 text-[13px] text-text-3">
+                  No revenue recorded in the last 30 days.
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-3.5 mt-3 border-t border-line">
                 <MiniStat
                   label="Gross"
@@ -544,7 +689,6 @@ export default function OwnerDashboard() {
                   highlight
                 />
               </div>
-              {/* HANDOFF: revenue series currently synthesized in <RevenueChart/>; replace with /api/payments aggregation by day. */}
             </Card>
 
             {/* Locations */}
