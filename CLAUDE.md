@@ -8,6 +8,7 @@ Before every task:
 - Understand existing functionality before coding.
 - Search for related files before editing.
 - Start from a new branch and target PRs to `main`.
+- Follow the full delivery loop in `AGENTS.md`: fetch latest `origin/main`, branch from `main`, commit, push, open a PR, wait for CI, fix failures, repush until passing, then merge and deploy only when approvals allow it.
 
 For every implementation change:
 - update or add tests,
