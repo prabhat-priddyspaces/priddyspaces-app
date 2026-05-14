@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -41,7 +41,7 @@ from app.services.public_marketplace import PublicMarketplaceSearchFilters, sear
 
 DEFAULT_NEAR_ME_RADIUS_MILES = 50
 MARKETPLACE_CATEGORY_ROUTES = {
-    "coworking": "coworking",
+    "coworking": "spaces",
     "private_office": "private-offices",
     "meeting_room": "meeting-rooms",
 }
@@ -134,7 +134,7 @@ def _metadata_events(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def public_space_url(space_public_id: str, *, back: str = "/spaces") -> str:
-    return f"/spaces/_.html?{urlencode({'id': str(space_public_id), 'back': back})}"
+    return f"/spaces/{quote(str(space_public_id), safe='')}?{urlencode({'back': back})}"
 
 
 def public_location_url(
@@ -147,7 +147,7 @@ def public_location_url(
     radius_miles: float | None = None,
     sort: str | None = None,
 ) -> str:
-    params: dict[str, str] = {"id": str(location_public_id)}
+    params: dict[str, str] = {"route": route_key}
     if q:
         params["q"] = q
     if lat is not None and lng is not None:
@@ -157,7 +157,7 @@ def public_location_url(
         params["radius_miles"] = f"{radius_miles:g}"
     if sort:
         params["sort"] = sort
-    return f"/{route_key}/_.html?{urlencode(params)}"
+    return f"/locations/{quote(str(location_public_id), safe='')}?{urlencode(params)}"
 
 
 def _make_proposal(

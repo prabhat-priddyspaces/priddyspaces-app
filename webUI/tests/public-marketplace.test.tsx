@@ -79,7 +79,7 @@ describe("public marketplace flows", () => {
     expect(await screen.findByRole("heading", { name: "Fallback Place" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("link", { name: "Open Fallback Place" }));
-    expect(pushMock).toHaveBeenCalledWith("/locations/_?q=Miami&id=loc_1&route=spaces");
+    expect(pushMock).toHaveBeenCalledWith("/locations/loc_1?q=Miami&route=spaces");
   });
 
   it("shows a designed fallback when a result image fails to load", async () => {

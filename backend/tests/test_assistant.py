@@ -196,7 +196,7 @@ def test_assistant_rate_limit(db_session, client_factory, monkeypatch):
     assert response.json()["rate_limited"] is True
 
 
-def test_marketplace_location_citation_uses_static_export_href(db_session, client_factory, monkeypatch):
+def test_marketplace_location_citation_uses_server_href(db_session, client_factory, monkeypatch):
     monkeypatch.setattr(settings, "ASSISTANT_ENABLED", True)
     owner, _org, location, _space = _seed_owner_location(db_session)
     client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
@@ -207,8 +207,8 @@ def test_marketplace_location_citation_uses_static_export_href(db_session, clien
     citations = response.json()["message"]["citations"]
     location_citation = next(item for item in citations if item["type"] == "location")
     parsed = urlparse(location_citation["url"])
-    assert parsed.path == "/meeting-rooms/_.html"
-    assert parse_qs(parsed.query)["id"] == [location.public_id]
+    assert parsed.path == f"/locations/{location.public_id}"
+    assert parse_qs(parsed.query)["route"] == ["meeting-rooms"]
 
 
 def test_near_me_without_coordinates_requests_location_action(db_session, client_factory, monkeypatch):

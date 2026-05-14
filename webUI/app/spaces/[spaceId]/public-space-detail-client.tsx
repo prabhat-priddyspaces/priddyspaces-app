@@ -6,11 +6,9 @@ import { PublicSpaceDetailView } from "@/components/public-space-detail-view";
 export function PublicSpaceDetailClient() {
   const { spaceId } = useParams<{ spaceId: string }>();
   const searchParams = useSearchParams();
-  // Static export only emits /spaces/_/index.html, so production URLs route
-  // through the placeholder with the real id in ?id=. Path param wins for dev
-  // mode and any /spaces/{id} legacy links.
+  const isLegacyPlaceholder = !spaceId || spaceId === "_" || spaceId === "_.html";
   const effectiveSpaceId =
-    !spaceId || spaceId === "_" ? searchParams.get("id") || "" : spaceId;
+    isLegacyPlaceholder ? searchParams.get("id") || "" : spaceId;
   return (
     <PublicSpaceDetailView
       spaceId={effectiveSpaceId}

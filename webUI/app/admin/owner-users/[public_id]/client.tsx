@@ -43,7 +43,10 @@ interface OwnerUserDetail {
 export function AdminOwnerUserDetailClient() {
   const params = useParams<{ public_id: string }>();
   const searchParams = useSearchParams();
-  const ownerPublicId = searchParams.get("id") || (params.public_id === "_" ? "" : params.public_id);
+  const routePublicId = params.public_id;
+  const ownerPublicId =
+    searchParams.get("id") ||
+    (routePublicId === "_" || routePublicId === "_.html" ? "" : routePublicId);
   const [data, setData] = useState<OwnerUserDetail | null>(null);
   const [error, setError] = useState("");
 

@@ -11,15 +11,80 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { reverseGeocode } from "@/components/use-address-autocomplete";
 
-function citationHref(citation: AssistantCitation) {
-  if (citation.type !== "space") return citation.url;
-  const match = citation.url.match(/^\/spaces\/([^/?#]+)(?:[?#].*)?$/);
-  const pathId = match?.[1];
-  if (!pathId || pathId === "_" || pathId === "_.html") return citation.url;
+const SPACE_DETAIL_QUERY_KEYS = ["date", "start_time", "end_time", "plan", "move_in"];
+const MARKETPLACE_ROUTES = new Set(["spaces", "private-offices", "meeting-rooms"]);
+const LEGACY_PLACEHOLDERS = new Set(["_", "_.html"]);
+
+function pathWithQuery(pathname: string, params: URLSearchParams) {
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function normalizeSpaceCitation(citation: AssistantCitation, url: URL) {
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (segments[0] !== "spaces") return null;
+
+  const pathId = segments[1] || "";
+  const isLegacyPlaceholder = !pathId || LEGACY_PLACEHOLDERS.has(pathId);
+  if (!isLegacyPlaceholder) return `${url.pathname}${url.search}${url.hash}`;
+
+  const spaceId = url.searchParams.get("id") || citation.id || "";
+  if (!spaceId) return null;
+
   const params = new URLSearchParams();
-  params.set("id", citation.id || pathId);
-  params.set("back", "/spaces");
-  return `/spaces/_.html?${params.toString()}`;
+  params.set("back", url.searchParams.get("back") || "/spaces");
+  for (const key of SPACE_DETAIL_QUERY_KEYS) {
+    const value = url.searchParams.get(key);
+    if (value) params.set(key, value);
+  }
+  return pathWithQuery(`/spaces/${encodeURIComponent(spaceId)}`, params);
+}
+
+function normalizeLocationCitation(citation: AssistantCitation, url: URL) {
+  const segments = url.pathname.split("/").filter(Boolean);
+  const routeSegment = segments[0] || "";
+  const pathId = segments[1] || "";
+  let locationId = "";
+  let route = "";
+
+  if (routeSegment === "locations") {
+    if (pathId && !LEGACY_PLACEHOLDERS.has(pathId)) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    locationId = url.searchParams.get("id") || citation.id || "";
+    route = url.searchParams.get("route") || "spaces";
+  } else if (MARKETPLACE_ROUTES.has(routeSegment) && LEGACY_PLACEHOLDERS.has(pathId)) {
+    locationId = url.searchParams.get("id") || citation.id || "";
+    route = routeSegment;
+  } else {
+    return null;
+  }
+
+  if (!locationId) return null;
+  const params = new URLSearchParams();
+  params.set("route", route);
+  url.searchParams.forEach((value, key) => {
+    if (key !== "id" && key !== "route") params.append(key, value);
+  });
+  return pathWithQuery(`/locations/${encodeURIComponent(locationId)}`, params);
+}
+
+function citationHref(citation: AssistantCitation) {
+  if (!citation.url.startsWith("/")) return citation.url;
+
+  try {
+    const url = new URL(citation.url, "https://priddyspaces.local");
+    if (citation.type === "space") {
+      return normalizeSpaceCitation(citation, url) || citation.url;
+    }
+    if (citation.type === "location") {
+      return normalizeLocationCitation(citation, url) || citation.url;
+    }
+  } catch {
+    return citation.url;
+  }
+
+  return citation.url;
 }
 
 function CitationChips({ citations }: { citations: AssistantCitation[] }) {
