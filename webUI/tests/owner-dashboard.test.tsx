@@ -32,6 +32,44 @@ vi.mock("../lib/api", () => ({
     if (url.startsWith("/api/subscriptions")) {
       return Promise.resolve([{ status: "active" }]);
     }
+    if (url.startsWith("/api/owner/calendar")) {
+      return Promise.resolve({
+        start: nowIso,
+        end: nowIso,
+        truncated: false,
+        spaces: [
+          {
+            public_id: "space_1",
+            name: "Board Room",
+            space_type: "conference_room",
+            location_public_id: "loc_1",
+            location_name: "Downtown",
+            location_timezone: "UTC",
+          },
+        ],
+        events: [
+          {
+            kind: "booking",
+            public_id: "booking_1",
+            space_public_id: "space_1",
+            space_name: "Board Room",
+            space_type: "conference_room",
+            location_public_id: "loc_1",
+            location_name: "Downtown",
+            start: nowIso,
+            end: nowIso,
+            status: "booking.confirmed",
+            payment_status: "succeeded",
+            member: { public_id: "member_1", name: "Real Member", email: "real@example.com" },
+            amount_cents: 20000,
+            checked_in: false,
+            no_show: false,
+            request_kind: null,
+            plan_name: null,
+          },
+        ],
+      });
+    }
     if (url.startsWith("/api/orgs")) {
       return Promise.resolve([{ public_id: "org_1", name: "Org" }]);
     }
@@ -55,6 +93,9 @@ describe("OwnerDashboard", () => {
     expect(await screen.findByText("MTD Revenue")).toBeInTheDocument();
     expect(screen.getByText("Active members")).toBeInTheDocument();
     expect(screen.getByText("Downtown")).toBeInTheDocument();
+    expect(screen.getByText("Board Room")).toBeInTheDocument();
+    expect(screen.queryByText("Riverside 3")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open assistant for dashboard suggestions/ })).toBeInTheDocument();
     expect(screen.getByText("Occupancy")).toBeInTheDocument();
   });
 });

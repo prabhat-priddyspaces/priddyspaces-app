@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { assistantStream } from "../lib/assistantStream";
@@ -111,6 +111,23 @@ describe("AssistantMount", () => {
     );
     expect(screen.getByText("Talk to a human")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+  });
+
+  it("opens from dashboard events and pre-fills the suggested question", () => {
+    render(<AssistantMount />);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("priddyspaces:assistant-open", {
+          detail: { prefill: "What should I prioritize today?" },
+        }),
+      );
+    });
+
+    expect(screen.getByText("Assistant")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Ask PriddySpaces...")).toHaveValue(
+      "What should I prioritize today?",
+    );
   });
 
   it("requests browser geolocation from request_location actions and resends the original query", async () => {

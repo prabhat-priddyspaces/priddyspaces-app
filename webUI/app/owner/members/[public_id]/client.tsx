@@ -35,6 +35,27 @@ const TABS: { value: TabKey; label: string }[] = [
   { value: "notes", label: "Notes & profile" },
 ];
 
+function parseOptionalDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function memberActivityWindow(detail: MemberDetail): { start: Date; end: Date } {
+  const today = startOfDay(new Date());
+  const fallbackStart = addDays(today, -90);
+  const fallbackEnd = addDays(today, 180);
+  const firstBooking = parseOptionalDate(detail.stats.first_booking_at);
+  const lastBooking = parseOptionalDate(detail.stats.last_booking_at);
+  const start = firstBooking
+    ? new Date(Math.min(addDays(startOfDay(firstBooking), -1).getTime(), fallbackStart.getTime()))
+    : fallbackStart;
+  const end = lastBooking
+    ? new Date(Math.max(addDays(startOfDay(lastBooking), 2).getTime(), fallbackEnd.getTime()))
+    : fallbackEnd;
+  return { start, end };
+}
+
 export function OwnerMemberDetailClient() {
   const params = useParams<{ public_id: string }>();
   const public_id = params?.public_id ?? "";
@@ -55,7 +76,11 @@ export function OwnerMemberDetailClient() {
 
   const load = useCallback(async () => {
     const token = getAccessToken() ?? undefined;
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      setError("Sign in required");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -65,18 +90,19 @@ export function OwnerMemberDetailClient() {
         token
       );
       setMember(detail);
+      setEvents([]);
       setDraftStatus((detail.status as MemberStatus) || "active");
       setDraftPhone(detail.phone || "");
       setDraftCompany(detail.company_name || "");
       setDraftTags(detail.tags.join(", "));
       setDraftNotes(detail.notes || "");
 
-      // Pull last 60 days of bookings/requests/subscriptions for this member from the calendar feed.
-      const start = addDays(startOfDay(new Date()), -60);
-      const end = addDays(start, 35);
+      const { start, end } = memberActivityWindow(detail);
       const params = new URLSearchParams();
       params.set("start", start.toISOString());
       params.set("end", end.toISOString());
+      params.set("member_public_id", public_id);
+      params.set("include", "bookings,requests,subscriptions");
       const calendar = await apiFetch<CalendarResponse>(
         `/api/owner/calendar?${params.toString()}`,
         { method: "GET" },

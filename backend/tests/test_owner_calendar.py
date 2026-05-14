@@ -136,6 +136,47 @@ def test_calendar_returns_booking_event(db_session, client_factory):
     assert ev["member"]["name"] == "Cal Member"
 
 
+def test_calendar_filters_to_member_and_allows_full_member_window(db_session, client_factory):
+    owner, _org, _loc, space = _seed_owner_with_space(db_session)
+    member = _seed_member(db_session, email="member-a@example.com", sub="sub-member-a")
+    other = _seed_member(db_session, email="member-b@example.com", sub="sub-member-b")
+    db_session.add_all(
+        [
+            Booking(
+                user_id=member.id,
+                space_id=space.id,
+                tenant_id=space.tenant_id,
+                start_datetime=datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc),
+                status=BookingStatus.CONFIRMED,
+            ),
+            Booking(
+                user_id=other.id,
+                space_id=space.id,
+                tenant_id=space.tenant_id,
+                start_datetime=datetime(2026, 6, 16, 10, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 6, 16, 12, 0, tzinfo=timezone.utc),
+                status=BookingStatus.CONFIRMED,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    client = client_factory(_owner_token(owner))
+    start = datetime(2026, 5, 4, 0, 0, tzinfo=timezone.utc)
+    end = start + timedelta(days=60)
+    resp = client.get(
+        f"/api/owner/calendar?{_qs(start, end, member_public_id=member.public_id)}"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    events = data["events"]
+    assert len(events) == 1
+    assert events[0]["member"]["public_id"] == member.public_id
+    assert events[0]["start"].startswith("2026-06-15")
+
+
 def test_calendar_excludes_approved_request_to_avoid_double_render(db_session, client_factory):
     owner, _org, _loc, space = _seed_owner_with_space(db_session)
     member = _seed_member(db_session)

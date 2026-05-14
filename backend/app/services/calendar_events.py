@@ -63,6 +63,7 @@ def build_calendar_events(
     statuses: Optional[set[str]] = None,
     include: Optional[set[str]] = None,
     user_id_filter: Optional[int] = None,
+    max_window_days: int | None = MAX_WINDOW_DAYS,
 ) -> CalendarResponse:
     """Return unified calendar events across Booking + BookingRequest + Subscription.
 
@@ -81,9 +82,10 @@ def build_calendar_events(
     if end <= start:
         return CalendarResponse(start=start, end=end, events=[], spaces=[], truncated=False)
 
-    max_end = start + timedelta(days=MAX_WINDOW_DAYS)
-    if end > max_end:
-        end = max_end
+    if max_window_days is not None:
+        max_end = start + timedelta(days=max_window_days)
+        if end > max_end:
+            end = max_end
 
     include = include or {"bookings", "requests", "subscriptions"}
 

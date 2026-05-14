@@ -9,10 +9,11 @@ from app.db.deps import get_db
 from app.models.enums import SpaceType, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.space import Space
+from app.models.user import User
 from app.schemas.calendar import CalendarResponse
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids
-from app.services.calendar_events import build_calendar_events
+from app.services.calendar_events import MAX_WINDOW_DAYS, build_calendar_events
 
 router = APIRouter()
 
@@ -38,6 +39,7 @@ def owner_calendar(
     space_public_id: list[str] | None = Query(None),
     status: list[str] | None = Query(None, description="Prefixed status filter (e.g. 'booking.confirmed')"),
     include: Optional[str] = Query(None, description="Comma-separated subset of bookings,requests,subscriptions"),
+    member_public_id: Optional[str] = Query(None, description="Restrict events to one member/user public_id"),
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
@@ -71,6 +73,12 @@ def owner_calendar(
         include_set = {part.strip() for part in include.split(",") if part.strip()}
 
     statuses_set = set(status) if status else None
+    user_id_filter: int | None = None
+    if member_public_id:
+        member = db.query(User).filter(User.public_id == member_public_id).first()
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found")
+        user_id_filter = member.id
 
     return build_calendar_events(
         db,
@@ -81,4 +89,6 @@ def owner_calendar(
         space_ids=space_id_set,
         statuses=statuses_set,
         include=include_set,
+        user_id_filter=user_id_filter,
+        max_window_days=None if user_id_filter is not None else MAX_WINDOW_DAYS,
     )

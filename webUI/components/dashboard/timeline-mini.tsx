@@ -36,7 +36,7 @@ export interface TimelineMiniProps {
   className?: string;
 }
 
-export function TimelineMini({ rooms, now = 0.37, className }: TimelineMiniProps) {
+export function TimelineMini({ rooms, now, className }: TimelineMiniProps) {
   return (
     <div className={className}>
       <div className="grid grid-cols-[120px_1fr] gap-3 mb-1.5">
