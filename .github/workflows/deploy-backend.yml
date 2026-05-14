@@ -120,6 +120,7 @@ jobs:
                       | ensure("CLERK_JWKS_URL"; $arn)
                       | ensure("CLERK_SECRET_KEY"; $arn)
                       | ensure("CLERK_WEBHOOK_SECRET"; $arn)
+                      | ensure("SENDGRID_API_KEY"; $arn)
                     )
                   | if $ENVIRONMENT == "dev" then
                       .environment = ((.environment // []) | ensure_env("ASSISTANT_ENABLED"; "true"))
