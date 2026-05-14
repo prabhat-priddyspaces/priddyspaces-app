@@ -60,10 +60,12 @@ describe("DefaultMarketplaceRedirect", () => {
     });
   });
 
-  it("does not send protected static-export misses to the public marketplace", () => {
-    expect(defaultMarketplaceFallbackHref("/owner/locations/new", "")).toBeNull();
-    expect(defaultMarketplaceFallbackHref("/admin/members", "")).toBeNull();
-    expect(defaultMarketplaceFallbackHref("/member/requests", "")).toBeNull();
+  it("redirects app routes to their static HTML file instead of the public marketplace", () => {
+    expect(defaultMarketplaceFallbackHref("/owner/locations/new", "")).toBe(
+      "/owner/locations/new.html",
+    );
+    expect(defaultMarketplaceFallbackHref("/admin/members", "")).toBe("/admin/members.html");
+    expect(defaultMarketplaceFallbackHref("/member/calendar", "")).toBe("/member/calendar.html");
   });
 
   it("recovers member request detail URLs for static export", () => {

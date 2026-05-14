@@ -5,13 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 const DETAIL_QUERY_KEYS = ["date", "start_time", "end_time", "plan", "move_in"];
-const APP_ROUTE_PREFIXES = [
-  "/admin",
-  "/dashboard",
-  "/member",
-  "/onboarding",
-  "/owner",
-];
 
 export function legacyStaticDetailHref(pathname: string, search: string) {
   const segments = pathname.split("/").filter(Boolean);
@@ -105,13 +98,6 @@ export function defaultMarketplaceFallbackHref(pathname: string, search: string)
   const legacyHref = legacyStaticDetailHref(pathname, search);
   if (legacyHref) return legacyHref;
   if (pathname === "/" || pathname === "") return "/spaces";
-  if (
-    APP_ROUTE_PREFIXES.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    )
-  ) {
-    return null;
-  }
   return staticExportHtmlHref(pathname, search) || "/spaces";
 }
 
