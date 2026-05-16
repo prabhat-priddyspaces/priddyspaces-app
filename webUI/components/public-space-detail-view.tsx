@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { buildLoginHref } from "@/lib/auth-redirect";
@@ -126,7 +127,8 @@ export function PublicSpaceDetailView({
   initialMoveInDate,
 }: PublicSpaceDetailViewProps) {
   const router = useRouter();
-  const isAuthenticated = Boolean(getAccessToken());
+  const { isSignedIn } = useAuth();
+  const isAuthenticated = Boolean(isSignedIn ?? getAccessToken());
   const [detail, setDetail] = useState<MarketplaceSpaceDetailResponse | null>(null);
   const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);

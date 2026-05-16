@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ClerkSignUpCard } from "@/components/clerk-sign-up-card";
 
 // See sign-in/[[...sign-in]]/page.tsx for the rationale — hash routing
@@ -10,7 +11,9 @@ export function generateStaticParams() {
 export default function SignUpPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
-      <ClerkSignUpCard />
+      <Suspense fallback={null}>
+        <ClerkSignUpCard />
+      </Suspense>
     </div>
   );
 }

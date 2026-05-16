@@ -2,6 +2,7 @@
 
 import { SignUp } from "@clerk/nextjs";
 import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 const SIGNUP_ROLE_KEY = "priddyspaces_signup_role";
 
@@ -10,6 +11,9 @@ interface ClerkSignUpCardProps {
 }
 
 export function ClerkSignUpCard({ owner = false }: ClerkSignUpCardProps) {
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect_url") ?? undefined;
+
   useEffect(() => {
     if (owner) {
       window.sessionStorage.setItem(SIGNUP_ROLE_KEY, "owner");
@@ -21,6 +25,12 @@ export function ClerkSignUpCard({ owner = false }: ClerkSignUpCardProps) {
   return (
     <SignUp
       routing="hash"
+      forceRedirectUrl={redirectUrl ?? "/dashboard"}
+      signInUrl={
+        redirectUrl
+          ? `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`
+          : "/sign-in"
+      }
       appearance={{
         variables: {
           colorPrimary: "#111827",
