@@ -23,7 +23,7 @@ Primary references:
 | Marketing HTML | Marketing templates render through a sandboxed Jinja environment and sanitize HTML before preview/outbound use. Unsafe preview DOM injection was removed. | `backend/app/services/marketing.py`, `webUI/app/owner/marketing/templates/page.tsx` |
 | Legal pages | Privacy and terms pages use static version dates instead of dynamic dates. | `webUI/app/privacy/page.tsx`, `webUI/app/terms/page.tsx` |
 | Runtime | Backend and web containers run as non-root users. Read-only root filesystems remain an ECS task-definition control for the infra repo. | `backend/Dockerfile`, `webUI/Dockerfile` |
-| Supply chain | Dependabot, CodeQL, `pip-audit`, Bandit, `npm audit --omit=dev`, and SBOM artifact generation are configured. | `.github/dependabot.yml`, `.github/workflows/codeql.yml`, `.github/workflows/security.yml` |
+| Supply chain | Dependabot, Semgrep SAST, `pip-audit`, Bandit, `npm audit --omit=dev`, and SBOM artifact generation are configured. CodeQL can be enabled when GitHub Code Security is available for this private repo. | `.github/dependabot.yml`, `.github/workflows/security.yml` |
 
 ## OWASP Top 10:2025 Mapping
 
@@ -31,12 +31,12 @@ Primary references:
 | --- | --- |
 | A01 Broken Access Control | Location-scoped floor-plan presigns, owner/admin authorization checks, protected payment method ownership checks, tests for scoped uploads. |
 | A02 Security Misconfiguration | Production config validator, strict CORS, security headers, non-root containers, static legal dates, no demo password logging. |
-| A03 Software Supply Chain Failures | Dependabot, CodeQL, backend and npm audits, Bandit, SBOM artifact retention, patched web/mobile production audit findings. |
+| A03 Software Supply Chain Failures | Dependabot, Semgrep SAST, backend and npm audits, Bandit, SBOM artifact retention, patched web/mobile production audit findings. |
 | A04 Cryptographic Failures | AES-GCM payment credential encryption, fail-closed production encryption key requirement, no production default crypto fallback. |
 | A05 Injection | Sanitized marketing template HTML, sandboxed Jinja rendering, iframe preview sandbox, CSP. |
 | A06 Insecure Design | Fail-closed production config, verified-email gates before payment-linked workflows, documented infra WAF and private-network requirements. |
 | A07 Authentication Failures | Clerk token memory-only web storage, secure mobile token storage, sensitive endpoint rate limiting. |
-| A08 Software/Data Integrity Failures | SBOM, CodeQL, audit gates, opaque upload keys, infra handoff for malware quarantine before publication. |
+| A08 Software/Data Integrity Failures | SBOM, Semgrep SAST, audit gates, opaque upload keys, infra handoff for malware quarantine before publication. |
 | A09 Logging/Alerting Failures | Infra handoff requires CloudTrail, GuardDuty, Security Hub, AWS Config, WAF/ALB/CloudFront logs, CloudWatch alarms, and evidence export. |
 | A10 Mishandling Exceptional Conditions | Production errors suppress traceback unless `DEBUG=true`; production validator prevents debug mode. |
 
@@ -85,4 +85,5 @@ npm audit --omit=dev --audit-level=moderate
 
 - The separate infra repo must implement `docs/compliance/infra-security-handoff.md` before staging/prod can be considered SOC 2-ready.
 - SOC 2 Type II requires operating evidence over time; this PR only creates technical controls and evidence hooks.
+- GitHub CodeQL code scanning failed in this private repo because GitHub Code Security / Advanced Security is not enabled. Semgrep SAST is the active CI control until that entitlement is enabled.
 - Mobile npm install still warns about Clerk transitive Solana wallet peer ranges against React Native 0.73.6. The production audit is clean, but the peer warning should be tracked during the next Expo/React Native upgrade.
