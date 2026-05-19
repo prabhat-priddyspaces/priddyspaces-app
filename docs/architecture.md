@@ -16,6 +16,7 @@
 - `webUI` -> member + owner/admin UI
 - `mobile` -> member app
 - `backend` -> API, auth, payments, webhooks
+- `backend worker` -> background jobs for marketing, assistant reminders/alerts, and settlement polling
 - `db` -> Postgres (Docker)
 
 ## Public ID Rule

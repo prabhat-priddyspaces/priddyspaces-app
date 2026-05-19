@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     ASSISTANT_SUMMARY_INPUT_COST_PER_1M: float = 0.15
     ASSISTANT_SUMMARY_OUTPUT_COST_PER_1M: float = 0.60
 
+    # Background worker. The worker is a standalone ECS service that uses the
+    # same backend image with `python -m app.worker` as its command.
+    WORKER_INTERVAL_SECONDS: int = 60
+    WORKER_BATCH_LIMIT: int = 100
+    WORKER_ENABLE_MARKETING: bool = True
+    WORKER_ENABLE_ASSISTANT_JOBS: bool = True
+    WORKER_ENABLE_CARDPOINTE_SETTLEMENTS: bool = True
+    WORKER_CARDPOINTE_MAX_AGE_DAYS: int = 7
+
     @property
     def is_production_like(self) -> bool:
         return self.ENVIRONMENT.strip().lower() in {"staging", "production", "prod"}

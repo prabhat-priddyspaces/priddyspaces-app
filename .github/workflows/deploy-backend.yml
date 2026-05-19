@@ -50,6 +50,8 @@ jobs:
           echo "ecr_repo_uri=$(aws ssm get-parameter --name "$PREFIX/ecr_backend_repo_uri" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
           echo "ecs_cluster=$(aws ssm get-parameter --name "$PREFIX/ecs_cluster_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
           echo "ecs_service=$(aws ssm get-parameter --name "$PREFIX/ecs_backend_service_name" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
+          WORKER_SERVICE=$(aws ssm get-parameter --name "$PREFIX/ecs_backend_worker_service_name" --query 'Parameter.Value' --output text 2>/dev/null || true)
+          echo "ecs_worker_service=$WORKER_SERVICE" >> "$GITHUB_OUTPUT"
           echo "ecs_private_subnets=$(aws ssm get-parameter --name "$PREFIX/ecs_private_subnets_csv" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
           echo "ecs_security_groups=$(aws ssm get-parameter --name "$PREFIX/ecs_service_security_groups_csv" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
 
@@ -148,6 +150,78 @@ jobs:
 
           echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
 
+      - name: Register new worker task definition revision
+        id: worker_taskdef
+        if: ${{ steps.meta.outputs.ecs_worker_service != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_worker_service }}"
+          IMAGE_URI="${{ steps.image.outputs.image_uri }}"
+
+          CURRENT_TASK_DEF=$(aws ecs describe-services \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          aws ecs describe-task-definition --task-definition "$CURRENT_TASK_DEF" --query 'taskDefinition' > worker-taskdef.json
+
+          jq --arg IMAGE_URI "$IMAGE_URI" '
+            def base_arn:
+              (.[0].valueFrom // "") | split(":") | .[0:7] | join(":");
+            def ensure(name; baseArn):
+              if any(.[]; .name == name) then .
+              else . + [{name: name, valueFrom: (baseArn + ":" + name + "::")}]
+              end;
+            def ensure_env(name; value):
+              if any(.[]; .name == name) then
+                map(if .name == name then .value = value else . end)
+              else
+                . + [{name: name, value: value}]
+              end;
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .deregisteredAt,
+              .registeredBy
+            )
+            | .containerDefinitions |= map(
+                if .name == "backend" then
+                  .image = $IMAGE_URI
+                  | .command = ["python", "-m", "app.worker"]
+                  | ((.secrets // []) | base_arn) as $arn
+                  | .secrets = (
+                      (.secrets // [])
+                      | ensure("CLERK_JWKS_URL"; $arn)
+                      | ensure("CLERK_SECRET_KEY"; $arn)
+                      | ensure("CLERK_WEBHOOK_SECRET"; $arn)
+                      | ensure("SENDGRID_API_KEY"; $arn)
+                    )
+                  | .environment = (
+                      (.environment // [])
+                      | ensure_env("WORKER_INTERVAL_SECONDS"; "60")
+                      | ensure_env("WORKER_BATCH_LIMIT"; "100")
+                      | ensure_env("WORKER_ENABLE_MARKETING"; "true")
+                      | ensure_env("WORKER_ENABLE_ASSISTANT_JOBS"; "true")
+                      | ensure_env("WORKER_ENABLE_CARDPOINTE_SETTLEMENTS"; "true")
+                    )
+                else . end
+              )
+          ' worker-taskdef.json > worker-taskdef-updated.json
+
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://worker-taskdef-updated.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
       - name: Run Alembic migration task
         shell: bash
         run: |
@@ -224,6 +298,34 @@ jobs:
               --query 'services[0].events[0:25]' --output table || true
 
             echo "===== Stopped task (most recent) describe: ====="
+            STOPPED_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
+              --desired-status STOPPED --query 'taskArns[0]' --output text 2>/dev/null || echo None)
+            if [ -n "$STOPPED_ARN" ] && [ "$STOPPED_ARN" != "None" ]; then
+              aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$STOPPED_ARN" \
+                --query 'tasks[0].{lastStatus:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,exitCode:exitCode,reason:reason}}' || true
+            fi
+            exit 1
+          fi
+
+      - name: Update ECS worker service
+        if: ${{ steps.meta.outputs.ecs_worker_service != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_worker_service }}"
+
+          aws ecs update-service \
+            --cluster "$CLUSTER" \
+            --service "$SERVICE" \
+            --task-definition "${{ steps.worker_taskdef.outputs.task_definition_arn }}"
+
+          if ! aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"; then
+            echo "===== Worker service failed to stabilize. Recent events: ====="
+            aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].events[0:25]' --output table || true
+
+            echo "===== Worker stopped task (most recent) describe: ====="
             STOPPED_ARN=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" \
               --desired-status STOPPED --query 'taskArns[0]' --output text 2>/dev/null || echo None)
             if [ -n "$STOPPED_ARN" ] && [ "$STOPPED_ARN" != "None" ]; then
