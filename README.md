@@ -29,6 +29,19 @@ The backend container:
 - runs Alembic migrations automatically
 - starts Uvicorn with reload enabled
 
+### Backend worker
+
+Background jobs run outside the API process with the same backend image:
+
+```bash
+cd backend
+python -m app.worker --once
+```
+
+The worker covers marketing ticks, assistant reminders and space alerts, and
+CardPointe settlement polling. In AWS it runs as its own ECS service with the
+command `python -m app.worker`.
+
 ### Web UI (local dev)
 
 ```bash

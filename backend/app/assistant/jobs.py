@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.assistant.runtime import _citation, public_space_url
-from app.models.assistant import AssistantMessage, SpaceAlert
+from app.models.assistant import SpaceAlert
 from app.models.booking import Booking
 from app.models.enums import BookingStatus, SpaceVisibility
 from app.models.location import Location
@@ -50,6 +50,7 @@ def build_booking_reminders(db: Session, *, now: datetime | None = None) -> list
                     "window": label,
                     "booking_public_id": booking.public_id,
                     "user_id": booking.user_id,
+                    "tenant_id": booking.tenant_id,
                     "send_at": now.isoformat(),
                 }
             )
@@ -81,10 +82,15 @@ def match_space_alerts(db: Session, *, now: datetime | None = None) -> list[dict
         alert.matched_at = now
         alert.last_notified_at = now
         alert.notification_count += 1
+        alert.status = "matched"
+        alert.is_active = False
         db.add(alert)
         matches.append(
             {
                 "alert_public_id": alert.public_id,
+                "user_id": alert.user_id,
+                "guest_id": alert.guest_id,
+                "tenant_id": alert.tenant_id,
                 "space_public_id": space.public_id,
                 "location_public_id": location.public_id,
                 "citations": [_citation("space", space.public_id, public_space_url(space.public_id), space.name or "Space")],
@@ -94,9 +100,19 @@ def match_space_alerts(db: Session, *, now: datetime | None = None) -> list[dict
     return matches
 
 
-def send_booking_reminder_email(to_email: str, reminder: dict[str, Any]) -> None:
+def send_booking_reminder_email(to_email: str, reminder: dict[str, Any], *, db: Session | None = None) -> None:
     send_email(
         to_email,
         "Upcoming PriddySpaces booking",
         f"Your booking {reminder['booking_public_id']} starts in {reminder['window']}. Open the assistant for details.",
+        db=db,
+    )
+
+
+def send_space_alert_email(to_email: str, match: dict[str, Any], *, db: Session | None = None) -> None:
+    send_email(
+        to_email,
+        "A PriddySpaces match is available",
+        f"We found a space matching your alert: {match['space_public_id']}. Open PriddySpaces for details.",
+        db=db,
     )
