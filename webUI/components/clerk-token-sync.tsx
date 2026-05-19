@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * Bridges Clerk auth state into the legacy localStorage access-token slot
- * (`priddyspaces_access_token`) so the components that still read auth via
- * `getAccessToken()` recognize a signed-in user.
+ * Bridges Clerk auth state into the legacy access-token helper so components
+ * that still read auth via `getAccessToken()` recognize a signed-in user.
  *
  * Clerk JWTs are short-lived (~60 s by default), so we refresh on every
  * session-state change and on a periodic interval. The backend
@@ -11,9 +10,8 @@
  * dropping the Clerk-issued token into the same slot keeps every API
  * call working without per-component changes.
  *
- * The long-term fix is for components to call `useAuth().getToken()`
- * directly instead of reading localStorage, but bridging here lets us
- * unblock the deployed app immediately.
+ * Production tokens are kept in module memory, not localStorage. The
+ * localStorage path remains only for the explicit Playwright bypass build.
  */
 
 import { useEffect } from "react";
@@ -46,7 +44,7 @@ export function ClerkTokenSync() {
         }
       } catch {
         // Token fetch can fail transiently (network, expired session).
-        // Leave whatever's in localStorage; next interval will retry.
+        // Leave the in-memory token alone; next interval will retry.
       }
     };
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,7 +30,7 @@ from app.models.user import User
 from app.services.amenities import seed_default_amenities
 
 
-DEFAULT_OWNER_PASSWORD = "OwnerDemo123!"
+DEMO_OWNER_PASSWORD_ENV = "DEMO_OWNER_PASSWORD"
 
 DEMO_ORGS: list[dict[str, Any]] = [
     {
@@ -459,10 +460,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Seed demo owners and listings")
     parser.add_argument(
         "--owner-password",
-        default=DEFAULT_OWNER_PASSWORD,
-        help="Password assigned to all seeded owner accounts",
+        default=os.environ.get(DEMO_OWNER_PASSWORD_ENV),
+        help=f"Password assigned to all seeded owner accounts; defaults to ${DEMO_OWNER_PASSWORD_ENV}",
     )
     args = parser.parse_args()
+    if not args.owner_password:
+        raise SystemExit(f"Set {DEMO_OWNER_PASSWORD_ENV} or pass --owner-password before seeding demo owners")
 
     db = SessionLocal()
     try:
@@ -471,7 +474,6 @@ def main() -> int:
         db.close()
 
     print("Seeded demo owners and listings")
-    print(f"Owner password: {args.owner_password}")
     print("Owners:")
     for demo_org in DEMO_ORGS:
         print(f"  - {demo_org['owner']['email']} ({demo_org['organization']['name']})")

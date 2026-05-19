@@ -1,24 +1,45 @@
 export const AUTH_TOKEN_KEY = "priddyspaces_access_token";
 
-export function getAccessToken(): string | null {
-  if (typeof window === "undefined") {
+let memoryAccessToken: string | null = null;
+
+function shouldUsePersistedTestToken(): boolean {
+  return process.env.NEXT_PUBLIC_E2E_BYPASS_CLERK === "1";
+}
+
+function safeLocalStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
     return null;
   }
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function getAccessToken(): string | null {
+  if (memoryAccessToken) return memoryAccessToken;
+  const storage = safeLocalStorage();
+  if (storage && shouldUsePersistedTestToken()) {
+    return storage.getItem(AUTH_TOKEN_KEY);
+  }
+  return null;
 }
 
 export function setAccessToken(token: string) {
-  if (typeof window === "undefined") {
-    return;
+  memoryAccessToken = token;
+  const storage = safeLocalStorage();
+  if (!storage) return;
+  if (shouldUsePersistedTestToken()) {
+    storage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    storage.removeItem(AUTH_TOKEN_KEY);
   }
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
 }
 
 export function clearAccessToken() {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  memoryAccessToken = null;
+  const storage = safeLocalStorage();
+  if (!storage) return;
+  storage.removeItem(AUTH_TOKEN_KEY);
 }
 
 function decodeBase64Url(value: string): string | null {

@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.enums import UserAppRole
 from app.models.user import User
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
@@ -69,3 +70,8 @@ def get_or_create_user(db: Session, payload: dict) -> User:
         status_code=401,
         detail="User not provisioned; replay the user.created webhook.",
     )
+
+
+def require_verified_email_for_payments(user: User) -> None:
+    if settings.EMAIL_VERIFICATION_REQUIRED and not user.email_verified:
+        raise HTTPException(status_code=403, detail="Email verification required before payment")

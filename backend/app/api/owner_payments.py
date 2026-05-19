@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
-from app.core.crypto import encrypt_secret
+from app.core.crypto import decrypt_secret, encrypt_secret
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
@@ -25,7 +25,7 @@ from app.schemas.owner_payment import (
     PaymentMethodSetupSessionOut,
     PaymentProviderOverrideUpdate,
 )
-from app.services.auth_user import get_or_create_user
+from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import get_org_member, require_location_roles, require_owner_or_admin
 from app.services.notifications import send_email
 from app.services.owner_payments import (
@@ -39,6 +39,12 @@ from app.services.owner_payments import (
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
 
 router = APIRouter()
+
+
+def _reencrypt_legacy_secret(value: str | None) -> str | None:
+    if value and value.startswith("v1:"):
+        return encrypt_secret(decrypt_secret(value))
+    return value
 
 
 def _org_by_public_id(db: Session, public_id: str) -> Organization:
@@ -135,13 +141,21 @@ def upsert_owner_payment_setting(
     setting.stripe_publishable_key = payload.stripe_publishable_key.strip() if payload.stripe_publishable_key else None
     if payload.stripe_secret_key is not None:
         setting.stripe_secret_key_encrypted = encrypt_secret(payload.stripe_secret_key.strip() or None)
+    else:
+        setting.stripe_secret_key_encrypted = _reencrypt_legacy_secret(setting.stripe_secret_key_encrypted)
     if payload.stripe_webhook_secret is not None:
         setting.stripe_webhook_secret_encrypted = encrypt_secret(payload.stripe_webhook_secret.strip() or None)
+    else:
+        setting.stripe_webhook_secret_encrypted = _reencrypt_legacy_secret(setting.stripe_webhook_secret_encrypted)
     setting.cardpointe_merchant_id = payload.cardpointe_merchant_id.strip() if payload.cardpointe_merchant_id else None
     if payload.cardpointe_username is not None:
         setting.cardpointe_username_encrypted = encrypt_secret(payload.cardpointe_username.strip() or None)
+    else:
+        setting.cardpointe_username_encrypted = _reencrypt_legacy_secret(setting.cardpointe_username_encrypted)
     if payload.cardpointe_password is not None:
         setting.cardpointe_password_encrypted = encrypt_secret(payload.cardpointe_password.strip() or None)
+    else:
+        setting.cardpointe_password_encrypted = _reencrypt_legacy_secret(setting.cardpointe_password_encrypted)
     setting.cardpointe_site = payload.cardpointe_site.rstrip("/") if payload.cardpointe_site else None
     setting.cardpointe_tokenizer_url = payload.cardpointe_tokenizer_url.strip() if payload.cardpointe_tokenizer_url else None
 
@@ -324,6 +338,7 @@ def create_payment_method_setup_session(
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
@@ -356,6 +371,7 @@ def save_member_payment_method(
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
     if user.role != UserAppRole.MEMBER:
         raise HTTPException(status_code=403, detail="Member only")
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()

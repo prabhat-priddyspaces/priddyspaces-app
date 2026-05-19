@@ -50,7 +50,7 @@ from app.schemas.booking_request import (
     GuestBookingRequestCreate,
     GuestBookingRequestOut,
 )
-from app.services.auth_user import get_or_create_user
+from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import accessible_location_ids, require_location_roles, user_can_access_location
 from app.services.booking_email_delivery import (
     BOOKING_EMAIL_CANCELLED,
@@ -885,6 +885,7 @@ def create_booking_request(
     user = get_or_create_user(db, token)
 
     if payload.membership_plan_public_id:
+        require_verified_email_for_payments(user)
         if payload.redemption_lock_public_id:
             raise HTTPException(status_code=400, detail="Rewards cannot be redeemed for memberships or leases")
         req = _create_membership_purchase_request(payload, user, db)
@@ -932,6 +933,7 @@ def create_booking_request(
     validate_occurrences_available(db, space=space, location=location, occurrences=occurrences)
 
     if settings.PAYMENT_METHOD_REQUIRED_FOR_REQUEST:
+        require_verified_email_for_payments(user)
         owner_payment_setting, payment_method, consent_at = require_payment_method_for_request(
             db,
             user,
@@ -939,6 +941,8 @@ def create_booking_request(
             payload.member_owner_payment_method_public_id,
             payload.payment_authorization_consent,
         )
+    elif payload.redemption_lock_public_id:
+        require_verified_email_for_payments(user)
 
     req = BookingRequest(
         tenant_id=space.tenant_id,
@@ -1296,6 +1300,7 @@ def retry_booking_request_payment(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
     req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).with_for_update().first()
     if not req:
         raise HTTPException(status_code=404, detail="Booking request not found")

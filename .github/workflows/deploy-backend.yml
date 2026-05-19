@@ -124,10 +124,19 @@ jobs:
                       | ensure("CLERK_SECRET_KEY"; $arn)
                       | ensure("CLERK_WEBHOOK_SECRET"; $arn)
                       | ensure("SENDGRID_API_KEY"; $arn)
+                      | if $ENVIRONMENT == "dev" then .
+                        else
+                          ensure("JWT_SECRET"; $arn)
+                          | ensure("PAYMENT_CREDENTIAL_ENCRYPTION_KEY"; $arn)
+                          | ensure("STRIPE_SECRET_KEY"; $arn)
+                          | ensure("STRIPE_WEBHOOK_SECRET"; $arn)
+                        end
                     )
-                  | if $ENVIRONMENT == "dev" then
-                      .environment = ((.environment // []) | ensure_env("ASSISTANT_ENABLED"; "true"))
-                    else . end
+                  | .environment = (
+                      (.environment // [])
+                      | ensure_env("ENVIRONMENT"; $ENVIRONMENT)
+                      | if $ENVIRONMENT == "dev" then ensure_env("ASSISTANT_ENABLED"; "true") else . end
+                    )
                 else . end
               )
           ' taskdef.json > taskdef-updated.json

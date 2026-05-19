@@ -183,7 +183,12 @@ export default function MarketingTemplatesPage() {
               <div className="rounded-sm border border-border bg-surface2 p-3 text-sm">
                 <div className="font-semibold text-textPrimary">{preview.subject}</div>
                 {preview.missing_values.length ? <div className="text-error">{preview.missing_values.join(", ")}</div> : null}
-                <div className="mt-3 text-textPrimary" dangerouslySetInnerHTML={{ __html: preview.html_body || `<pre>${preview.text_body || ""}</pre>` }} />
+                <iframe
+                  title="Template preview"
+                  sandbox=""
+                  className="mt-3 h-72 w-full rounded-sm border border-border bg-white"
+                  srcDoc={preview.html_body || `<pre>${preview.text_body || ""}</pre>`}
+                />
               </div>
             ) : null}
           </Card>

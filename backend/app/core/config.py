@@ -2,6 +2,7 @@ import json
 import logging
 import os
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ _load_aws_secrets()
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Priddyspaces Coworking API"
+    ENVIRONMENT: str = "local"
     DEBUG: bool = False
     DATABASE_URL: str = "postgresql+psycopg2://priddyspaces:priddyspaces@localhost:5432/priddyspaces"
     STRIPE_SECRET_KEY: str = ""
@@ -48,6 +50,9 @@ class Settings(BaseSettings):
     PAYMENT_CHARGE_ON_APPROVAL: bool = True
     PAYMENT_CREDENTIAL_ENCRYPTION_KEY: str = ""
     EMAIL_VERIFICATION_REQUIRED: bool = True
+    API_RATE_LIMIT_ENABLED: bool = True
+    SENSITIVE_RATE_LIMIT_PER_MINUTE: int = 600
+    WEBHOOK_RATE_LIMIT_PER_MINUTE: int = 1200
     # AWS (Secrets Manager key name for production; leave blank in local dev)
     AWS_SECRET_NAME: str = ""
     AWS_REGION: str = "us-east-1"
@@ -104,6 +109,50 @@ class Settings(BaseSettings):
     ASSISTANT_PRIMARY_OUTPUT_COST_PER_1M: float = 15.0
     ASSISTANT_SUMMARY_INPUT_COST_PER_1M: float = 0.15
     ASSISTANT_SUMMARY_OUTPUT_COST_PER_1M: float = 0.60
+
+    @property
+    def is_production_like(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() in {"staging", "production", "prod"}
+
+    @model_validator(mode="after")
+    def validate_runtime_security(self) -> "Settings":
+        if not self.is_production_like:
+            return self
+
+        missing = [
+            name
+            for name in [
+                "DATABASE_URL",
+                "CLERK_JWKS_URL",
+                "CLERK_SECRET_KEY",
+                "CLERK_WEBHOOK_SECRET",
+                "JWT_SECRET",
+                "PAYMENT_CREDENTIAL_ENCRYPTION_KEY",
+                "CORS_ALLOW_ORIGINS",
+                "FRONTEND_URL",
+                "BACKEND_URL",
+            ]
+            if not str(getattr(self, name, "") or "").strip()
+        ]
+        if missing:
+            raise ValueError(f"Missing required {self.ENVIRONMENT} setting(s): {', '.join(missing)}")
+        if self.DEBUG:
+            raise ValueError("DEBUG must be false in staging/production")
+        if "*" in self.CORS_ALLOW_ORIGINS:
+            raise ValueError("Wildcard CORS origins are not allowed in staging/production")
+        if "localhost" in self.DATABASE_URL or "priddyspaces:priddyspaces" in self.DATABASE_URL:
+            raise ValueError("DATABASE_URL must not use local defaults in staging/production")
+        if not self.FRONTEND_URL.startswith("https://") or not self.BACKEND_URL.startswith("https://"):
+            raise ValueError("FRONTEND_URL and BACKEND_URL must use HTTPS in staging/production")
+        origins = [origin.strip() for origin in self.CORS_ALLOW_ORIGINS.split(",") if origin.strip()]
+        if not origins or any(not origin.startswith("https://") for origin in origins):
+            raise ValueError("CORS_ALLOW_ORIGINS must contain only HTTPS origins in staging/production")
+        if len(self.JWT_SECRET) < 32:
+            raise ValueError("JWT_SECRET must be at least 32 characters in staging/production")
+        if len(self.PAYMENT_CREDENTIAL_ENCRYPTION_KEY) < 32:
+            raise ValueError("PAYMENT_CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters")
+        return self
+
     model_config = SettingsConfigDict(env_file=".env")
 
 

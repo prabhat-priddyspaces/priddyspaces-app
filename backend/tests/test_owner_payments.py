@@ -3,12 +3,22 @@ from app.models.enums import AvailabilityStatus, SpaceType, UserAppRole, UserRol
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
+from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.space import Space
 from app.models.user import User
 
 
 def _user(db, email: str, sub: str, role: UserAppRole) -> User:
     user = User(email=email, auth_subject=sub, role=role, email_verified=True, is_active=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _unverified_user(db, email: str, sub: str, role: UserAppRole) -> User:
+    user = _user(db, email, sub, role)
+    user.email_verified = False
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -80,6 +90,9 @@ def test_owner_payment_settings_and_member_method_scope(db_session, client_facto
     assert body["has_cardpointe_username"] is True
     assert body["has_cardpointe_password"] is True
     assert "api-pass" not in saved.text
+    setting = db_session.query(OwnerPaymentSetting).filter(OwnerPaymentSetting.organization_id == org.id).one()
+    assert setting.cardpointe_username_encrypted.startswith("v2:")
+    assert setting.cardpointe_password_encrypted.startswith("v2:")
 
     owner_client.patch(
         f"/api/owner/payment-provider/organization/{org.public_id}",
@@ -119,3 +132,18 @@ def test_owner_payment_settings_and_member_method_scope(db_session, client_facto
     resolved = member_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
     assert resolved.json()["has_payment_method"] is True
     assert resolved.json()["payment_method_public_id"] == method.json()["public_id"]
+
+
+def test_unverified_member_cannot_start_payment_setup(db_session, client_factory):
+    _owner, _org, space = _owner_space(db_session)
+    member = _unverified_user(db_session, "unverified-pay@example.com", "sub-pay-unverified", UserAppRole.MEMBER)
+    client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": False,
+    })
+
+    response = client.post("/api/payment-methods/setup-session", json={"space_public_id": space.public_id})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Email verification required before payment"

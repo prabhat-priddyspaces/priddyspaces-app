@@ -51,7 +51,7 @@ jobs:
       CORS_ALLOW_ORIGINS: http://localhost:3000
       REDIS_URL: redis://localhost:6379/0
       FRONTEND_URL: http://localhost:3000
-      API_KEY_ENCRYPTION_KEY: ci-encryption-key-32-bytes-long
+      PAYMENT_CREDENTIAL_ENCRYPTION_KEY: ci-encryption-key-32-bytes-long
       SENDGRID_API_KEY: ""
       OPENAI_API_KEY: ""
     steps:

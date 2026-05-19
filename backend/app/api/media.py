@@ -127,7 +127,7 @@ def presign_media(
     token: dict = Depends(get_current_user),
 ):
     _space_with_access(db, token, payload.space_public_id)
-    return presign_space_image_upload(payload.filename, payload.content_type)
+    return presign_space_image_upload(payload.filename, payload.content_type, payload.size_bytes)
 
 
 @router.post("/media", response_model=SpaceImageOut)

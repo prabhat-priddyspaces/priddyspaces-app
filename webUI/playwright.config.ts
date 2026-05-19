@@ -39,9 +39,12 @@ export default defineConfig({
       // Any non-empty value works; e2e mocks the maps.googleapis.com response.
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
         process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "test-key-for-playwright",
+      // Force relative /api requests in e2e so route mocks are not affected by
+      // a developer's local .env pointing at a separate backend origin.
+      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
       // Use a separate build cache so the test-only NEXT_PUBLIC_* values
       // don't get baked into the .next dir that `npm run dev` reuses.
-      NEXT_DIST_DIR: ".next-playwright",
+      NEXT_DIST_DIR: process.env.NEXT_DIST_DIR || ".next-playwright",
       // Bypass Clerk auth in e2e: middleware no-ops, ClerkProvider is unmounted,
       // and layouts use a localStorage-backed useMe variant. The existing
       // mockSession() helper sets the access token under the same key.
