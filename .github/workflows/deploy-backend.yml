@@ -58,6 +58,102 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Ensure dev app config secret keys
+        if: ${{ inputs.environment == 'dev' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
+          SERVICE="${{ steps.meta.outputs.ecs_service }}"
+          ENVIRONMENT="${{ inputs.environment }}"
+
+          CURRENT_TASK_DEF=$(aws ecs describe-services \
+            --cluster "$CLUSTER" \
+            --services "$SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          aws ecs describe-task-definition --task-definition "$CURRENT_TASK_DEF" --query 'taskDefinition' > current-taskdef.json
+
+          APP_SECRET_ARN=$(jq -r '
+            .containerDefinitions[]
+            | select(.name == "backend")
+            | (.secrets // [])[].valueFrom
+            | select(. != null)
+            | split(":")[0:7]
+            | join(":")
+          ' current-taskdef.json | head -n 1)
+
+          if [ -z "$APP_SECRET_ARN" ] || [ "$APP_SECRET_ARN" = "null" ]; then
+            echo "Could not resolve app config secret ARN from $CURRENT_TASK_DEF"
+            exit 1
+          fi
+
+          aws secretsmanager get-secret-value \
+            --secret-id "$APP_SECRET_ARN" \
+            --query SecretString \
+            --output text > app-secret.json
+
+          if ! jq -e 'type == "object"' app-secret.json >/dev/null; then
+            echo "App config secret must contain a JSON object"
+            exit 1
+          fi
+
+          MISSING_REQUIRED=$(jq -r '
+            . as $secret
+            | ["DATABASE_URL", "REDIS_URL"]
+            | map(select($secret[.] == null))
+            | join(", ")
+          ' app-secret.json)
+          if [ -n "$MISSING_REQUIRED" ]; then
+            echo "App config secret is missing required generated key(s): $MISSING_REQUIRED"
+            exit 1
+          fi
+
+          BACKEND_URL="https://api.${ENVIRONMENT}.priddyspaces.com"
+          FRONTEND_URL="https://app.${ENVIRONMENT}.priddyspaces.com"
+          JWT_SECRET_DEFAULT=$(openssl rand -hex 32)
+          PAYMENT_KEY_DEFAULT=$(openssl rand -hex 32)
+
+          NORMALIZED_SECRET=$(jq -c . app-secret.json)
+          UPDATED_SECRET=$(jq -c \
+            --arg backend_url "$BACKEND_URL" \
+            --arg frontend_url "$FRONTEND_URL" \
+            --arg cors_allow_origins "$FRONTEND_URL" \
+            --arg jwt_secret "$JWT_SECRET_DEFAULT" \
+            --arg payment_key "$PAYMENT_KEY_DEFAULT" \
+            '
+            def ensure($key; $value):
+              if (.[$key]? == null) then . + {($key): $value} else . end;
+
+            ensure("DEBUG"; "false")
+            | ensure("JWT_SECRET"; $jwt_secret)
+            | ensure("PAYMENT_CREDENTIAL_ENCRYPTION_KEY"; $payment_key)
+            | ensure("BACKEND_URL"; $backend_url)
+            | ensure("FRONTEND_URL"; $frontend_url)
+            | ensure("CORS_ALLOW_ORIGINS"; $cors_allow_origins)
+            | ensure("CLERK_JWKS_URL"; "")
+            | ensure("CLERK_SECRET_KEY"; "")
+            | ensure("CLERK_WEBHOOK_SECRET"; "")
+            | ensure("SENDGRID_API_KEY"; "")
+            | ensure("SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY"; "")
+            | ensure("OPENAI_API_KEY"; "")
+            | ensure("STRIPE_SECRET_KEY"; "")
+            | ensure("STRIPE_WEBHOOK_SECRET"; "")
+            | ensure("STRIPE_PUBLISHABLE_KEY"; "")
+            | ensure("PAYMENT_MODE"; "dummy")
+            ' app-secret.json)
+
+          if [ "$UPDATED_SECRET" = "$NORMALIZED_SECRET" ]; then
+            echo "Dev app config secret already has the expected keys"
+            exit 0
+          fi
+
+          aws secretsmanager put-secret-value \
+            --secret-id "$APP_SECRET_ARN" \
+            --secret-string "$UPDATED_SECRET" >/dev/null
+          echo "Dev app config secret was updated with missing keys"
+
       - name: Build and push backend image
         id: image
         shell: bash
