@@ -74,7 +74,7 @@ jobs:
             --exclude mobile/node_modules
 
       - name: Upload Semgrep SARIF artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: semgrep-sarif
           path: semgrep.sarif
@@ -138,7 +138,7 @@ jobs:
           output-file: priddyspaces.spdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: priddyspaces-sbom
           path: priddyspaces.spdx.json
