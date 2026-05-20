@@ -80,6 +80,7 @@ jobs:
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
             --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
             --build-arg NEXT_ASSET_PREFIX="$ASSET_PREFIX" \
+            --build-arg NEXT_PUBLIC_APP_ENV="${{ inputs.environment }}" \
             -t "$BUILDER_IMAGE" webUI
 
           rm -rf next-static
@@ -114,6 +115,7 @@ jobs:
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
             --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
             --build-arg NEXT_ASSET_PREFIX="$ASSET_PREFIX" \
+            --build-arg NEXT_PUBLIC_APP_ENV="${{ inputs.environment }}" \
             -t "$IMAGE_URI" \
             -t "$LATEST_URI" \
             webUI
@@ -189,6 +191,7 @@ jobs:
                       | ensure_env("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"; $GMAPS_KEY)
                       | ensure_env("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"; $CLERK_PK)
                       | ensure_env("NEXT_ASSET_PREFIX"; $ASSET_PREFIX)
+                      | ensure_env("NEXT_PUBLIC_APP_ENV"; "${{ inputs.environment }}")
                     )
                 else . end
               )

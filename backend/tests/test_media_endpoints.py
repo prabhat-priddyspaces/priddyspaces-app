@@ -7,6 +7,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.location import Location
 from app.models.space import Space
 from app.core.config import settings
+from app.services.storage import MAX_IMAGE_UPLOAD_BYTES, presign_space_image_upload
 
 
 def _seed_owner_space(db):
@@ -65,11 +66,12 @@ def _seed_owner_space(db):
 def test_media_upload_flow(db_session, client_factory, monkeypatch):
     owner, space = _seed_owner_space(db_session)
 
-    def fake_presign(filename: str, content_type: str | None = None):
+    def fake_presign(filename: str, content_type: str, size_bytes: int):
         return {
             "upload_url": "https://s3.example.com/upload",
             "key": f"spaces/{filename}",
-            "public_url": f"https://cdn.example.com/spaces/{filename}"
+            "public_url": f"https://cdn.example.com/spaces/{filename}",
+            "max_bytes": 10 * 1024 * 1024,
         }
 
     monkeypatch.setattr("app.api.media.presign_space_image_upload", fake_presign)
@@ -82,7 +84,12 @@ def test_media_upload_flow(db_session, client_factory, monkeypatch):
 
     presign = client.post(
         "/api/media/presign",
-        json={"filename": "space.jpg", "content_type": "image/jpeg", "space_public_id": space.public_id}
+        json={
+            "filename": "space.jpg",
+            "content_type": "image/jpeg",
+            "size_bytes": 1024,
+            "space_public_id": space.public_id,
+        }
     )
     assert presign.status_code == 200
     presign_data = presign.json()
@@ -111,11 +118,12 @@ def test_media_upload_flow(db_session, client_factory, monkeypatch):
 def test_media_update_and_delete_flow(db_session, client_factory, monkeypatch):
     owner, space = _seed_owner_space(db_session)
 
-    def fake_presign(filename: str, content_type: str | None = None):
+    def fake_presign(filename: str, content_type: str, size_bytes: int):
         return {
             "upload_url": "https://s3.example.com/upload",
             "key": f"spaces/{filename}",
-            "public_url": f"https://cdn.example.com/spaces/{filename}"
+            "public_url": f"https://cdn.example.com/spaces/{filename}",
+            "max_bytes": 10 * 1024 * 1024,
         }
 
     monkeypatch.setattr("app.api.media.presign_space_image_upload", fake_presign)
@@ -232,3 +240,82 @@ def test_media_public_urls_encode_storage_key(db_session, client_factory, monkey
         create.json()["image_url"]
         == "https://assets.example.com/spaces/Screenshot%202026-05-07%20at%2011.40.21%20AM.png"
     )
+
+
+def test_space_image_presign_rejects_non_images(db_session, client_factory):
+    owner, space = _seed_owner_space(db_session)
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True
+    })
+
+    presign = client.post(
+        "/api/media/presign",
+        json={
+            "filename": "payload.svg",
+            "content_type": "image/svg+xml",
+            "size_bytes": 1024,
+            "space_public_id": space.public_id,
+        }
+    )
+
+    assert presign.status_code == 400
+
+
+def test_space_image_presign_generates_opaque_s3_key(monkeypatch):
+    captured = {}
+
+    class FakeS3:
+        def generate_presigned_url(self, method, Params, ExpiresIn):
+            captured["method"] = method
+            captured["params"] = Params
+            captured["expires_in"] = ExpiresIn
+            return "https://s3.example.com/upload"
+
+    monkeypatch.setattr(settings, "S3_BUCKET", "uploads")
+    monkeypatch.setattr(settings, "S3_REGION", "us-east-1")
+    monkeypatch.setattr(settings, "S3_PUBLIC_BASE_URL", "https://assets.example.com")
+    monkeypatch.setattr("app.services.storage.boto3.client", lambda *args, **kwargs: FakeS3())
+
+    result = presign_space_image_upload("../../profile.png", "image/png", 1024)
+
+    assert result["upload_url"] == "https://s3.example.com/upload"
+    assert result["key"].startswith("spaces/")
+    assert result["key"].endswith(".png")
+    assert "profile" not in result["key"]
+    assert ".." not in result["key"]
+    assert result["public_url"] == f"https://assets.example.com/{result['key']}"
+    assert result["max_bytes"] == MAX_IMAGE_UPLOAD_BYTES
+    assert captured["method"] == "put_object"
+    assert captured["params"]["ContentType"] == "image/png"
+    assert "ContentLength" not in captured["params"]
+
+
+def test_floor_plan_presign_requires_location_scope(db_session, client_factory, monkeypatch):
+    owner, space = _seed_owner_space(db_session)
+    location = db_session.query(Location).filter(Location.id == space.location_id).one()
+
+    def fake_presign(filename: str, content_type: str, size_bytes: int):
+        return {"upload_url": "https://s3.example.com/upload", "key": f"floor-plans/{filename}", "max_bytes": 10 * 1024 * 1024}
+
+    monkeypatch.setattr("app.api.floor_plans.presign_floor_plan_upload", fake_presign)
+
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True
+    })
+
+    presign = client.post(
+        "/api/floor-plans/presign",
+        json={
+            "filename": "floor.png",
+            "content_type": "image/png",
+            "size_bytes": 1024,
+            "location_public_id": location.public_id,
+        },
+    )
+
+    assert presign.status_code == 200
+    assert presign.json()["key"] == "floor-plans/floor.png"

@@ -26,7 +26,7 @@ from app.schemas.payment import (
 from app.models.enums import UserAppRole, UserRole, PaymentStatus, BookingStatus
 from app.models.pricing_rule import PricingRule
 from app.models.tax_config import TaxConfig
-from app.services.auth_user import get_or_create_user
+from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import accessible_location_ids, get_org_member, list_org_members, require_owner_or_admin
 from app.services.pricing import estimate_booking_amount
 from app.services.stripe_payments import (
@@ -176,6 +176,7 @@ def create_intent(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
 
     amount = payload.amount
     booking_tenant_id = None
@@ -222,6 +223,7 @@ def create_subscription_purchase(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
@@ -290,6 +292,7 @@ def create_member_portal(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
 
     if not user.stripe_customer_id:
         customer = create_customer(email=user.email)

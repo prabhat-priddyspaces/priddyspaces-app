@@ -7,7 +7,7 @@ from app.models.floor_plan import FloorPlan
 from app.models.location import Location
 from app.schemas.floor_plan import FloorPlanCreate, FloorPlanOut, FloorPlanPresignIn, FloorPlanPresignOut
 from app.services.lookups import get_location_by_public_id
-from app.services.storage import presign_floor_plan_upload
+from app.services.storage import presign_floor_plan_upload, public_floor_plan_url
 from app.services.auth_user import get_or_create_user
 from app.services.authz import get_org_member, require_owner_or_admin
 
@@ -20,8 +20,13 @@ def presign_floor_plan(
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user)
 ):
-    get_or_create_user(db, token)
-    return presign_floor_plan_upload(payload.filename)
+    location = get_location_by_public_id(db, payload.location_public_id)
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    user = get_or_create_user(db, token)
+    member = get_org_member(db, location.organization_id, user.id)
+    require_owner_or_admin(member)
+    return presign_floor_plan_upload(payload.filename, payload.content_type, payload.size_bytes)
 
 
 @router.post("/floor-plans", response_model=FloorPlanOut)
@@ -42,7 +47,7 @@ def create_floor_plan(
     floor_plan = FloorPlan(
         location_id=location.id,
         tenant_id=location.organization_id,
-        image_url=payload.image_url,
+        image_url=public_floor_plan_url(payload.image_url) if payload.image_url.startswith("floor-plans/") else payload.image_url,
         scale=payload.scale,
         version=version
     )

@@ -28,7 +28,10 @@ interface MediaPresignOut {
   upload_url: string;
   key: string;
   public_url: string;
+  max_bytes: number;
 }
+
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export function SpaceMediaClient() {
   const params = useParams<{ spaceId: string }>();
@@ -72,6 +75,10 @@ export function SpaceMediaClient() {
       setMessage("Choose an image before uploading.");
       return;
     }
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      setMessage("Image must be 10 MB or smaller.");
+      return;
+    }
 
     const token = getAccessToken() ?? undefined;
     setUploading(true);
@@ -85,6 +92,7 @@ export function SpaceMediaClient() {
           body: JSON.stringify({
             filename: file.name,
             content_type: file.type || "application/octet-stream",
+            size_bytes: file.size,
             space_public_id: spaceId,
           }),
         },

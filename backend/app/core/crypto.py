@@ -5,15 +5,17 @@ import hashlib
 import hmac
 import os
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from app.core.config import settings
 
 
 def _credential_key() -> bytes:
-    raw = (
-        settings.PAYMENT_CREDENTIAL_ENCRYPTION_KEY
-        or settings.JWT_SECRET
-        or "priddyspaces-local-payment-credential-key"
-    )
+    if settings.is_production_like and not settings.PAYMENT_CREDENTIAL_ENCRYPTION_KEY:
+        raise ValueError("PAYMENT_CREDENTIAL_ENCRYPTION_KEY is required")
+    raw = settings.PAYMENT_CREDENTIAL_ENCRYPTION_KEY or settings.JWT_SECRET
+    if not raw:
+        raw = "priddyspaces-local-payment-credential-key"
     return hashlib.sha256(raw.encode("utf-8")).digest()
 
 
@@ -31,17 +33,21 @@ def encrypt_secret(value: str | None) -> str | None:
         return None
     plaintext = value.encode("utf-8")
     key = _credential_key()
-    nonce = os.urandom(16)
-    stream = _keystream(key, nonce, len(plaintext))
-    ciphertext = bytes(a ^ b for a, b in zip(plaintext, stream))
-    tag = hmac.new(key, nonce + ciphertext, hashlib.sha256).digest()
-    token = base64.urlsafe_b64encode(nonce + tag + ciphertext).decode("ascii")
-    return f"v1:{token}"
+    nonce = os.urandom(12)
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
+    token = base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+    return f"v2:{token}"
 
 
 def decrypt_secret(value: str | None) -> str | None:
     if not value:
         return None
+    if value.startswith("v2:"):
+        raw = base64.urlsafe_b64decode(value[3:].encode("ascii"))
+        nonce = raw[:12]
+        ciphertext = raw[12:]
+        plaintext = AESGCM(_credential_key()).decrypt(nonce, ciphertext, None)
+        return plaintext.decode("utf-8")
     if not value.startswith("v1:"):
         return value
     raw = base64.urlsafe_b64decode(value[3:].encode("ascii"))

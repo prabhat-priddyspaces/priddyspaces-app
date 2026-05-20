@@ -19,7 +19,10 @@ interface PresignResponse {
   upload_url: string;
   key: string;
   public_url: string;
+  max_bytes: number;
 }
+
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 export function SpaceImages({ spacePublicId }: { spacePublicId: string }) {
   const [images, setImages] = useState<SpaceImage[]>([]);
@@ -43,6 +46,10 @@ export function SpaceImages({ spacePublicId }: { spacePublicId: string }) {
 
   async function handleUpload(file: File | null) {
     if (!file) return;
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      setMessage("Image must be 10 MB or smaller");
+      return;
+    }
     setUploading(true);
     setMessage("");
     try {
@@ -54,6 +61,7 @@ export function SpaceImages({ spacePublicId }: { spacePublicId: string }) {
           body: JSON.stringify({
             filename: file.name,
             content_type: file.type,
+            size_bytes: file.size,
             space_public_id: spacePublicId
           })
         },

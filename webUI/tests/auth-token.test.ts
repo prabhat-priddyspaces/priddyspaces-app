@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   AUTH_TOKEN_KEY,
+  clearAccessToken,
+  getAccessToken,
   getAccessTokenPayload,
   getActiveImpersonationToken,
   isImpersonationToken,
@@ -37,6 +39,7 @@ describe("access-token helpers", () => {
         },
       },
     });
+    clearAccessToken();
   });
 
   it("reads an impersonation payload from an internal JWT", () => {
@@ -62,7 +65,7 @@ describe("access-token helpers", () => {
     expect(isImpersonationToken(token)).toBe(false);
   });
 
-  it("returns the active impersonation token from localStorage", () => {
+  it("keeps the active token in memory without persisting to localStorage", () => {
     const token = tokenWithPayload({
       sub: "owner_1",
       email: "owner@example.com",
@@ -71,7 +74,8 @@ describe("access-token helpers", () => {
 
     setAccessToken(token);
 
-    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBe(token);
+    expect(window.localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(getAccessToken()).toBe(token);
     expect(getActiveImpersonationToken()).toBe(token);
   });
 });

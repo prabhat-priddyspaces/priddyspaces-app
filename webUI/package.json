@@ -10,7 +10,7 @@
     "build:export": "PATCH_CLERK_STATIC_EXPORT=1 node scripts/patch-clerk-static-export.js && NEXT_OUTPUT_MODE=export next build",
     "start": "next start",
     "start:export": "npx serve@latest out",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
@@ -28,7 +28,7 @@
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.469.0",
-    "next": "^16.1.6",
+    "next": "^16.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.8.1",
@@ -44,11 +44,16 @@
     "@types/react-dom": "^18.2.24",
     "autoprefixer": "^10.4.19",
     "eslint": "^9.39.2",
-    "eslint-config-next": "^16.1.6",
+    "eslint-config-next": "^16.2.6",
     "jsdom": "^24.1.1",
-    "postcss": "^8.4.38",
+    "postcss": "^8.5.10",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.10"
+    }
   }
 }

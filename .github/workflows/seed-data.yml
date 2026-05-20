@@ -45,6 +45,12 @@ jobs:
           set -euo pipefail
           CLUSTER="${{ steps.meta.outputs.ecs_cluster }}"
           SERVICE="${{ steps.meta.outputs.ecs_service }}"
+          DEMO_OWNER_PASSWORD=$(aws ssm get-parameter \
+            --name "/priddyspaces/${{ inputs.environment }}/app/demo_owner_password" \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)
+          echo "::add-mask::$DEMO_OWNER_PASSWORD"
 
           TASK_DEF_ARN=$(aws ecs describe-services \
             --cluster "$CLUSTER" \
@@ -57,13 +63,16 @@ jobs:
           jq -n --argjson subnets "$SUBNETS_JSON" --argjson securityGroups "$SGS_JSON" \
             '{awsvpcConfiguration:{subnets:$subnets,securityGroups:$securityGroups,assignPublicIp:"DISABLED"}}' \
             > network-config.json
+          jq -n --arg password "$DEMO_OWNER_PASSWORD" \
+            '{containerOverrides:[{name:"backend",command:["python","-m","app.seed_demo_data"],environment:[{name:"DEMO_OWNER_PASSWORD",value:$password}]}]}' \
+            > seed-overrides.json
 
           aws ecs run-task \
             --cluster "$CLUSTER" \
             --launch-type FARGATE \
             --task-definition "$TASK_DEF_ARN" \
             --network-configuration file://network-config.json \
-            --overrides '{"containerOverrides":[{"name":"backend","command":["python","-m","app.seed_demo_data"]}]}' \
+            --overrides file://seed-overrides.json \
             --count 1 >/tmp/run-task.json
 
           TASK_ARN=$(jq -r '.tasks[0].taskArn' /tmp/run-task.json)

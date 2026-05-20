@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import httpx
+import bleach
 from fastapi import HTTPException
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -53,6 +54,35 @@ logger = logging.getLogger("marketing")
 
 OWNER_MARKETING_ROLES = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
 SENDER_LANES = {"shared", "verified_sender"}
+
+ALLOWED_MARKETING_HTML_TAGS = [
+    "a",
+    "b",
+    "br",
+    "div",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "li",
+    "ol",
+    "p",
+    "span",
+    "strong",
+    "table",
+    "tbody",
+    "td",
+    "th",
+    "thead",
+    "tr",
+    "ul",
+]
+ALLOWED_MARKETING_HTML_ATTRIBUTES = {
+    "a": ["href", "title"],
+    "table": ["cellpadding", "cellspacing", "role"],
+    "td": ["align", "colspan"],
+    "th": ["align", "colspan"],
+}
 
 ALLOWED_TEMPLATE_FIELDS: dict[str, set[str]] = {
     "member": {"first_name", "last_name", "full_name", "email", "phone"},
@@ -193,6 +223,14 @@ def render_marketing_template(
     subject = _render(template.subject) or template.subject
     html = _render(template.html_body)
     text = _render(template.text_body)
+    if html is not None:
+        html = bleach.clean(
+            html,
+            tags=ALLOWED_MARKETING_HTML_TAGS,
+            attributes=ALLOWED_MARKETING_HTML_ATTRIBUTES,
+            protocols=["http", "https", "mailto"],
+            strip=True,
+        )
     return subject, html, text, sorted(set(missing))
 
 
