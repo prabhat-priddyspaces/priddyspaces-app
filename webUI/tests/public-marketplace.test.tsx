@@ -1,13 +1,15 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
 import { PublicMarketplaceBrowser } from "../components/public-marketplace-browser";
 import { PublicSpaceDetailView } from "../components/public-space-detail-view";
 
-const { pushMock, apiFetchMock } = vi.hoisted(() => ({
+const { pushMock, apiFetchMock, reverseGeocodeMock, searchQuery } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   apiFetchMock: vi.fn(),
+  reverseGeocodeMock: vi.fn(),
+  searchQuery: { value: "q=Miami" },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -17,7 +19,7 @@ vi.mock("next/navigation", () => ({
     push: pushMock,
     back: vi.fn(),
   }),
-  useSearchParams: () => new URLSearchParams("q=Miami"),
+  useSearchParams: () => new URLSearchParams(searchQuery.value),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -37,14 +39,75 @@ vi.mock("../components/public-location-mini-map", () => ({
   PublicLocationMiniMap: () => <div data-testid="public-location-mini-map" />,
 }));
 
+vi.mock("../components/use-address-autocomplete", () => ({
+  useAddressAutocomplete: () => ({ warning: null }),
+  reverseGeocode: reverseGeocodeMock,
+}));
+
 describe("public marketplace flows", () => {
   beforeEach(() => {
+    searchQuery.value = "q=Miami";
     pushMock.mockReset();
     apiFetchMock.mockReset();
+    reverseGeocodeMock.mockReset();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
       value: vi.fn(),
     });
+  });
+
+  it("requests browser geolocation on first load when no location filter is present", async () => {
+    searchQuery.value = "";
+    reverseGeocodeMock.mockResolvedValue({ city: "Plantation", state: "FL", formatted: "Plantation, FL" });
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({
+        coords: { latitude: 26.132, longitude: -80.2624 },
+      } as GeolocationPosition),
+    );
+    Object.defineProperty(navigator, "geolocation", {
+      value: { getCurrentPosition },
+      configurable: true,
+    });
+    apiFetchMock.mockResolvedValueOnce({
+      meta: { total_locations: 0, page: 1, page_size: 20 },
+      results: [],
+    });
+
+    render(<PublicMarketplaceBrowser routeKey="spaces" />);
+
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith(
+        "/spaces?q=Plantation%2C+FL&lat=26.132&lng=-80.2624&radius_miles=50",
+      ),
+    );
+  });
+
+  it("uses browser geolocation from the Locate me button", async () => {
+    reverseGeocodeMock.mockResolvedValue({ city: "Plantation", state: "FL", formatted: "Plantation, FL" });
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({
+        coords: { latitude: 26.132, longitude: -80.2624 },
+      } as GeolocationPosition),
+    );
+    Object.defineProperty(navigator, "geolocation", {
+      value: { getCurrentPosition },
+      configurable: true,
+    });
+    apiFetchMock.mockResolvedValueOnce({
+      meta: { total_locations: 0, page: 1, page_size: 20 },
+      results: [],
+    });
+
+    render(<PublicMarketplaceBrowser routeKey="spaces" />);
+    fireEvent.click(screen.getByRole("button", { name: /Locate me/ }));
+
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith(
+        "/spaces?q=Plantation%2C+FL&lat=26.132&lng=-80.2624&radius_miles=50",
+      ),
+    );
   });
 
   it("falls back to the location page when a result has no featured space", async () => {

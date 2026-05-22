@@ -61,6 +61,47 @@ const meetingRoomResults = {
   results: [coworkingResults.results[1]],
 };
 
+test("public marketplace can ask for browser location and search the default radius", async ({ page, context }) => {
+  const marketplaceRequests: URL[] = [];
+
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 26.132, longitude: -80.2624 });
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/marketplace/locations") {
+      marketplaceRequests.push(url);
+      await json(route, coworkingResults);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  const response = await page.goto("/spaces");
+
+  expect(response?.headers()["permissions-policy"]).toContain("geolocation=(self)");
+  await expect(page).toHaveURL(/\/spaces\?/);
+  await expect(page).toHaveURL(/lat=26.132/);
+  await expect(page).toHaveURL(/lng=-80.2624/);
+  await expect(page).toHaveURL(/radius_miles=50/);
+  await expect(page.getByRole("button", { name: /Locate me/ })).toBeVisible();
+  await expect(page.locator('input[placeholder="50"]')).toHaveValue("50");
+  await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
+  await expect
+    .poll(() =>
+      marketplaceRequests.some(
+        (url) =>
+          url.searchParams.get("lat") === "26.132" &&
+          url.searchParams.get("lng") === "-80.2624" &&
+          url.searchParams.get("radius_miles") === "50",
+      ),
+    )
+    .toBe(true);
+});
+
 test("public marketplace redirects to /spaces and supports route-driven location search", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
