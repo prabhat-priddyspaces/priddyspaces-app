@@ -17,6 +17,7 @@ import {
   Search,
   Settings,
   Sparkles,
+  User,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -147,9 +148,15 @@ export function CommandPalette() {
           },
           {
             id: "settings",
-            label: "Settings",
+            label: "Organization settings",
             icon: Settings,
             onSelect: () => navigate("/owner/settings"),
+          },
+          {
+            id: "account",
+            label: "Account",
+            icon: User,
+            onSelect: () => navigate("/owner/account"),
           },
         ],
       },

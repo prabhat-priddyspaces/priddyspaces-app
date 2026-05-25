@@ -57,6 +57,7 @@ export interface SidebarProps {
   profile?: SidebarProfile;
   onSearchClick?: () => void;
   onProfileClick?: () => void;
+  onWorkspaceClick?: () => void;
   /** When `variant === "admin"`, controls whether platform-only items are shown. */
   isSuperadmin?: boolean;
 }
@@ -97,7 +98,8 @@ const ownerSections: SidebarSection[] = [
   {
     label: "Settings",
     items: [
-      { href: "/owner/settings", icon: Settings, label: "Workspace" },
+      { href: "/owner/account", icon: User, label: "Account" },
+      { href: "/owner/settings", icon: Settings, label: "Organization" },
       { href: "/owner/settings/payments", icon: CreditCard, label: "Payments setup" },
       {
         href: "/owner/settings/assistant-policies",
@@ -183,6 +185,7 @@ export function Sidebar({
   profile,
   onSearchClick,
   onProfileClick,
+  onWorkspaceClick,
   isSuperadmin = false,
 }: SidebarProps) {
   const pathname = usePathname() ?? "";
@@ -203,10 +206,13 @@ export function Sidebar({
       : "Workspace");
 
   return (
-    <aside className="hidden lg:flex flex-col gap-1 border-r border-line bg-bg px-3 py-3.5 w-[232px] flex-none overflow-hidden">
+    <aside
+      data-testid="workspace-sidebar"
+      className="hidden lg:flex flex-col gap-1 border-r border-line bg-bg px-3 py-3.5 w-[232px] flex-none overflow-hidden"
+    >
       <button
         type="button"
-        onClick={onProfileClick}
+        onClick={onWorkspaceClick}
         className="flex items-center gap-2.5 rounded-[10px] border border-transparent bg-transparent p-1.5 mb-2.5 text-left hover:bg-surface-2 transition-colors"
       >
         <Logo size={28} />
@@ -280,6 +286,8 @@ export function Sidebar({
         <button
           type="button"
           onClick={onProfileClick}
+          aria-label="Open account settings"
+          data-testid="sidebar-profile-button"
           className="mt-2 flex items-center gap-2.5 rounded-[10px] bg-surface-2 px-2 py-2 text-left hover:bg-surface-3 transition-colors"
         >
           <Avatar name={profile.name} size={28} />
