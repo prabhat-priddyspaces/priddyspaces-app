@@ -2,6 +2,7 @@
 
 import { ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { useMe } from "@/hooks/useMe";
 import { useAppSignOut } from "@/hooks/useAppSignOut";
@@ -35,6 +36,7 @@ export function AppShell({
 }: AppShellProps) {
   const { me } = useMe();
   const appSignOut = useAppSignOut();
+  const router = useRouter();
 
   const profile = me
     ? {
@@ -78,6 +80,7 @@ export function AppShell({
     <WorkspaceShell
       sidebar="owner"
       sidebarProfile={profile}
+      onProfileClick={() => router.push("/owner/account")}
       topbar={topbar}
       banner={
         <ImpersonationBanner

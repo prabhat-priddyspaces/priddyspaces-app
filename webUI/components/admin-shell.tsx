@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
@@ -36,6 +37,7 @@ export function AdminShell({
 }: AdminShellProps) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const appSignOut = useAppSignOut();
+  const router = useRouter();
 
   useEffect(() => {
     const token = getAccessToken();
@@ -85,6 +87,7 @@ export function AdminShell({
       sidebar="admin"
       sidebarProfile={profile}
       isSuperadmin={me?.platform_role === "superadmin"}
+      onProfileClick={() => router.push("/admin/settings")}
       topbar={topbar}
       banner={
         <ImpersonationBanner

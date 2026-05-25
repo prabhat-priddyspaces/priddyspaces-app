@@ -527,7 +527,7 @@ export default function OwnerSettingsPage() {
   }, [selectedOrg]);
 
   return (
-    <AppShell title="Settings" breadcrumb={["Owner", "Platform"]}>
+    <AppShell title="Organization settings" breadcrumb={["Owner", "Organization"]}>
       <div className="grid gap-6">
         <p className="text-[13px] text-text-3 max-w-xl">
           Pricing, promotions, tax, flags, cancellation rules, plans, and payouts.

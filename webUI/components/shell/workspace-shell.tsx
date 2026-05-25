@@ -15,6 +15,8 @@ export interface WorkspaceShellProps {
   className?: string;
   contentClassName?: string;
   onSearchClick?: () => void;
+  onProfileClick?: () => void;
+  onWorkspaceClick?: () => void;
 }
 
 export function WorkspaceShell({
@@ -27,20 +29,25 @@ export function WorkspaceShell({
   className,
   contentClassName,
   onSearchClick,
+  onProfileClick,
+  onWorkspaceClick,
 }: WorkspaceShellProps) {
   return (
-    <div className={cn("min-h-screen flex flex-col bg-bg text-text", className)}>
+    <div className={cn("h-screen overflow-hidden flex flex-col bg-bg text-text", className)}>
       {banner}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar
           variant={sidebar}
           profile={sidebarProfile}
           isSuperadmin={isSuperadmin}
           onSearchClick={onSearchClick}
+          onProfileClick={onProfileClick}
+          onWorkspaceClick={onWorkspaceClick}
         />
-        <div className="flex flex-col flex-1 min-w-0">
-          {topbar}
+        <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+          {topbar ? <div className="flex-none">{topbar}</div> : null}
           <main
+            data-testid="workspace-main"
             className={cn(
               "flex-1 min-h-0 overflow-auto px-6 py-7 lg:px-8",
               contentClassName

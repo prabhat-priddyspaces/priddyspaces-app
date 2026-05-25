@@ -34,6 +34,7 @@ function Shell({
   onSignOut?: () => void;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const profile = {
     name:
       [me.first_name, me.last_name].filter(Boolean).join(" ") ||
@@ -61,6 +62,7 @@ function Shell({
     <WorkspaceShell
       sidebar="customer"
       sidebarProfile={profile}
+      onProfileClick={() => router.push("/member/profile")}
       topbar={topbar}
       banner={
         <ImpersonationBanner
