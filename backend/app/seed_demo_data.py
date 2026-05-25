@@ -14,6 +14,7 @@ from app.models.enums import (
     BookingMode,
     LocationStatus,
     OrganizationReviewStatus,
+    PlatformTeamRole,
     SpaceType,
     SpaceVisibility,
     UserAppRole,
@@ -33,12 +34,19 @@ from app.services.amenities import seed_default_amenities
 
 
 DEMO_OWNER_PASSWORD_ENV = "DEMO_OWNER_PASSWORD"
+DEMO_SUPERADMIN = {
+    "email": "adminpriddyspaces@mailinator.com",
+    "first_name": "Priddyspaces",
+    "last_name": "Admin",
+}
+DEMO_OWNER_EMAIL_DOMAIN = "@mailinator.com"
+LEGACY_DEMO_OWNER_EMAIL_DOMAIN = "@priddyspaces.demo"
 
 DEMO_ORGS: list[dict[str, Any]] = [
     # ─── New York ───────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.nyc@priddyspaces.demo",
+            "email": "owner.nyc@mailinator.com",
             "first_name": "Ava",
             "last_name": "Miller",
         },
@@ -132,7 +140,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Florida ────────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.miami@priddyspaces.demo",
+            "email": "owner.miami@mailinator.com",
             "first_name": "Leo",
             "last_name": "Garcia",
         },
@@ -226,7 +234,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Texas ──────────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.austin@priddyspaces.demo",
+            "email": "owner.austin@mailinator.com",
             "first_name": "Nina",
             "last_name": "Patel",
         },
@@ -320,7 +328,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── California ─────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.la@priddyspaces.demo",
+            "email": "owner.la@mailinator.com",
             "first_name": "Zoe",
             "last_name": "Chen",
         },
@@ -422,7 +430,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Illinois ───────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.chicago@priddyspaces.demo",
+            "email": "owner.chicago@mailinator.com",
             "first_name": "Marcus",
             "last_name": "Johnson",
         },
@@ -524,7 +532,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Washington ─────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.seattle@priddyspaces.demo",
+            "email": "owner.seattle@mailinator.com",
             "first_name": "Sofia",
             "last_name": "Andersen",
         },
@@ -587,7 +595,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Colorado ───────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.denver@priddyspaces.demo",
+            "email": "owner.denver@mailinator.com",
             "first_name": "Ethan",
             "last_name": "Brooks",
         },
@@ -650,7 +658,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Georgia ────────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.atlanta@priddyspaces.demo",
+            "email": "owner.atlanta@mailinator.com",
             "first_name": "Keisha",
             "last_name": "Williams",
         },
@@ -713,7 +721,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Tennessee ──────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.nashville@priddyspaces.demo",
+            "email": "owner.nashville@mailinator.com",
             "first_name": "James",
             "last_name": "Carter",
         },
@@ -768,7 +776,7 @@ DEMO_ORGS: list[dict[str, Any]] = [
     # ─── Arizona ────────────────────────────────────────────────────────────────
     {
         "owner": {
-            "email": "owner.phoenix@priddyspaces.demo",
+            "email": "owner.phoenix@mailinator.com",
             "first_name": "Aria",
             "last_name": "Reyes",
         },
@@ -840,6 +848,84 @@ def _reviewer_user_id(db: Session) -> int | None:
     return member.user_id if member else None
 
 
+def _demo_owner_emails() -> list[str]:
+    return [demo_org["owner"]["email"] for demo_org in DEMO_ORGS]
+
+
+def _legacy_demo_owner_emails() -> list[str]:
+    return [
+        email.replace(DEMO_OWNER_EMAIL_DOMAIN, LEGACY_DEMO_OWNER_EMAIL_DOMAIN)
+        for email in _demo_owner_emails()
+    ]
+
+
+def _remove_legacy_demo_seed(db: Session) -> None:
+    legacy_owners = db.query(User).filter(User.email.in_(_legacy_demo_owner_emails())).all()
+    legacy_owner_ids = [owner.id for owner in legacy_owners]
+    if not legacy_owner_ids:
+        return
+
+    legacy_org_ids = [
+        row[0]
+        for row in db.query(Organization.id)
+        .filter(Organization.owner_id.in_(legacy_owner_ids))
+        .all()
+    ]
+    legacy_location_ids = [
+        row[0]
+        for row in db.query(Location.id)
+        .filter(Location.organization_id.in_(legacy_org_ids))
+        .all()
+    ]
+    legacy_space_ids = [
+        row[0]
+        for row in db.query(Space.id)
+        .filter(Space.tenant_id.in_(legacy_org_ids))
+        .all()
+    ]
+    legacy_amenity_ids = [
+        row[0]
+        for row in db.query(OrganizationAmenity.id)
+        .filter(OrganizationAmenity.organization_id.in_(legacy_org_ids))
+        .all()
+    ]
+
+    if legacy_space_ids:
+        db.query(SpaceImage).filter(SpaceImage.space_id.in_(legacy_space_ids)).delete(
+            synchronize_session="fetch"
+        )
+        db.query(SpaceBookingMode).filter(SpaceBookingMode.space_id.in_(legacy_space_ids)).delete(
+            synchronize_session="fetch"
+        )
+        db.query(Space).filter(Space.id.in_(legacy_space_ids)).delete(synchronize_session="fetch")
+    if legacy_location_ids:
+        db.query(LocationAmenity).filter(LocationAmenity.location_id.in_(legacy_location_ids)).delete(
+            synchronize_session="fetch"
+        )
+        db.query(Location).filter(Location.id.in_(legacy_location_ids)).delete(
+            synchronize_session="fetch"
+        )
+    if legacy_amenity_ids:
+        db.query(LocationAmenity).filter(
+            LocationAmenity.organization_amenity_id.in_(legacy_amenity_ids)
+        ).delete(synchronize_session="fetch")
+        db.query(OrganizationAmenity).filter(OrganizationAmenity.id.in_(legacy_amenity_ids)).delete(
+            synchronize_session="fetch"
+        )
+    if legacy_org_ids:
+        db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id.in_(legacy_org_ids)
+        ).delete(synchronize_session="fetch")
+        db.query(Organization).filter(Organization.id.in_(legacy_org_ids)).delete(
+            synchronize_session="fetch"
+        )
+    db.query(OrganizationMember).filter(OrganizationMember.user_id.in_(legacy_owner_ids)).delete(
+        synchronize_session="fetch"
+    )
+    db.query(User).filter(User.id.in_(legacy_owner_ids)).delete(synchronize_session="fetch")
+    db.commit()
+
+
 def _upsert_user(
     db: Session,
     *,
@@ -861,6 +947,38 @@ def _upsert_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    return user
+
+
+def _upsert_superadmin(db: Session, *, password: str) -> User:
+    user = db.query(User).filter(User.email == DEMO_SUPERADMIN["email"]).first()
+    if not user:
+        user = User(email=DEMO_SUPERADMIN["email"])
+    user.first_name = DEMO_SUPERADMIN["first_name"]
+    user.last_name = DEMO_SUPERADMIN["last_name"]
+    user.full_name = f"{user.first_name} {user.last_name}".strip()
+    user.email_verified = True
+    user.is_active = True
+    user.password_hash = hash_password(password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    member = db.query(PlatformTeamMember).filter(PlatformTeamMember.user_id == user.id).first()
+    if not member:
+        member = PlatformTeamMember(
+            user_id=user.id,
+            role=PlatformTeamRole.SUPERADMIN,
+            is_active=True,
+            invited_at=datetime.now(timezone.utc),
+        )
+    else:
+        member.role = PlatformTeamRole.SUPERADMIN
+        member.is_active = True
+        if member.invited_at is None:
+            member.invited_at = datetime.now(timezone.utc)
+    db.add(member)
+    db.commit()
     return user
 
 
@@ -1090,8 +1208,16 @@ def _ensure_space_image(db: Session, *, org: Organization, space: Space) -> None
 
 
 def seed_demo_data(db: Session, *, owner_password: str) -> dict[str, int]:
+    _remove_legacy_demo_seed(db)
+    _upsert_superadmin(db, password=owner_password)
     reviewer_user_id = _reviewer_user_id(db)
-    counts: dict[str, int] = {"owners": 0, "organizations": 0, "locations": 0, "spaces": 0}
+    counts: dict[str, int] = {
+        "superadmins": 1,
+        "owners": 0,
+        "organizations": 0,
+        "locations": 0,
+        "spaces": 0,
+    }
     for demo_org in DEMO_ORGS:
         owner = _upsert_user(db, password=owner_password, **demo_org["owner"])
         counts["owners"] += 1
@@ -1142,11 +1268,14 @@ def main() -> int:
         db.close()
 
     print("Seeded demo owners and listings")
+    print("Platform admins:")
+    print(f"  - {DEMO_SUPERADMIN['email']} (superadmin)")
     print("Owners:")
     for demo_org in DEMO_ORGS:
         print(f"  - {demo_org['owner']['email']} ({demo_org['organization']['name']})")
     print(
-        f"Summary: owners={counts['owners']} organizations={counts['organizations']} "
+        f"Summary: superadmins={counts['superadmins']} owners={counts['owners']} "
+        f"organizations={counts['organizations']} "
         f"locations={counts['locations']} spaces={counts['spaces']}"
     )
     return 0
