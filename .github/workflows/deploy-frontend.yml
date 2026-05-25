@@ -51,6 +51,20 @@ jobs:
           echo "frontend_asset_prefix=$(aws ssm get-parameter --name "$PREFIX/frontend_asset_prefix" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
           echo "api_origin=$(aws ssm get-parameter --name "$PREFIX/api_origin" --query 'Parameter.Value' --output text)" >> "$GITHUB_OUTPUT"
 
+          FRONTEND_ORIGIN=$(aws ssm get-parameter --name "$PREFIX/frontend_origin" --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -z "$FRONTEND_ORIGIN" ]; then
+            FRONTEND_ORIGIN=$(aws ssm get-parameter --name "$PREFIX/frontend_url" --query 'Parameter.Value' --output text 2>/dev/null || true)
+          fi
+          if [ -z "$FRONTEND_ORIGIN" ]; then
+            case "${{ inputs.environment }}" in
+              dev) FRONTEND_ORIGIN="https://app.dev.priddyspaces.com" ;;
+              staging) FRONTEND_ORIGIN="https://app.staging.priddyspaces.com" ;;
+              prod|production) FRONTEND_ORIGIN="https://app.priddyspaces.com" ;;
+              *) FRONTEND_ORIGIN="" ;;
+            esac
+          fi
+          echo "frontend_origin=$FRONTEND_ORIGIN" >> "$GITHUB_OUTPUT"
+
           GMAPS_KEY=$(aws ssm get-parameter --name "$PREFIX/google_maps_api_key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
           echo "::add-mask::$GMAPS_KEY"
           echo "google_maps_api_key=$GMAPS_KEY" >> "$GITHUB_OUTPUT"
@@ -230,3 +244,55 @@ jobs:
             fi
             exit 1
           fi
+
+      - name: Smoke test frontend edge
+        shell: bash
+        run: |
+          set -euo pipefail
+          FRONTEND_ORIGIN="${{ steps.meta.outputs.frontend_origin }}"
+          if [ -z "$FRONTEND_ORIGIN" ]; then
+            echo "::warning::No frontend origin configured; skipping public edge smoke test."
+            exit 0
+          fi
+
+          HEALTH_URL="${FRONTEND_ORIGIN%/}/api/health?deploy_sha=${GITHUB_SHA}&attempt=${GITHUB_RUN_ATTEMPT}"
+          ROOT_URL="${FRONTEND_ORIGIN%/}/?deploy_sha=${GITHUB_SHA}&attempt=${GITHUB_RUN_ATTEMPT}"
+          HEALTH_HEADERS="$(mktemp)"
+          HEALTH_BODY="$(mktemp)"
+          ROOT_BODY="$(mktemp)"
+
+          for attempt in {1..12}; do
+            STATUS=$(curl -sS -D "$HEALTH_HEADERS" -o "$HEALTH_BODY" -w "%{http_code}" \
+              --max-time 20 \
+              --retry 0 \
+              -H "Cache-Control: no-cache" \
+              "$HEALTH_URL" || true)
+            CACHE_CONTROL=$(awk 'BEGIN { IGNORECASE = 1 } /^cache-control:/ { sub(/\r$/, ""); print $0 }' "$HEALTH_HEADERS" | tail -n 1)
+
+            if [ "$STATUS" = "200" ] \
+              && jq -e '.status == "ok"' "$HEALTH_BODY" >/dev/null 2>&1 \
+              && [[ "$CACHE_CONTROL" == *"no-store"* ]]; then
+              ROOT_STATUS=$(curl -sS -o "$ROOT_BODY" -w "%{http_code}" \
+                --max-time 20 \
+                --retry 0 \
+                -H "Cache-Control: no-cache" \
+                "$ROOT_URL" || true)
+
+              if [[ "$ROOT_STATUS" =~ ^(200|30[1278])$ ]]; then
+                echo "Frontend edge smoke check passed for $HEALTH_URL and $ROOT_URL"
+                exit 0
+              fi
+
+              echo "Frontend root smoke check failed with HTTP $ROOT_STATUS."
+              sed -n '1,20p' "$ROOT_BODY" || true
+            fi
+
+            echo "Frontend edge smoke check attempt $attempt failed with HTTP $STATUS."
+            echo "Cache-Control: ${CACHE_CONTROL:-missing}"
+            sed -n '1,30p' "$HEALTH_HEADERS" || true
+            sed -n '1,20p' "$HEALTH_BODY" || true
+            sleep 10
+          done
+
+          echo "Frontend edge smoke check failed for $HEALTH_URL"
+          exit 1
