@@ -159,6 +159,91 @@ def test_admin_email_health_reports_booking_failures(db_session, client_factory)
     assert body["recent_booking_failures"][0]["error"] == "bad sender"
 
 
+def test_admin_users_lists_all_user_types_with_filters_and_pagination(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="users-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    member = _create_user(db_session, email="member-list@example.com", role=UserAppRole.MEMBER)
+    member.full_name = "Member List"
+    owner = _create_user(db_session, email="owner-list@example.com", role=UserAppRole.OWNER)
+    inactive = _create_user(db_session, email="inactive-list@example.com", role=None)
+    inactive.is_active = False
+    inactive.email_verified = False
+    db_session.commit()
+
+    org = Organization(name="Users Org", owner_id=owner.id, review_status=OrganizationReviewStatus.APPROVED)
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+    db_session.add(
+        OrganizationMember(
+            organization_id=org.id,
+            tenant_id=org.id,
+            user_id=owner.id,
+            role=UserRole.OWNER,
+        )
+    )
+    db_session.commit()
+
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    response = client.get("/api/admin/users?page=1&page_size=2")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 4
+    assert data["page"] == 1
+    assert data["page_size"] == 2
+    assert len(data["results"]) == 2
+    assert "auth_subject" not in data["results"][0]
+    assert "password_hash" not in data["results"][0]
+
+    search = client.get("/api/admin/users?q=member-list")
+    assert search.status_code == 200
+    search_data = search.json()
+    assert search_data["total"] == 1
+    assert search_data["results"][0]["public_id"] == str(member.public_id)
+    assert search_data["results"][0]["role"] == "member"
+
+    owner_filter = client.get("/api/admin/users?role=owner")
+    assert owner_filter.status_code == 200
+    owner_rows = owner_filter.json()["results"]
+    assert any(row["public_id"] == str(owner.public_id) and row["organization_count"] == 1 for row in owner_rows)
+
+    platform_filter = client.get("/api/admin/users?role=platform")
+    assert platform_filter.status_code == 200
+    platform_rows = platform_filter.json()["results"]
+    assert any(row["public_id"] == str(admin.public_id) and row["platform_role"] == "superadmin" for row in platform_rows)
+
+    inactive_filter = client.get("/api/admin/users?status=inactive&email_verified=false")
+    assert inactive_filter.status_code == 200
+    inactive_rows = inactive_filter.json()["results"]
+    assert [row["public_id"] for row in inactive_rows] == [str(inactive.public_id)]
+
+
+def test_admin_users_rejects_non_platform_users_and_invalid_filters(db_session, client_factory):
+    member = _create_user(db_session, email="users-forbidden-member@example.com", role=UserAppRole.MEMBER)
+    forbidden_client = client_factory({
+        "sub": str(member.public_id),
+        "email": member.email,
+        "email_verified": True,
+    })
+    forbidden = forbidden_client.get("/api/admin/users")
+    assert forbidden.status_code == 403
+
+    admin = _create_platform_member(db_session, email="users-filter-admin@example.com", role=PlatformTeamRole.SUPPORT)
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+    invalid_role = client.get("/api/admin/users?role=unknown")
+    assert invalid_role.status_code == 400
+    invalid_status = client.get("/api/admin/users?status=paused")
+    assert invalid_status.status_code == 400
+
+
 def test_superadmin_can_invite_platform_team_member_but_admin_cannot(db_session, client_factory):
     superadmin = _create_platform_member(db_session, email="superadmin@example.com", role=PlatformTeamRole.SUPERADMIN)
     client = client_factory({

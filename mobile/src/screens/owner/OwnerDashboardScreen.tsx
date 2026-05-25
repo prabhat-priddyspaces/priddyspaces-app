@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -13,8 +14,31 @@ type Payment = { amount: number };
 type Invoice = { amount: number };
 type Organization = { public_id: string };
 
+function StatCard({
+  label,
+  value,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.statCard}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${label}`}
+    >
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export function OwnerDashboardScreen() {
   const { token } = useAuth();
+  const navigation = useNavigation<any>();
   const [total, setTotal] = useState(0);
   const [pending, setPending] = useState(0);
   const [paymentsTotal, setPaymentsTotal] = useState(0);
@@ -54,26 +78,31 @@ export function OwnerDashboardScreen() {
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <View style={styles.stats}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total bookings</Text>
-            <Text style={styles.statValue}>{total}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Pending</Text>
-            <Text style={styles.statValue}>{pending}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Payments</Text>
-            <Text style={styles.statValue}>${paymentsTotal}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Invoices</Text>
-            <Text style={styles.statValue}>{invoicesTotal}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Team</Text>
-            <Text style={styles.statValue}>{membersTotal}</Text>
-          </View>
+          <StatCard
+            label="Total bookings"
+            value={total.toString()}
+            onPress={() => navigation.navigate("Bookings")}
+          />
+          <StatCard
+            label="Pending"
+            value={pending.toString()}
+            onPress={() => navigation.navigate("Bookings")}
+          />
+          <StatCard
+            label="Payments"
+            value={`$${paymentsTotal}`}
+            onPress={() => navigation.navigate("Payments")}
+          />
+          <StatCard
+            label="Invoices"
+            value={invoicesTotal.toString()}
+            onPress={() => navigation.navigate("Invoices")}
+          />
+          <StatCard
+            label="Team"
+            value={membersTotal.toString()}
+            onPress={() => navigation.navigate("OwnerTeam")}
+          />
         </View>
       )}
     </View>

@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import React from "react";
 import { vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -13,7 +14,19 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ children }: { children: React.ReactNode }) => children
+  default: ({
+    children,
+    href,
+    ...props
+  }: {
+    children: React.ReactNode;
+    href: string | { pathname?: string };
+  }) =>
+    React.createElement(
+      "a",
+      { href: typeof href === "string" ? href : href.pathname ?? "", ...props },
+      children
+    )
 }));
 
 vi.mock("@clerk/nextjs", () => ({

@@ -151,6 +151,7 @@ const adminBaseSections: SidebarSection[] = [
   {
     label: "Accounts",
     items: [
+      { href: "/admin/users", icon: Users, label: "Users" },
       { href: "/admin/members", icon: Users, label: "Members" },
       { href: "/admin/owner-companies", icon: Building2, label: "Owner companies" },
       { href: "/admin/owner-users", icon: User, label: "Owner users" },
@@ -174,7 +175,20 @@ const adminSuperSections: SidebarSection[] = [
   },
 ];
 
-function isActive(pathname: string, href: string): boolean {
+export function getSidebarSections(
+  variant: SidebarVariant = "owner",
+  isSuperadmin = false
+): SidebarSection[] {
+  if (variant === "customer") return customerSections;
+  if (variant === "admin") {
+    return isSuperadmin
+      ? [...adminBaseSections, ...adminSuperSections]
+      : adminBaseSections;
+  }
+  return ownerSections;
+}
+
+export function isActive(pathname: string, href: string): boolean {
   if (href === "/owner" || href === "/member" || href === "/admin")
     return pathname === href;
   return pathname === href || pathname.startsWith(href + "/");
@@ -189,14 +203,7 @@ export function Sidebar({
   isSuperadmin = false,
 }: SidebarProps) {
   const pathname = usePathname() ?? "";
-  const sections =
-    variant === "customer"
-      ? customerSections
-      : variant === "admin"
-      ? isSuperadmin
-        ? [...adminBaseSections, ...adminSuperSections]
-        : adminBaseSections
-      : ownerSections;
+  const sections = getSidebarSections(variant, isSuperadmin);
   const workspaceLabel =
     profile?.workspace ??
     (variant === "customer"

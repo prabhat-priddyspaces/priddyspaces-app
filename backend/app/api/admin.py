@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -396,6 +396,153 @@ def list_members(
         }
         for member in members
     ]
+
+
+@router.get("/admin/users")
+def list_admin_users(
+    q: str | None = None,
+    role: str = "all",
+    status: str | None = None,
+    email_verified: bool | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    require_platform_roles(db, token, READ_ROLES)
+
+    role = role.strip().lower()
+    valid_roles = {"all", "member", "owner", "platform", "unassigned"}
+    if role not in valid_roles:
+        raise HTTPException(status_code=400, detail="Invalid role filter")
+
+    if status is not None:
+        status = status.strip().lower()
+        if status not in {"active", "inactive"}:
+            raise HTTPException(status_code=400, detail="Invalid status filter")
+
+    platform_user_ids_query = (
+        db.query(PlatformTeamMember.user_id)
+        .filter(PlatformTeamMember.is_active.is_(True))
+    )
+    query = db.query(User)
+
+    if q:
+        term = f"%{q.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(User.email).like(term),
+                func.lower(func.coalesce(User.full_name, "")).like(term),
+                func.lower(func.coalesce(User.first_name, "")).like(term),
+                func.lower(func.coalesce(User.last_name, "")).like(term),
+            )
+        )
+
+    if role == "member":
+        query = query.filter(User.role == UserAppRole.MEMBER)
+    elif role == "owner":
+        query = query.filter(User.role == UserAppRole.OWNER)
+    elif role == "platform":
+        query = query.filter(User.id.in_(platform_user_ids_query))
+    elif role == "unassigned":
+        query = query.filter(User.role.is_(None), ~User.id.in_(platform_user_ids_query))
+
+    if status == "active":
+        query = query.filter(User.is_active.is_(True))
+    elif status == "inactive":
+        query = query.filter(User.is_active.is_(False))
+
+    if email_verified is not None:
+        query = query.filter(User.email_verified.is_(email_verified))
+
+    total = query.count()
+    users = (
+        query.order_by(User.created_at.desc(), User.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    if not users:
+        return {
+            "results": [],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    user_ids = [user.id for user in users]
+    booking_counts = {
+        user_id: count
+        for user_id, count in (
+            db.query(Booking.user_id, func.count(Booking.id))
+            .filter(Booking.user_id.in_(user_ids))
+            .group_by(Booking.user_id)
+            .all()
+        )
+    }
+    payment_counts = {
+        user_id: count
+        for user_id, count in (
+            db.query(Payment.user_id, func.count(Payment.id))
+            .filter(Payment.user_id.in_(user_ids))
+            .group_by(Payment.user_id)
+            .all()
+        )
+    }
+    subscription_counts = {
+        user_id: count
+        for user_id, count in (
+            db.query(Subscription.user_id, func.count(Subscription.id))
+            .filter(Subscription.user_id.in_(user_ids))
+            .group_by(Subscription.user_id)
+            .all()
+        )
+    }
+    organization_counts = {
+        user_id: count
+        for user_id, count in (
+            db.query(OrganizationMember.user_id, func.count(OrganizationMember.id))
+            .filter(OrganizationMember.user_id.in_(user_ids))
+            .group_by(OrganizationMember.user_id)
+            .all()
+        )
+    }
+    platform_roles = {
+        member.user_id: member.role.value
+        for member in (
+            db.query(PlatformTeamMember)
+            .filter(
+                PlatformTeamMember.user_id.in_(user_ids),
+                PlatformTeamMember.is_active.is_(True),
+            )
+            .all()
+        )
+    }
+
+    return {
+        "results": [
+            {
+                "public_id": user.public_id,
+                "email": user.email,
+                "name": _user_label(user),
+                "role": user.role.value if user.role else None,
+                "app_role": user.role.value if user.role else None,
+                "platform_role": platform_roles.get(user.id),
+                "is_active": user.is_active,
+                "email_verified": user.email_verified,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "last_activity_at": user.updated_at.isoformat() if user.updated_at else None,
+                "organization_count": organization_counts.get(user.id, 0),
+                "bookings": booking_counts.get(user.id, 0),
+                "payments": payment_counts.get(user.id, 0),
+                "subscriptions": subscription_counts.get(user.id, 0),
+            }
+            for user in users
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/admin/members/{public_id}")

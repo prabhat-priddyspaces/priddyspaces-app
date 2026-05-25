@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAuth as useClerkAuth } from "@clerk/expo";
 
 import { API_BASE_URL } from "../constants";
@@ -72,15 +72,26 @@ function AssistantHeaderButton({ navigation }: { navigation: any }) {
   );
 }
 
+function MenuHeaderButton({ navigation }: { navigation: any }) {
+  return (
+    <TouchableOpacity
+      style={styles.menuButton}
+      onPress={() => navigation.navigate("Menu")}
+      accessibilityRole="button"
+      accessibilityLabel="Open menu"
+    >
+      <View style={styles.menuBar} />
+      <View style={styles.menuBar} />
+      <View style={styles.menuBar} />
+    </TouchableOpacity>
+  );
+}
+
 function MarketplaceStack() {
   return (
     <MemberStack.Navigator
       screenOptions={({ navigation }) => ({
-        headerLeft: () => (
-          <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
-          </TouchableOpacity>
-        ),
+        headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
@@ -96,11 +107,7 @@ function MemberTabs() {
     <Tabs.Navigator
       screenOptions={({ navigation }) => ({
         headerShown: true,
-        headerLeft: () => (
-          <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
-          </TouchableOpacity>
-        ),
+        headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
@@ -116,11 +123,7 @@ function OwnerTabs() {
     <Tabs.Navigator
       screenOptions={({ navigation }) => ({
         headerShown: true,
-        headerLeft: () => (
-          <TouchableOpacity style={{ marginLeft: 12 }} onPress={() => navigation.navigate("Menu")}>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }}>Menu</Text>
-          </TouchableOpacity>
-        ),
+        headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
@@ -197,3 +200,21 @@ export function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  menuButton: {
+    marginLeft: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  menuBar: {
+    width: 18,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: "#111827",
+  },
+});

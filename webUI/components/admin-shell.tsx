@@ -7,6 +7,7 @@ import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Button } from "@/components/ui/button";
 import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { MobileSidebarDrawer } from "@/components/shell/mobile-sidebar-drawer";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Topbar } from "@/components/shell/topbar";
 import { WorkspaceShell } from "@/components/shell/workspace-shell";
@@ -36,6 +37,7 @@ export function AdminShell({
   breadcrumb,
 }: AdminShellProps) {
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const appSignOut = useAppSignOut();
   const router = useRouter();
 
@@ -66,6 +68,7 @@ export function AdminShell({
     <Topbar
       title={title}
       breadcrumb={breadcrumb}
+      onMenuClick={() => setMobileNavOpen(true)}
       actions={
         <>
           <ThemeToggle />
@@ -83,20 +86,30 @@ export function AdminShell({
   );
 
   return (
-    <WorkspaceShell
-      sidebar="admin"
-      sidebarProfile={profile}
-      isSuperadmin={me?.platform_role === "superadmin"}
-      onProfileClick={() => router.push("/admin/settings")}
-      topbar={topbar}
-      banner={
-        <ImpersonationBanner
-          impersonation={me?.impersonation ?? emptyImpersonation}
-        />
-      }
-    >
-      {children}
-      <MobileBottomNav variant="owner" />
-    </WorkspaceShell>
+    <>
+      <MobileSidebarDrawer
+        open={mobileNavOpen}
+        variant="admin"
+        profile={profile}
+        isSuperadmin={me?.platform_role === "superadmin"}
+        onClose={() => setMobileNavOpen(false)}
+        onProfileClick={() => router.push("/admin/settings")}
+      />
+      <WorkspaceShell
+        sidebar="admin"
+        sidebarProfile={profile}
+        isSuperadmin={me?.platform_role === "superadmin"}
+        onProfileClick={() => router.push("/admin/settings")}
+        topbar={topbar}
+        banner={
+          <ImpersonationBanner
+            impersonation={me?.impersonation ?? emptyImpersonation}
+          />
+        }
+      >
+        {children}
+        <MobileBottomNav variant="admin" />
+      </WorkspaceShell>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
@@ -46,6 +47,7 @@ interface MetricSpec {
   accent: StatAccent;
   formatter?: (value: number) => string;
   sub?: string;
+  href: string;
 }
 
 const numberFormatter = new Intl.NumberFormat("en-US");
@@ -56,13 +58,14 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 const METRICS: MetricSpec[] = [
-  { key: "users", label: "Users", icon: Users, accent: "violet" },
-  { key: "members", label: "Members", icon: Users, accent: "mint" },
+  { key: "users", label: "Users", icon: Users, accent: "violet", href: "/admin/users" },
+  { key: "members", label: "Members", icon: Users, accent: "mint", href: "/admin/members" },
   {
     key: "owner_companies",
     label: "Owner companies",
     icon: Building2,
     accent: "violet",
+    href: "/admin/owner-companies",
   },
   {
     key: "live_listings",
@@ -70,13 +73,15 @@ const METRICS: MetricSpec[] = [
     icon: Box,
     accent: "mint",
     sub: "Active marketplace inventory",
+    href: "/admin/listings",
   },
-  { key: "bookings", label: "Bookings", icon: Calendar, accent: "violet" },
+  { key: "bookings", label: "Bookings", icon: Calendar, accent: "violet", href: "/admin/bookings" },
   {
     key: "booking_requests",
     label: "Pending requests",
     icon: Inbox,
     accent: "muted",
+    href: "/admin/bookings",
   },
   {
     key: "gmv",
@@ -84,6 +89,7 @@ const METRICS: MetricSpec[] = [
     icon: DollarSign,
     accent: "mint",
     formatter: (value) => currencyFormatter.format(value),
+    href: "/admin/payments",
   },
   {
     key: "platform_earnings",
@@ -92,6 +98,7 @@ const METRICS: MetricSpec[] = [
     accent: "violet",
     formatter: (value) => currencyFormatter.format(value),
     sub: "Net of host payouts",
+    href: "/admin/payments",
   },
 ];
 
@@ -152,14 +159,22 @@ export default function AdminDashboardPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
         {cards.map((card) => (
-          <StatCard
+          <Link
             key={card.key}
-            label={card.label}
-            value={card.value}
-            icon={card.icon}
-            accent={card.accent}
-            sub={card.sub}
-          />
+            href={card.href}
+            aria-label={`Open ${card.label}`}
+            data-testid={`admin-stat-${card.key.replace(/_/g, "-")}`}
+            className="rounded-2xl transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:shadow-ring"
+          >
+            <StatCard
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              accent={card.accent}
+              sub={card.sub}
+              className="h-full"
+            />
+          </Link>
         ))}
       </div>
 

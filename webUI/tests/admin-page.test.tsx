@@ -55,4 +55,18 @@ describe("AdminDashboard", () => {
     const titles = await screen.findAllByText("Platform Console");
     expect(titles.length).toBeGreaterThan(0);
   });
+
+  it("links dashboard metric cards to admin lists", async () => {
+    render(<AdminDashboard />);
+    const usersCard = await screen.findByTestId("admin-stat-users");
+    const membersCard = await screen.findByTestId("admin-stat-members");
+    const ownersCard = await screen.findByTestId("admin-stat-owner-companies");
+    const listingsCard = await screen.findByTestId("admin-stat-live-listings");
+
+    expect(usersCard).toHaveAttribute("href", "/admin/users");
+    expect(membersCard).toHaveAttribute("href", "/admin/members");
+    expect(ownersCard).toHaveAttribute("href", "/admin/owner-companies");
+    expect(listingsCard).toHaveAttribute("href", "/admin/listings");
+    expect(screen.getByTestId("mobile-menu-button")).toBeInTheDocument();
+  });
 });

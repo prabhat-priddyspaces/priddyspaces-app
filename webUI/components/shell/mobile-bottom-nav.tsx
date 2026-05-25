@@ -4,15 +4,15 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Box,
   Calendar,
-  FileText,
   Home,
   Inbox,
   LineChart,
-  MapPin,
   Search,
   Star,
   User,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,13 +38,25 @@ const customerItems: MobileNavItem[] = [
   { href: "/member/profile", label: "Profile", icon: User },
 ];
 
+const adminItems: MobileNavItem[] = [
+  { href: "/admin", label: "Home", icon: Home },
+  { href: "/admin/bookings", label: "Bookings", icon: Inbox },
+  { href: "/admin/listings", label: "Listings", icon: Box },
+  { href: "/admin/users", label: "Users", icon: Users },
+];
+
 export function MobileBottomNav({
   variant = "owner",
 }: {
-  variant?: "owner" | "customer";
+  variant?: "owner" | "customer" | "admin";
 }) {
   const pathname = usePathname() ?? "";
-  const items = variant === "customer" ? customerItems : ownerItems;
+  const items =
+    variant === "customer"
+      ? customerItems
+      : variant === "admin"
+      ? adminItems
+      : ownerItems;
   return (
     <nav
       aria-label="Primary"

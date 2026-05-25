@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bell, ChevronRight } from "lucide-react";
+import { Bell, ChevronRight, Menu } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ export interface TopbarProps {
   actions?: React.ReactNode;
   notification?: boolean;
   onNotificationClick?: () => void;
+  onMenuClick?: () => void;
   className?: string;
 }
 
@@ -28,6 +29,7 @@ export function Topbar({
   actions,
   notification = false,
   onNotificationClick,
+  onMenuClick,
   className,
 }: TopbarProps) {
   return (
@@ -37,6 +39,17 @@ export function Topbar({
         className
       )}
     >
+      {onMenuClick ? (
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation menu"
+          data-testid="mobile-menu-button"
+          className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-xl text-text-2 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:shadow-ring lg:hidden"
+        >
+          <Menu size={18} strokeWidth={1.8} />
+        </button>
+      ) : null}
       <div className="flex-1 min-w-0">
         {breadcrumb && breadcrumb.length > 0 && (
           <div className="flex items-center gap-1.5 text-[12px] text-text-3 mb-0.5">
