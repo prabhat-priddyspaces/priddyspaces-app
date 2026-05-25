@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { type NextFetchEvent, type NextRequest, NextResponse } from "next/server";
 
 // Routes that do not require authentication
 const isPublicRoute = createRouteMatcher([
@@ -19,15 +19,26 @@ const isPublicRoute = createRouteMatcher([
   "/api/health",
 ]);
 
+const isHealthRoute = createRouteMatcher(["/api/health"]);
 const bypass = process.env.E2E_BYPASS_CLERK === "1";
+
+const protectedMiddleware = clerkMiddleware(async (auth, req) => {
+  if (!isPublicRoute(req)) {
+    await auth.protect();
+  }
+});
+
+function middleware(req: NextRequest, event: NextFetchEvent) {
+  if (isHealthRoute(req)) {
+    return NextResponse.next();
+  }
+
+  return protectedMiddleware(req, event);
+}
 
 export default bypass
   ? () => NextResponse.next()
-  : clerkMiddleware(async (auth, req) => {
-      if (!isPublicRoute(req)) {
-        await auth.protect();
-      }
-    });
+  : middleware;
 
 export const config = {
   matcher: [
