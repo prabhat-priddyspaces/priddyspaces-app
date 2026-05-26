@@ -63,7 +63,15 @@ jobs:
               *) FRONTEND_ORIGIN="" ;;
             esac
           fi
+          if [ -z "$FRONTEND_ORIGIN" ]; then
+            echo "::error::Unable to resolve frontend origin for ${{ inputs.environment }}"
+            exit 1
+          fi
+          FRONTEND_ORIGIN="${FRONTEND_ORIGIN%/}"
           echo "frontend_origin=$FRONTEND_ORIGIN" >> "$GITHUB_OUTPUT"
+          echo "clerk_sign_in_url=$FRONTEND_ORIGIN/sign-in" >> "$GITHUB_OUTPUT"
+          echo "clerk_sign_up_url=$FRONTEND_ORIGIN/sign-up" >> "$GITHUB_OUTPUT"
+          echo "clerk_post_auth_url=$FRONTEND_ORIGIN/dashboard" >> "$GITHUB_OUTPUT"
 
           GMAPS_KEY=$(aws ssm get-parameter --name "$PREFIX/google_maps_api_key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || echo "")
           echo "::add-mask::$GMAPS_KEY"
@@ -81,6 +89,10 @@ jobs:
         env:
           API_ORIGIN: ${{ steps.meta.outputs.api_origin }}
           CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
+          APP_ORIGIN: ${{ steps.meta.outputs.frontend_origin }}
+          CLERK_SIGN_IN_URL: ${{ steps.meta.outputs.clerk_sign_in_url }}
+          CLERK_SIGN_UP_URL: ${{ steps.meta.outputs.clerk_sign_up_url }}
+          CLERK_POST_AUTH_URL: ${{ steps.meta.outputs.clerk_post_auth_url }}
           GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
           ASSET_PREFIX: ${{ steps.meta.outputs.frontend_asset_prefix }}
         run: |
@@ -92,6 +104,13 @@ jobs:
           docker build --target builder \
             --build-arg NEXT_PUBLIC_API_BASE_URL="$API_ORIGIN" \
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
+            --build-arg NEXT_PUBLIC_APP_ORIGIN="$APP_ORIGIN" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_URL="$CLERK_SIGN_IN_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_URL="$CLERK_SIGN_UP_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
             --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
             --build-arg NEXT_ASSET_PREFIX="$ASSET_PREFIX" \
             --build-arg NEXT_PUBLIC_APP_ENV="${{ inputs.environment }}" \
@@ -116,6 +135,10 @@ jobs:
         env:
           API_ORIGIN: ${{ steps.meta.outputs.api_origin }}
           CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
+          APP_ORIGIN: ${{ steps.meta.outputs.frontend_origin }}
+          CLERK_SIGN_IN_URL: ${{ steps.meta.outputs.clerk_sign_in_url }}
+          CLERK_SIGN_UP_URL: ${{ steps.meta.outputs.clerk_sign_up_url }}
+          CLERK_POST_AUTH_URL: ${{ steps.meta.outputs.clerk_post_auth_url }}
           GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
           ASSET_PREFIX: ${{ steps.meta.outputs.frontend_asset_prefix }}
         run: |
@@ -127,6 +150,13 @@ jobs:
           docker build \
             --build-arg NEXT_PUBLIC_API_BASE_URL="$API_ORIGIN" \
             --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY" \
+            --build-arg NEXT_PUBLIC_APP_ORIGIN="$APP_ORIGIN" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_URL="$CLERK_SIGN_IN_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_URL="$CLERK_SIGN_UP_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
+            --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL="$CLERK_POST_AUTH_URL" \
             --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
             --build-arg NEXT_ASSET_PREFIX="$ASSET_PREFIX" \
             --build-arg NEXT_PUBLIC_APP_ENV="${{ inputs.environment }}" \
@@ -144,6 +174,10 @@ jobs:
         env:
           API_ORIGIN: ${{ steps.meta.outputs.api_origin }}
           CLERK_PUBLISHABLE_KEY: ${{ steps.meta.outputs.clerk_publishable_key }}
+          APP_ORIGIN: ${{ steps.meta.outputs.frontend_origin }}
+          CLERK_SIGN_IN_URL: ${{ steps.meta.outputs.clerk_sign_in_url }}
+          CLERK_SIGN_UP_URL: ${{ steps.meta.outputs.clerk_sign_up_url }}
+          CLERK_POST_AUTH_URL: ${{ steps.meta.outputs.clerk_post_auth_url }}
           GOOGLE_MAPS_API_KEY: ${{ steps.meta.outputs.google_maps_api_key }}
           ASSET_PREFIX: ${{ steps.meta.outputs.frontend_asset_prefix }}
         run: |
@@ -165,6 +199,10 @@ jobs:
             --arg API_ORIGIN "$API_ORIGIN" \
             --arg GMAPS_KEY "$GOOGLE_MAPS_API_KEY" \
             --arg CLERK_PK "$CLERK_PUBLISHABLE_KEY" \
+            --arg APP_ORIGIN "$APP_ORIGIN" \
+            --arg CLERK_SIGN_IN_URL "$CLERK_SIGN_IN_URL" \
+            --arg CLERK_SIGN_UP_URL "$CLERK_SIGN_UP_URL" \
+            --arg CLERK_POST_AUTH_URL "$CLERK_POST_AUTH_URL" \
             --arg ASSET_PREFIX "$ASSET_PREFIX" '
             def base_arn:
               (.[0].valueFrom // "") | split(":") | .[0:7] | join(":");
@@ -204,6 +242,19 @@ jobs:
                       | ensure_env("NEXT_PUBLIC_API_BASE_URL"; $API_ORIGIN)
                       | ensure_env("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"; $GMAPS_KEY)
                       | ensure_env("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"; $CLERK_PK)
+                      | ensure_env("NEXT_PUBLIC_APP_ORIGIN"; $APP_ORIGIN)
+                      | ensure_env("CLERK_SIGN_IN_URL"; $CLERK_SIGN_IN_URL)
+                      | ensure_env("NEXT_PUBLIC_CLERK_SIGN_IN_URL"; $CLERK_SIGN_IN_URL)
+                      | ensure_env("CLERK_SIGN_UP_URL"; $CLERK_SIGN_UP_URL)
+                      | ensure_env("NEXT_PUBLIC_CLERK_SIGN_UP_URL"; $CLERK_SIGN_UP_URL)
+                      | ensure_env("CLERK_SIGN_IN_FORCE_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("CLERK_SIGN_UP_FORCE_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("CLERK_SIGN_IN_FALLBACK_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("CLERK_SIGN_UP_FALLBACK_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
+                      | ensure_env("NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL"; $CLERK_POST_AUTH_URL)
                       | ensure_env("NEXT_ASSET_PREFIX"; $ASSET_PREFIX)
                       | ensure_env("NEXT_PUBLIC_APP_ENV"; "${{ inputs.environment }}")
                     )
