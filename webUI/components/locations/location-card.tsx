@@ -44,8 +44,44 @@ export interface LocationCardProps {
   occupancy: number | null;
   mtdNet: number | null;
   status: "active" | "onboarding" | string;
+  organizationReviewStatus?: string | null;
+  onRequestApproval?: () => void;
+  requestingApproval?: boolean;
   primary?: boolean;
   amenities?: Array<{ id: number; name: string }>;
+}
+
+function reviewStatusMeta(status?: string | null) {
+  switch (status) {
+    case "approved":
+      return {
+        label: "Marketplace approved",
+        detail: "",
+        variant: "success" as const,
+        canRequest: false,
+      };
+    case "pending":
+      return {
+        label: "Marketplace in review",
+        detail: "This location is hidden from public search until a super admin approves the company.",
+        variant: "warning" as const,
+        canRequest: true,
+      };
+    case "rejected":
+      return {
+        label: "Marketplace rejected",
+        detail: "Update the company details, then request another review.",
+        variant: "danger" as const,
+        canRequest: true,
+      };
+    default:
+      return {
+        label: "Marketplace status unavailable",
+        detail: "Company review status could not be loaded.",
+        variant: "default" as const,
+        canRequest: false,
+      };
+  }
 }
 
 export function LocationCard({
@@ -57,10 +93,14 @@ export function LocationCard({
   occupancy,
   mtdNet,
   status,
+  organizationReviewStatus,
+  onRequestApproval,
+  requestingApproval,
   primary,
   amenities = [],
 }: LocationCardProps) {
   const isOnboarding = status === "onboarding";
+  const review = reviewStatusMeta(organizationReviewStatus);
   const occupancyColor =
     occupancy == null
       ? "text-text"
@@ -134,6 +174,11 @@ export function LocationCard({
               {address}
               {city ? ` · ${city}` : ""}
             </div>
+            <div className="mt-2">
+              <Badge variant={review.variant} dot>
+                {review.label}
+              </Badge>
+            </div>
           </div>
           <Button
             variant="ghost"
@@ -177,6 +222,22 @@ export function LocationCard({
                 + {hiddenCount} more
               </span>
             )}
+          </div>
+        )}
+
+        {review.canRequest && (
+          <div className="mb-3 rounded-[8px] border border-line bg-surface-2 px-3 py-2">
+            <div className="text-[12px] leading-5 text-text-2">{review.detail}</div>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="mt-2"
+              onClick={onRequestApproval}
+              disabled={!onRequestApproval || requestingApproval}
+            >
+              {requestingApproval ? "Sending..." : "Request approval"}
+            </Button>
           </div>
         )}
 

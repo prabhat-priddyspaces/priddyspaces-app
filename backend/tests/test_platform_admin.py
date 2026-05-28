@@ -7,6 +7,7 @@ from app.core.jwt import issue_token
 from app.db.deps import get_db
 from app.main import app
 from app.core.password import verify_password
+from app.models.audit_log import AuditLog
 from app.models.booking_request import BookingRequest
 from app.models.enums import BookingRequestStatus, OrganizationReviewStatus, PlatformTeamRole, SpaceType, SpaceVisibility, UserAppRole, UserRole
 from app.models.location import Location
@@ -403,6 +404,84 @@ def test_rejected_org_owner_can_resubmit(db_session, client_factory):
     assert data["review_status"] == "pending"
 
 
+def test_owner_can_request_org_approval_email(db_session, client_factory, monkeypatch):
+    owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
+    _superadmin = _create_platform_member(
+        db_session,
+        email="superadmin-approval@example.com",
+        role=PlatformTeamRole.SUPERADMIN,
+    )
+    sent: list[dict[str, str]] = []
+
+    def fake_send_email(to_email, subject, body, **kwargs):
+        sent.append(
+            {
+                "to_email": to_email,
+                "subject": subject,
+                "body": body,
+                "html_body": kwargs.get("html_body") or "",
+            }
+        )
+
+    monkeypatch.setattr("app.api.organizations.send_email", fake_send_email)
+    client = client_factory({
+        "sub": str(owner.public_id),
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    response = client.post(f"/api/orgs/{org.public_id}/approval-request")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["review_status"] == "pending"
+    assert data["recipients_notified"] == 1
+    assert sent[0]["to_email"] == "superadmin-approval@example.com"
+    assert "Owner company approval requested: Org" == sent[0]["subject"]
+    assert f"/admin/owner-companies?company={org.public_id}" in sent[0]["body"]
+    assert f"/admin/owner-companies?company={org.public_id}&action=approve" in sent[0]["body"]
+    audit = db_session.query(AuditLog).filter(AuditLog.action == "organization_approval_requested").one()
+    assert audit.entity_public_id == org.public_id
+
+
+def test_rejected_org_approval_request_resubmits_to_pending(db_session, client_factory, monkeypatch):
+    owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.REJECTED)
+    org.review_notes = "Missing details"
+    db_session.add(org)
+    db_session.commit()
+    _superadmin = _create_platform_member(
+        db_session,
+        email="superadmin-resubmit@example.com",
+        role=PlatformTeamRole.SUPERADMIN,
+    )
+    monkeypatch.setattr("app.api.organizations.send_email", lambda *args, **kwargs: None)
+    client = client_factory({
+        "sub": str(owner.public_id),
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    response = client.post(f"/api/orgs/{org.public_id}/approval-request")
+
+    assert response.status_code == 200
+    db_session.refresh(org)
+    assert org.review_status == OrganizationReviewStatus.PENDING
+    assert org.review_notes is None
+
+
+def test_approved_org_cannot_request_approval_email(db_session, client_factory):
+    owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.APPROVED)
+    client = client_factory({
+        "sub": str(owner.public_id),
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    response = client.post(f"/api/orgs/{org.public_id}/approval-request")
+
+    assert response.status_code == 400
+
+
 def test_impersonation_stop_uses_actor_platform_role(db_session, client_factory):
     admin = _create_platform_member(db_session, email="admin@example.com", role=PlatformTeamRole.ADMIN)
     member = _create_user(db_session, email="member@example.com", role=UserAppRole.MEMBER)
@@ -609,3 +688,20 @@ def test_admin_audit_logs_include_readable_labels(db_session, client_factory):
     assert first["action_label"] == "Organization review updated"
     assert first["entity_label"] == org.name
     assert first["actor_name"] == admin.email
+
+
+def test_admin_owner_company_search_matches_public_id(db_session, client_factory):
+    admin = _create_platform_member(db_session, email="owner-search-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
+    client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    response = client.get(f"/api/admin/owner-companies?q={org.public_id}")
+
+    assert response.status_code == 200
+    rows = response.json()
+    assert len(rows) == 1
+    assert rows[0]["public_id"] == org.public_id

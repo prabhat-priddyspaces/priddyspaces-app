@@ -15,6 +15,7 @@ import {
 
 interface Location {
   public_id: string;
+  organization_public_id: string;
   name: string;
   address: string;
   city: string | null;
@@ -28,19 +29,38 @@ interface Space {
   availability_status: string;
 }
 
+interface Organization {
+  public_id: string;
+  name: string;
+  review_status: string;
+}
+
+interface ApprovalRequestResponse {
+  public_id: string;
+  review_status: string;
+  recipients_notified: number;
+}
+
 export function LocationList() {
   const [locations, setLocations] = useState<Location[]>([]);
+  const [organizations, setOrganizations] = useState<Record<string, Organization>>({});
   const [spacesByLocation, setSpacesByLocation] = useState<Record<string, Space[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [approvalMessage, setApprovalMessage] = useState("");
+  const [requestingOrgId, setRequestingOrgId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const token = getAccessToken() ?? undefined;
-        const list = await apiFetch<Location[]>("/api/locations", { method: "GET" }, token);
+        const [list, orgList] = await Promise.all([
+          apiFetch<Location[]>("/api/locations", { method: "GET" }, token),
+          apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token),
+        ]);
         setLocations(list);
+        setOrganizations(Object.fromEntries(orgList.map((org) => [org.public_id, org])));
         const spacesEntries = await Promise.all(
           list.map(async (loc) => {
             try {
@@ -65,6 +85,38 @@ export function LocationList() {
 
     load().catch(() => null);
   }, []);
+
+  async function requestApproval(organizationPublicId: string) {
+    const token = getAccessToken() ?? undefined;
+    setRequestingOrgId(organizationPublicId);
+    setApprovalMessage("");
+    setError(null);
+    try {
+      const result = await apiFetch<ApprovalRequestResponse>(
+        `/api/orgs/${organizationPublicId}/approval-request`,
+        { method: "POST" },
+        token
+      );
+      setOrganizations((current) => {
+        const currentOrg = current[organizationPublicId];
+        if (!currentOrg) return current;
+        return {
+          ...current,
+          [organizationPublicId]: {
+            ...currentOrg,
+            review_status: result.review_status,
+          },
+        };
+      });
+      setApprovalMessage(
+        `Approval request sent to ${result.recipients_notified} super admin${result.recipients_notified === 1 ? "" : "s"}.`
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to request approval");
+    } finally {
+      setRequestingOrgId(null);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -113,6 +165,11 @@ export function LocationList() {
           </Button>
         </Link>
       </div>
+      {approvalMessage ? (
+        <div className="mb-3 rounded-[8px] border border-success/30 bg-success-soft px-3 py-2 text-sm text-success">
+          {approvalMessage}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="text-[13px] text-text-3">Loading…</div>
@@ -124,6 +181,7 @@ export function LocationList() {
             const occupied = spaces.filter(
               (s) => s.availability_status !== "available"
             ).length;
+            const org = organizations[location.organization_public_id];
             return (
               <LocationCard
                 key={location.public_id}
@@ -136,6 +194,11 @@ export function LocationList() {
                 // HANDOFF: per-location MTD net not yet returned by /api/locations.
                 mtdNet={null}
                 status={location.status}
+                organizationReviewStatus={org?.review_status}
+                onRequestApproval={
+                  org ? () => requestApproval(org.public_id).catch(() => null) : undefined
+                }
+                requestingApproval={requestingOrgId === org?.public_id}
                 primary={i === 0}
                 amenities={location.amenities}
               />

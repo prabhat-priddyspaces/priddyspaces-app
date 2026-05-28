@@ -707,7 +707,12 @@ def list_owner_companies(
         query = query.filter(Organization.review_status == review_status)
     if q:
         term = f"%{q.strip().lower()}%"
-        query = query.filter(func.lower(Organization.name).like(term))
+        query = query.filter(
+            or_(
+                func.lower(Organization.name).like(term),
+                func.lower(Organization.public_id).like(term),
+            )
+        )
     organizations = query.order_by(Organization.created_at.desc()).all()
     if not organizations:
         return []

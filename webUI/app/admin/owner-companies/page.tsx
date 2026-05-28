@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,9 @@ function reviewHistorySummary(
 }
 
 export default function AdminOwnerCompaniesPage() {
+  const searchParams = useSearchParams();
+  const linkedCompanyId = searchParams.get("company") || "";
+  const linkedAction = searchParams.get("action") || "";
   const [companies, setCompanies] = useState<OwnerCompany[]>([]);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [query, setQuery] = useState("");
@@ -83,8 +87,13 @@ export default function AdminOwnerCompaniesPage() {
   useEffect(() => {
     const token = getAccessToken() ?? undefined;
     apiFetch<MeResponse>("/api/me", { method: "GET" }, token).then(setMe).catch(() => null);
-    loadCompanies("").catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load companies"));
-  }, []);
+    const initialSearch = linkedCompanyId || "";
+    setQuery(initialSearch);
+    if (linkedAction === "approve" && linkedCompanyId) {
+      setMessage("Approval link opened. Review the company, then click Approve.");
+    }
+    loadCompanies(initialSearch).catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load companies"));
+  }, [linkedAction, linkedCompanyId]);
 
   async function updateCompany(publicId: string, reviewStatus: string | null) {
     const token = getAccessToken() ?? undefined;
@@ -124,7 +133,10 @@ export default function AdminOwnerCompaniesPage() {
         {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-4">
           {companies.map((company) => (
-            <Card key={company.public_id} className="p-4">
+            <Card
+              key={company.public_id}
+              className={`p-4 ${linkedCompanyId === company.public_id ? "border-brand" : ""}`}
+            >
               <div className="space-y-3">
                 <div>
                   <div className="font-semibold text-text">{company.name}</div>
@@ -132,6 +144,11 @@ export default function AdminOwnerCompaniesPage() {
                     {company.owner.name || company.owner.email} • {formatAdminLabel(company.review_status)} • {company.locations} locations • {company.listings} listings
                   </div>
                 </div>
+                {linkedCompanyId === company.public_id && linkedAction === "approve" ? (
+                  <div className="rounded-[8px] border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
+                    This company was opened from an approval request email.
+                  </div>
+                ) : null}
                 <div className="grid gap-3 md:grid-cols-2">
                   <Input
                     value={notes[company.public_id] ?? ""}
