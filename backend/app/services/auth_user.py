@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.models.enums import UserAppRole
 from app.models.user import User
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
+from app.services.loyalty import grant_priddy_signup_points
 
 
 def get_or_create_user(db: Session, payload: dict) -> User:
@@ -45,6 +46,8 @@ def get_or_create_user(db: Session, payload: dict) -> User:
             if user.role is None:
                 user.role = UserAppRole.MEMBER
             db.add(user)
+            db.flush()
+            grant_priddy_signup_points(db, user)
             db.commit()
             db.refresh(user)
             return user
@@ -59,6 +62,8 @@ def get_or_create_user(db: Session, payload: dict) -> User:
             role=UserAppRole.MEMBER,
         )
         db.add(user)
+        db.flush()
+        grant_priddy_signup_points(db, user)
         db.commit()
         db.refresh(user)
         return user

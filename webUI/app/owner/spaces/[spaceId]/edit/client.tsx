@@ -29,6 +29,20 @@ interface Space {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   visibility: string;
+  priddy_points_enabled: boolean | null;
+  owner_points_enabled: boolean | null;
+}
+
+function pointsFormValue(value: boolean | null) {
+  if (value === true) return "enabled";
+  if (value === false) return "disabled";
+  return "inherit";
+}
+
+function pointsPayload(value: string) {
+  if (value === "enabled") return true;
+  if (value === "disabled") return false;
+  return null;
 }
 
 export function EditSpaceClient() {
@@ -51,7 +65,9 @@ export function EditSpaceClient() {
     availability_end_time: "",
     buffer_before_minutes: "0",
     buffer_after_minutes: "0",
-    visibility: "public"
+    visibility: "public",
+    priddy_points_enabled: "inherit",
+    owner_points_enabled: "inherit"
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -74,7 +90,9 @@ export function EditSpaceClient() {
           availability_end_time: space.availability_end_time || "",
           buffer_before_minutes: String(space.buffer_before_minutes ?? 0),
           buffer_after_minutes: String(space.buffer_after_minutes ?? 0),
-          visibility: space.visibility || "public"
+          visibility: space.visibility || "public",
+          priddy_points_enabled: pointsFormValue(space.priddy_points_enabled),
+          owner_points_enabled: pointsFormValue(space.owner_points_enabled)
         });
       })
       .catch((err: any) => setMessage(err?.message || "Failed to load space"))
@@ -105,7 +123,9 @@ export function EditSpaceClient() {
             availability_end_time: form.availability_end_time || null,
             buffer_before_minutes: Number(form.buffer_before_minutes || 0),
             buffer_after_minutes: Number(form.buffer_after_minutes || 0),
-            visibility: form.visibility
+            visibility: form.visibility,
+            priddy_points_enabled: pointsPayload(form.priddy_points_enabled),
+            owner_points_enabled: pointsPayload(form.owner_points_enabled)
           })
         },
         token
@@ -243,6 +263,20 @@ export function EditSpaceClient() {
               Amenities are now assigned on the location. Update them from the location editor if
               this room should expose different amenities.
             </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <PointsSelect
+                id="priddy-points"
+                label="Priddy Points"
+                value={form.priddy_points_enabled}
+                onChange={(value) => setForm({ ...form, priddy_points_enabled: value })}
+              />
+              <PointsSelect
+                id="owner-points"
+                label="Owner points"
+                value={form.owner_points_enabled}
+                onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
+              />
+            </div>
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="availability_start">Availability start</Label>
@@ -310,5 +344,33 @@ export function EditSpaceClient() {
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+function PointsSelect({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+      >
+        <option value="inherit">Use organization setting</option>
+        <option value="enabled">Allow on this space</option>
+        <option value="disabled">Exclude this space</option>
+      </select>
+    </div>
   );
 }

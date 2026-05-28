@@ -21,6 +21,7 @@ from app.models.user import User
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.auth_user import get_or_create_user
+from app.services.loyalty import grant_priddy_signup_points
 from app.services.platform_auth import issue_standard_token, touch_platform_last_login
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -106,6 +107,8 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)) -> TokenOut:
             email_verified=True,
         )
         db.add(user)
+    db.flush()
+    grant_priddy_signup_points(db, user)
     db.commit()
     db.refresh(user)
     token = issue_token(

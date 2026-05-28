@@ -14,9 +14,13 @@ class LoyaltyOwnerSetting(PublicIdMixin, TimestampMixin, Base):
     organization_id = Column(Integer, nullable=False, index=True)
     tenant_id = Column(Integer, nullable=False, index=True)
     is_enabled = Column(Boolean, nullable=False, default=True, server_default="true")
+    accepts_priddy_points = Column(Boolean, nullable=False, default=False, server_default="false")
+    owner_points_redemption_enabled = Column(Boolean, nullable=False, default=True, server_default="true")
     point_value_cents = Column(Integer, nullable=False, default=1, server_default="1")
-    earn_rate_bps = Column(Integer, nullable=False, default=100, server_default="100")
-    max_redemption_percent = Column(Integer, nullable=False, default=25, server_default="25")
+    earn_rate_bps = Column(Integer, nullable=False, default=1, server_default="1")
+    max_redemption_percent = Column(Integer, nullable=False, default=100, server_default="100")
+    allowed_space_types = Column(JSON, nullable=False, default=lambda: ["conference_room", "shared_desk", "virtual_office"])
+    allowed_booking_modes = Column(JSON, nullable=False, default=lambda: ["hourly", "day_pass"])
     promo_expiration_days = Column(Integer, nullable=False, default=180, server_default="180")
     earned_expiration_days = Column(Integer, nullable=False, default=730, server_default="730")
     campaign_daily_issue_cap = Column(Integer, nullable=False, default=500000, server_default="500000")
@@ -68,9 +72,11 @@ class LoyaltyRedemptionLock(PublicIdMixin, TimestampMixin, Base):
     organization_id = Column(Integer, nullable=False, index=True)
     tenant_id = Column(Integer, nullable=False, index=True)
     wallet_id = Column(Integer, ForeignKey("loyalty_wallets.id"), nullable=False, index=True)
+    priddy_wallet_id = Column(Integer, ForeignKey("priddy_points_wallets.id"), nullable=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
     booking_request_id = Column(Integer, nullable=True, index=True)
     space_id = Column(Integer, nullable=True, index=True)
+    priddy_points = Column(Integer, nullable=False, default=0, server_default="0")
     promo_points = Column(Integer, nullable=False, default=0, server_default="0")
     earned_points = Column(Integer, nullable=False, default=0, server_default="0")
     points = Column(Integer, nullable=False, default=0, server_default="0")
@@ -88,11 +94,13 @@ class LoyaltyRedemption(PublicIdMixin, TimestampMixin, Base):
     organization_id = Column(Integer, nullable=False, index=True)
     tenant_id = Column(Integer, nullable=False, index=True)
     wallet_id = Column(Integer, ForeignKey("loyalty_wallets.id"), nullable=False, index=True)
+    priddy_wallet_id = Column(Integer, ForeignKey("priddy_points_wallets.id"), nullable=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
     redemption_lock_id = Column(Integer, ForeignKey("loyalty_redemption_locks.id"), nullable=True, index=True)
     booking_request_id = Column(Integer, nullable=True, index=True)
     booking_id = Column(Integer, nullable=True, index=True)
     payment_id = Column(Integer, nullable=True, index=True)
+    priddy_points = Column(Integer, nullable=False, default=0, server_default="0")
     promo_points = Column(Integer, nullable=False, default=0, server_default="0")
     earned_points = Column(Integer, nullable=False, default=0, server_default="0")
     points = Column(Integer, nullable=False, default=0, server_default="0")
@@ -117,6 +125,42 @@ class LoyaltyLedgerEntry(PublicIdMixin, TimestampMixin, Base):
     source = Column(String(64), nullable=False)
     source_public_id = Column(String(255), nullable=True)
     campaign_id = Column(Integer, nullable=True, index=True)
+    booking_request_id = Column(Integer, nullable=True, index=True)
+    booking_id = Column(Integer, nullable=True, index=True)
+    payment_id = Column(Integer, nullable=True, index=True)
+    redemption_id = Column(Integer, nullable=True, index=True)
+    redemption_lock_id = Column(Integer, nullable=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    idempotency_key = Column(String(255), nullable=True, index=True)
+    note = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+
+
+class PriddyPointsWallet(PublicIdMixin, TimestampMixin, Base):
+    __tablename__ = "priddy_points_wallets"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_priddy_points_wallets_user"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    balance = Column(Integer, nullable=False, default=0, server_default="0")
+    lifetime_earned_points = Column(Integer, nullable=False, default=0, server_default="0")
+
+
+class PriddyPointsLedgerEntry(PublicIdMixin, TimestampMixin, Base):
+    __tablename__ = "priddy_points_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_priddy_points_ledger_entries_idempotency_key"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    wallet_id = Column(Integer, ForeignKey("priddy_points_wallets.id"), nullable=False, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    entry_type = Column(String(64), nullable=False)
+    points = Column(Integer, nullable=False)
+    source = Column(String(64), nullable=False)
+    source_public_id = Column(String(255), nullable=True)
     booking_request_id = Column(Integer, nullable=True, index=True)
     booking_id = Column(Integer, nullable=True, index=True)
     payment_id = Column(Integer, nullable=True, index=True)

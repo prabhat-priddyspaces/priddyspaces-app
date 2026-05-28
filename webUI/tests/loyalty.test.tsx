@@ -48,10 +48,15 @@ vi.mock("../lib/api", () => ({
         public_id: "settings_1",
         organization_public_id: "org_1",
         is_enabled: true,
+        accepts_priddy_points: true,
+        owner_points_redemption_enabled: true,
         point_value_cents: 1,
         earn_rate_bps: 100,
         earn_points_per_dollar: 1,
+        earn_points_per_100_dollars: 100,
         max_redemption_percent: 25,
+        allowed_space_types: ["conference_room", "shared_desk"],
+        allowed_booking_modes: ["hourly", "day_pass"],
         promo_expiration_days: 180,
         earned_expiration_days: 730,
         campaign_daily_issue_cap: 500000,
@@ -107,6 +112,30 @@ vi.mock("../lib/api", () => ({
           cash_value_cents: 700,
           next_expiration_at: null,
           expiring_points: 0,
+        },
+      ]);
+    }
+    if (url === "/api/loyalty/priddy-wallet") {
+      return Promise.resolve({
+        public_id: "priddy_1",
+        balance: 1000,
+        lifetime_earned_points: 1000,
+        point_value_cents: 1,
+        cash_value_cents: 1000,
+      });
+    }
+    if (url === "/api/loyalty/priddy-wallet/transactions") {
+      return Promise.resolve([
+        {
+          public_id: "priddy_entry_1",
+          entry_type: "signup_grant",
+          point_type: "priddy",
+          points: 1000,
+          source: "signup",
+          source_public_id: "user_1",
+          expires_at: null,
+          note: "Signup Priddy Points",
+          created_at: null,
         },
       ]);
     }

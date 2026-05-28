@@ -23,6 +23,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.user import User
 from app.schemas.auth import MeOut
 from app.services.amenities import seed_default_amenities
+from app.services.loyalty import grant_priddy_signup_points
 from app.services.platform_auth import (
     build_default_route,
     get_effective_user,
@@ -204,6 +205,8 @@ def complete_profile(
         user.privacy_policy_accepted_at = now
 
     db.add(user)
+    db.flush()
+    grant_priddy_signup_points(db, user)
     db.commit()
     db.refresh(user)
 

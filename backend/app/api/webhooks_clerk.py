@@ -21,6 +21,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.user import User
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
+from app.services.loyalty import grant_priddy_signup_points
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -154,6 +155,8 @@ def _handle_user_upsert(db: Session, data: dict) -> None:
         else:
             ptm.role = platform_role
             ptm.is_active = True
+
+    grant_priddy_signup_points(db, user)
 
     _write_audit(db, "user.synced", "user", clerk_id, {"email": email})
 

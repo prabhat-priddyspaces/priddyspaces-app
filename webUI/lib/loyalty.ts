@@ -29,15 +29,28 @@ export interface LoyaltySettings {
   public_id: string;
   organization_public_id: string;
   is_enabled: boolean;
+  accepts_priddy_points: boolean;
+  owner_points_redemption_enabled: boolean;
   point_value_cents: number;
   earn_rate_bps: number;
   earn_points_per_dollar: number;
+  earn_points_per_100_dollars: number;
   max_redemption_percent: number;
+  allowed_space_types: string[];
+  allowed_booking_modes: string[];
   promo_expiration_days: number;
   earned_expiration_days: number;
   campaign_daily_issue_cap: number;
   max_promo_grant_points: number;
   updated_at: string | null;
+}
+
+export interface PriddyPointsWallet {
+  public_id: string;
+  balance: number;
+  lifetime_earned_points: number;
+  point_value_cents: number;
+  cash_value_cents: number;
 }
 
 export interface LoyaltyCampaign {
@@ -89,12 +102,25 @@ export interface LoyaltyRedemptionPreview {
   max_discount_cents: number;
   requested_points: number;
   discount_cents: number;
+  priddy: LoyaltyRedemptionBucket;
+  owner: LoyaltyRedemptionBucket;
+}
+
+export interface LoyaltyRedemptionBucket {
+  eligible: boolean;
+  reason: string | null;
+  balance: number;
+  point_value_cents: number;
+  max_redeemable_points: number;
+  requested_points: number;
+  discount_cents: number;
 }
 
 export interface LoyaltyRedemptionLock {
   public_id: string;
   organization_public_id: string;
   points: number;
+  priddy_points: number;
   promo_points: number;
   earned_points: number;
   discount_cents: number;

@@ -18,6 +18,8 @@ class SpaceCreate(BaseModel):
     buffer_before_minutes: int = 0
     buffer_after_minutes: int = 0
     visibility: SpaceVisibility = SpaceVisibility.PUBLIC
+    priddy_points_enabled: bool | None = None
+    owner_points_enabled: bool | None = None
     amenities: str | None = None
 
 
@@ -35,6 +37,8 @@ class SpaceOut(BaseModel):
     buffer_before_minutes: int = 0
     buffer_after_minutes: int = 0
     visibility: SpaceVisibility
+    priddy_points_enabled: bool | None = None
+    owner_points_enabled: bool | None = None
     amenities: str | None
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,4 +56,6 @@ class SpaceUpdate(BaseModel):
     buffer_before_minutes: int | None = None
     buffer_after_minutes: int | None = None
     visibility: SpaceVisibility | None = None
+    priddy_points_enabled: bool | None = None
+    owner_points_enabled: bool | None = None
     amenities: str | None = None
