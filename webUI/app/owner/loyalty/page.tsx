@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -60,7 +60,7 @@ export default function OwnerLoyaltyPage() {
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load organizations"));
   }, []);
 
-  async function load(currentOrgId = orgId) {
+  const load = useCallback(async (currentOrgId = orgId) => {
     if (!currentOrgId) return;
     const token = getAccessToken() ?? undefined;
     const qs = `organization_public_id=${encodeURIComponent(currentOrgId)}`;
@@ -72,19 +72,23 @@ export default function OwnerLoyaltyPage() {
     setSettings(settingsResp);
     setSummary(summaryResp);
     setCampaigns(campaignsResp);
-  }
+  }, [orgId]);
 
   useEffect(() => {
     load().catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load loyalty"));
-  }, [orgId]);
+  }, [load]);
 
   const settingsDraft = useMemo(() => {
     if (!settings) return null;
     return {
       is_enabled: settings.is_enabled,
+      accepts_priddy_points: settings.accepts_priddy_points,
+      owner_points_redemption_enabled: settings.owner_points_redemption_enabled,
       point_value_cents: settings.point_value_cents,
-      earn_rate_bps: settings.earn_rate_bps,
+      earn_points_per_100_dollars: settings.earn_points_per_100_dollars,
       max_redemption_percent: settings.max_redemption_percent,
+      allowed_space_types: settings.allowed_space_types,
+      allowed_booking_modes: settings.allowed_booking_modes,
       promo_expiration_days: settings.promo_expiration_days,
       earned_expiration_days: settings.earned_expiration_days,
       campaign_daily_issue_cap: settings.campaign_daily_issue_cap,
@@ -117,6 +121,13 @@ export default function OwnerLoyaltyPage() {
   function updateSetting(field: keyof LoyaltySettings, value: number | boolean) {
     if (!settings) return;
     setSettings({ ...settings, [field]: value });
+  }
+
+  function toggleSettingList(field: "allowed_space_types" | "allowed_booking_modes", value: string) {
+    if (!settings) return;
+    const current = settings[field] || [];
+    const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+    setSettings({ ...settings, [field]: next });
   }
 
   async function createCampaign() {
@@ -197,7 +208,7 @@ export default function OwnerLoyaltyPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-textPrimary">Loyalty</h2>
-            <p className="text-textSecondary">Owner-funded rewards, redemption guardrails, and member incentives.</p>
+            <p className="text-textSecondary">Owner-funded points, Priddy Points acceptance, and redemption eligibility.</p>
           </div>
           <select
             value={orgId}
@@ -229,7 +240,7 @@ export default function OwnerLoyaltyPage() {
               <div>
                 <div className="text-sm font-semibold text-textPrimary">Reward settings</div>
                 <div className="text-sm text-textSecondary">
-                  {settings.earn_points_per_dollar} points per $1 at {settings.earn_rate_bps / 100}% back.
+                  {settings.earn_points_per_100_dollars} points per $100 spent. Points can cover up to {settings.max_redemption_percent}% of eligible bookings.
                 </div>
               </div>
               <label className="flex items-center gap-2 text-sm text-textSecondary">
@@ -238,22 +249,61 @@ export default function OwnerLoyaltyPage() {
                   checked={settings.is_enabled}
                   onChange={(event) => updateSetting("is_enabled", event.target.checked)}
                 />
-                Enabled
+                Owner points enabled
               </label>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-4">
               <NumberField label="Point value (cents)" value={settings.point_value_cents} min={1} max={10} onChange={(value) => updateSetting("point_value_cents", value)} />
-              <NumberField label="Earn rate (basis points)" value={settings.earn_rate_bps} min={0} max={2000} onChange={(value) => updateSetting("earn_rate_bps", value)} />
-              <NumberField label="Max redemption %" value={settings.max_redemption_percent} min={0} max={50} onChange={(value) => updateSetting("max_redemption_percent", value)} />
+              <NumberField label="Points per $100" value={settings.earn_points_per_100_dollars} min={0} max={1000} onChange={(value) => updateSetting("earn_points_per_100_dollars", value)} />
+              <NumberField label="Max redemption %" value={settings.max_redemption_percent} min={0} max={100} onChange={(value) => updateSetting("max_redemption_percent", value)} />
               <NumberField label="Promo expiry days" value={settings.promo_expiration_days} min={1} max={730} onChange={(value) => updateSetting("promo_expiration_days", value)} />
               <NumberField label="Earned expiry days" value={settings.earned_expiration_days} min={30} max={1095} onChange={(value) => updateSetting("earned_expiration_days", value)} />
               <NumberField label="Daily issue cap" value={settings.campaign_daily_issue_cap} min={0} max={5000000} onChange={(value) => updateSetting("campaign_daily_issue_cap", value)} />
               <NumberField label="Max promo grant" value={settings.max_promo_grant_points} min={0} max={1000000} onChange={(value) => updateSetting("max_promo_grant_points", value)} />
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="rounded-sm border border-border p-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-textPrimary">
+                  <input type="checkbox" checked={settings.accepts_priddy_points} onChange={(event) => updateSetting("accepts_priddy_points", event.target.checked)} />
+                  Accept Priddy Points
+                </label>
+                <div className="mt-1 text-xs text-textMuted">Members can use platform points as a discount on eligible listings.</div>
+              </div>
+              <div className="rounded-sm border border-border p-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-textPrimary">
+                  <input type="checkbox" checked={settings.owner_points_redemption_enabled} onChange={(event) => updateSetting("owner_points_redemption_enabled", event.target.checked)} />
+                  Allow owner point redemption
+                </label>
+                <div className="mt-1 text-xs text-textMuted">Members can spend this owner's points on eligible listings.</div>
+              </div>
               <div className="flex items-end">
                 <Button type="button" onClick={saveSettings} disabled={saving}>
                   {saving ? "Saving..." : "Save settings"}
                 </Button>
               </div>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <EligibilityGroup
+                title="Owner point space types"
+                options={[
+                  ["shared_desk", "Shared desk"],
+                  ["conference_room", "Conference room"],
+                  ["virtual_office", "Virtual office"],
+                  ["private_office", "Private office"],
+                  ["suite", "Suite"],
+                ]}
+                selected={settings.allowed_space_types}
+                onToggle={(value) => toggleSettingList("allowed_space_types", value)}
+              />
+              <EligibilityGroup
+                title="Owner point booking types"
+                options={[
+                  ["day_pass", "Day pass"],
+                  ["hourly", "Hourly"],
+                ]}
+                selected={settings.allowed_booking_modes}
+                onToggle={(value) => toggleSettingList("allowed_booking_modes", value)}
+              />
             </div>
           </Card>
         ) : null}
@@ -375,6 +425,32 @@ function Metric({ label, value }: { label: string; value: string }) {
       <div className="text-sm text-textMuted">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-textPrimary">{value}</div>
     </Card>
+  );
+}
+
+function EligibilityGroup({
+  title,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  options: Array<[string, string]>;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-sm border border-border p-3">
+      <div className="text-sm font-semibold text-textPrimary">{title}</div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {options.map(([value, label]) => (
+          <label key={value} className="flex items-center gap-2 text-sm text-textSecondary">
+            <input type="checkbox" checked={(selected || []).includes(value)} onChange={() => onToggle(value)} />
+            {label}
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 

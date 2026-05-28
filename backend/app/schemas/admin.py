@@ -39,14 +39,61 @@ class PlatformTeamUpdateIn(BaseModel):
 
 
 class PlatformSettingsUpdateIn(BaseModel):
-    default_owner_commission_pct: int
+    default_owner_commission_pct: int | None = None
+    priddy_points_enabled: bool | None = None
+    priddy_signup_points: int | None = None
+    priddy_point_value_cents: int | None = None
+    priddy_allowed_space_types: list[str] | None = None
+    priddy_allowed_booking_modes: list[str] | None = None
 
     @field_validator("default_owner_commission_pct")
     @classmethod
-    def validate_commission(cls, value: int) -> int:
+    def validate_commission(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
         if value < 0 or value > 100:
             raise ValueError("Commission must be between 0 and 100")
         return value
+
+    @field_validator("priddy_signup_points")
+    @classmethod
+    def validate_priddy_signup_points(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        if value < 0 or value > 1000000:
+            raise ValueError("Signup points must be between 0 and 1,000,000")
+        return value
+
+    @field_validator("priddy_point_value_cents")
+    @classmethod
+    def validate_priddy_point_value(cls, value: int | None) -> int | None:
+        if value is None:
+            return None
+        if value != 1:
+            raise ValueError("Priddy Points are currently fixed at 1 cent per point")
+        return value
+
+    @field_validator("priddy_allowed_space_types")
+    @classmethod
+    def validate_priddy_space_types(cls, value: list[str] | None) -> list[str] | None:
+        allowed = {"private_office", "shared_desk", "conference_room", "virtual_office", "suite"}
+        if value is None:
+            return None
+        cleaned = sorted({item for item in value if item in allowed})
+        if not cleaned:
+            raise ValueError("At least one eligible space type is required")
+        return cleaned
+
+    @field_validator("priddy_allowed_booking_modes")
+    @classmethod
+    def validate_priddy_booking_modes(cls, value: list[str] | None) -> list[str] | None:
+        allowed = {"hourly", "day_pass"}
+        if value is None:
+            return None
+        cleaned = sorted({item for item in value if item in allowed})
+        if not cleaned:
+            raise ValueError("At least one eligible booking mode is required")
+        return cleaned
 
 
 class PlatformProfileUpdateIn(BaseModel):

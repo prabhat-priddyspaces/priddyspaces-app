@@ -200,24 +200,6 @@ def charge_booking_request(
     space = db.query(Space).filter(Space.id == req.space_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
-    setting = (
-        db.query(OwnerPaymentSetting)
-        .filter(OwnerPaymentSetting.id == req.owner_payment_setting_id)
-        .first()
-    )
-    method = (
-        db.query(MemberOwnerPaymentMethod)
-        .filter(MemberOwnerPaymentMethod.id == req.member_owner_payment_method_id)
-        .first()
-    )
-    if not setting or not method or method.status != "active":
-        req.status = BookingRequestStatus.PAYMENT_FAILED
-        req.payment_status = "failed"
-        req.operator_notes = operator_notes
-        db.add(req)
-        db.commit()
-        db.refresh(req)
-        return req, None, None
 
     snapshot = _estimate_request_snapshot(db, req, space)
     gross_amount_cents = int(snapshot["total_cents"])
@@ -229,6 +211,27 @@ def charge_booking_request(
         "loyalty_discount_cents": loyalty_discount_cents,
         "total_cents": amount_cents,
     }
+    setting = None
+    method = None
+    if amount_cents > 0:
+        setting = (
+            db.query(OwnerPaymentSetting)
+            .filter(OwnerPaymentSetting.id == req.owner_payment_setting_id)
+            .first()
+        )
+        method = (
+            db.query(MemberOwnerPaymentMethod)
+            .filter(MemberOwnerPaymentMethod.id == req.member_owner_payment_method_id)
+            .first()
+        )
+        if not setting or not method or method.status != "active":
+            req.status = BookingRequestStatus.PAYMENT_FAILED
+            req.payment_status = "failed"
+            req.operator_notes = operator_notes
+            db.add(req)
+            db.commit()
+            db.refresh(req)
+            return req, None, None
     amount = amount_cents // 100
     attempt = (req.payment_attempt_count or 0) + 1
     idempotency_key = f"booking_{req.public_id}_attempt_{attempt}"
@@ -244,9 +247,9 @@ def charge_booking_request(
             discount_cents=(payment_snapshot.get("discount_cents") or 0) + loyalty_discount_cents,
             tax_cents=payment_snapshot.get("tax_cents"),
             currency="usd",
-            provider=setting.provider,
-            payment_method_id=method.id,
-            status=PaymentStatus.REQUIRES_PAYMENT,
+            provider=setting.provider if setting else "points",
+            payment_method_id=method.id if method else None,
+            status=PaymentStatus.REQUIRES_PAYMENT if amount_cents > 0 else PaymentStatus.SUCCEEDED,
             attempt_number=attempt,
             idempotency_key=idempotency_key,
             booking_series_id=req.booking_series_id,
@@ -256,6 +259,55 @@ def charge_booking_request(
         db.add(payment)
         db.commit()
         db.refresh(payment)
+
+    if amount_cents == 0:
+        payment.status = PaymentStatus.SUCCEEDED
+        payment.raw_response = {"covered_by_points": True}
+        req.payment_attempt_count = attempt
+        req.operator_notes = operator_notes
+        if req.booking_id:
+            booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+            if not booking:
+                raise HTTPException(status_code=409, detail="Booking hold no longer exists")
+            booking.status = BookingStatus.CONFIRMED
+            db.add(booking)
+        else:
+            booking = Booking(
+                user_id=req.user_id,
+                space_id=req.space_id,
+                tenant_id=req.tenant_id,
+                start_datetime=req.start_datetime,
+                end_datetime=req.end_datetime,
+                inventory_start_datetime=req.start_datetime - timedelta(minutes=space.buffer_before_minutes or 0),
+                inventory_end_datetime=req.end_datetime + timedelta(minutes=space.buffer_after_minutes or 0),
+                booking_request_id=req.id,
+                booking_series_id=req.booking_series_id,
+                status=BookingStatus.CONFIRMED,
+            )
+            db.add(booking)
+            db.flush()
+            req.booking_id = booking.id
+        if req.booking_series_id:
+            db.query(Booking).filter(
+                Booking.booking_series_id == req.booking_series_id,
+                Booking.status == BookingStatus.PENDING,
+            ).update({Booking.status: BookingStatus.CONFIRMED}, synchronize_session=False)
+        payment.booking_id = booking.id
+        req.status = BookingRequestStatus.APPROVED
+        req.payment_status = "succeeded"
+        req.approved_at = datetime.now(timezone.utc)
+        req.pricing_snapshot = json.dumps(payment_snapshot)
+        req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
+        _create_invoice(db, req=req, booking=booking, payment=payment)
+        db.add(payment)
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        db.refresh(booking)
+        db.refresh(payment)
+        finalize_redemption_for_payment(db, req, booking, payment)
+        db.commit()
+        return req, booking, payment
 
     failure_reason = "Payment provider did not return a result"
     try:
@@ -398,6 +450,9 @@ def refund_booking_payment(db: Session, *, req: BookingRequest | None, booking: 
         amount_cents = min(amount_cents, remaining_cents)
     if amount_cents <= 0:
         payment.refunded_amount_cents = payment.refunded_amount_cents or 0
+        if (payment.amount_cents or payment.amount * 100) <= 0 and payment.status == PaymentStatus.SUCCEEDED:
+            payment.status = PaymentStatus.REFUNDED
+            reverse_for_payment_refund(db, payment)
         db.add(payment)
         return payment
     idempotency_key = f"refund_{payment.public_id}_{booking.public_id}_{amount_cents}"

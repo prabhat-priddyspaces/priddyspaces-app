@@ -222,3 +222,228 @@ test("member can submit a booking request from a space detail page", async ({ pa
   await expect(page.getByText("Payment: pay_req_1")).toBeVisible();
   await expect(page.getByText("Invoice: inv_req_1")).toBeVisible();
 });
+
+test("member can redeem Priddy Points for a full day pass without a card", async ({ page }) => {
+  const bookingRequest = {
+    public_id: "req_points_1",
+    created_at: "2026-04-09T18:45:00.000Z",
+    space_public_id: "space_points_1",
+    space_name: "Open Desk Day Pass",
+    space_type: "shared_desk",
+    location_public_id: "loc_points_1",
+    location_name: "Rewards Hub",
+    location_address: "200 Market St",
+    location_city: "Miami",
+    location_state: "FL",
+    location_postal_code: "33131",
+    location_timezone: "America/New_York",
+    location_public_phone: null,
+    location_public_email: null,
+    support_contacts: [],
+    booking_id: 202,
+    booking_public_id: "book_points_1",
+    estimated_amount: 10,
+    start_datetime: "2026-04-10T13:00:00.000Z",
+    end_datetime: "2026-04-10T22:00:00.000Z",
+    status: "approved",
+    payment_status: "succeeded",
+    payment_provider: "points",
+    member_owner_payment_method_public_id: null,
+    approved_at: "2026-04-09T19:10:00.000Z",
+    rejected_at: null,
+    cancelled_at: null,
+    cancellation_deadline_at: "2026-04-09T14:00:00.000Z",
+    operator_notes: null,
+  };
+  let paymentResolveCalls = 0;
+
+  await mockSession(page, "member");
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("member"));
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_points_1/availability") {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      await json(route, {
+        space_public_id: "space_points_1",
+        timezone: "America/New_York",
+        granularity_minutes: 60,
+        availability_start_time: "09:00",
+        availability_end_time: "18:00",
+        buffer_before_minutes: 0,
+        buffer_after_minutes: 0,
+        hourly_price: null,
+        daily_price: 10,
+        days: [
+          {
+            date: todayIso,
+            fully_blocked: false,
+            busy_intervals: [],
+          },
+        ],
+      });
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_points_1") {
+      await json(route, {
+        space: {
+          public_id: "space_points_1",
+          name: "Open Desk Day Pass",
+          space_type: "shared_desk",
+          capacity: 1,
+          availability_status: "available",
+          availability_start_time: "09:00:00",
+          availability_end_time: "18:00:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          price_daily: 10,
+          price_monthly: null,
+          hourly_price: null,
+          membership_price: null,
+          amenities: ["WiFi", "Coffee"],
+        },
+        images: [],
+        location: {
+          location_public_id: "loc_points_1",
+          name: "Rewards Hub",
+          address: "200 Market St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33131",
+          neighborhood: "Brickell",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          public_phone: null,
+          public_email: null,
+          public_hours_weekdays: null,
+          public_hours_weekends: null,
+          public_parking_notes: [],
+          public_transit_notes: [],
+          public_included_items: [],
+        },
+        cancellation_policy: null,
+        support_contacts: [],
+      });
+      return;
+    }
+
+    if (key === "GET /api/subscription-plans/public") {
+      await json(route, []);
+      return;
+    }
+
+    if (key === "POST /api/loyalty/redemptions/preview") {
+      await json(route, {
+        eligible: true,
+        reason: null,
+        organization_public_id: "org_points_1",
+        wallet_public_id: "wallet_points_1",
+        promo_balance: 0,
+        earned_balance: 0,
+        total_balance: 0,
+        point_value_cents: 1,
+        subtotal_cents: 1000,
+        max_redeemable_points: 1000,
+        max_discount_cents: 1000,
+        requested_points: 0,
+        discount_cents: 0,
+        priddy: {
+          eligible: true,
+          reason: null,
+          balance: 1000,
+          point_value_cents: 1,
+          max_redeemable_points: 1000,
+          requested_points: 0,
+          discount_cents: 0,
+        },
+        owner: {
+          eligible: false,
+          reason: "No owner points available",
+          balance: 0,
+          point_value_cents: 1,
+          max_redeemable_points: 0,
+          requested_points: 0,
+          discount_cents: 0,
+        },
+      });
+      return;
+    }
+
+    if (key === "POST /api/loyalty/redemptions/lock") {
+      const payload = route.request().postDataJSON() as {
+        booking_mode: string;
+        full_day: boolean;
+        priddy_points_requested: number;
+        owner_points_requested: number;
+      };
+      expect(payload.booking_mode).toBe("day_pass");
+      expect(payload.full_day).toBe(true);
+      expect(payload.priddy_points_requested).toBe(1000);
+      expect(payload.owner_points_requested).toBe(0);
+      await json(route, {
+        public_id: "lock_points_1",
+        organization_public_id: "org_points_1",
+        points: 1000,
+        priddy_points: 1000,
+        promo_points: 0,
+        earned_points: 0,
+        discount_cents: 1000,
+        status: "active",
+        expires_at: "2026-04-09T19:15:00.000Z",
+      });
+      return;
+    }
+
+    if (key === "GET /api/payment-methods/resolve") {
+      paymentResolveCalls += 1;
+      await json(route, { detail: "Payment method should not be resolved for fully covered points bookings" }, 500);
+      return;
+    }
+
+    if (key === "POST /api/booking-requests") {
+      const payload = route.request().postDataJSON() as {
+        booking_mode: string;
+        full_day: boolean;
+        member_owner_payment_method_public_id: string | null;
+        payment_authorization_consent: boolean;
+        redemption_lock_public_id: string;
+      };
+      expect(payload.booking_mode).toBe("day_pass");
+      expect(payload.full_day).toBe(true);
+      expect(payload.member_owner_payment_method_public_id).toBeNull();
+      expect(payload.payment_authorization_consent).toBe(true);
+      expect(payload.redemption_lock_public_id).toBe("lock_points_1");
+      await json(route, bookingRequest);
+      return;
+    }
+
+    if (key === "GET /api/booking-requests") {
+      await json(route, [bookingRequest]);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/spaces/space_points_1");
+
+  await expect(page.getByRole("heading", { name: "Open Desk Day Pass" })).toBeVisible();
+  await page.getByRole("button", { name: "Full day" }).click();
+  await expect(page.getByText("Priddy Points: 1,000 available, up to 1,000")).toBeVisible();
+  await expect(page.getByText("Rewards savings")).toBeVisible();
+  await expect(page.getByText("$10").last()).toBeVisible();
+
+  await page.getByRole("button", { name: "Reserve & Pay" }).click();
+
+  await expect(page).toHaveURL(/\/member\/requests$/);
+  await expect(page.getByText("Open Desk Day Pass").first()).toBeVisible();
+  expect(paymentResolveCalls).toBe(0);
+});

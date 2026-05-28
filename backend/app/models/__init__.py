@@ -50,6 +50,8 @@ from app.models.loyalty import (
     LoyaltyRedemption,
     LoyaltyRedemptionLock,
     LoyaltyWallet,
+    PriddyPointsLedgerEntry,
+    PriddyPointsWallet,
 )
 from app.models.marketing import (
     AudienceSegment,
@@ -118,6 +120,8 @@ __all__ = [
     "LoyaltyRedemption",
     "LoyaltyRedemptionLock",
     "LoyaltyWallet",
+    "PriddyPointsLedgerEntry",
+    "PriddyPointsWallet",
     "AudienceSegment",
     "BusinessMarketingSenderSetting",
     "CampaignRecipient",

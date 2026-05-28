@@ -1386,6 +1386,11 @@ def get_platform_settings(
     settings = get_or_create_platform_settings(db)
     return {
         "default_owner_commission_pct": settings.default_owner_commission_pct,
+        "priddy_points_enabled": settings.priddy_points_enabled,
+        "priddy_signup_points": settings.priddy_signup_points,
+        "priddy_point_value_cents": settings.priddy_point_value_cents,
+        "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
+        "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
         "current_admin": {
             "public_id": actor.public_id,
             "email": actor.email,
@@ -1406,8 +1411,17 @@ def update_platform_settings(
 ):
     actor, _member = require_superadmin(db, token)
     settings = get_or_create_platform_settings(db)
-    before = {"default_owner_commission_pct": settings.default_owner_commission_pct}
-    settings.default_owner_commission_pct = payload.default_owner_commission_pct
+    before = {
+        "default_owner_commission_pct": settings.default_owner_commission_pct,
+        "priddy_points_enabled": settings.priddy_points_enabled,
+        "priddy_signup_points": settings.priddy_signup_points,
+        "priddy_point_value_cents": settings.priddy_point_value_cents,
+        "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
+        "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
+    }
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(settings, field, value)
     db.add(settings)
     db.commit()
     db.refresh(settings)
@@ -1418,10 +1432,22 @@ def update_platform_settings(
         entity_type="platform_settings",
         entity_public_id=settings.public_id,
         before_state=before,
-        after_state={"default_owner_commission_pct": settings.default_owner_commission_pct},
+        after_state={
+            "default_owner_commission_pct": settings.default_owner_commission_pct,
+            "priddy_points_enabled": settings.priddy_points_enabled,
+            "priddy_signup_points": settings.priddy_signup_points,
+            "priddy_point_value_cents": settings.priddy_point_value_cents,
+            "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
+            "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
+        },
     )
     return {
         "default_owner_commission_pct": settings.default_owner_commission_pct,
+        "priddy_points_enabled": settings.priddy_points_enabled,
+        "priddy_signup_points": settings.priddy_signup_points,
+        "priddy_point_value_cents": settings.priddy_point_value_cents,
+        "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
+        "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
     }
 
 

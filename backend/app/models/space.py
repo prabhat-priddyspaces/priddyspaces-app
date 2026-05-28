@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, Float, Integer, Numeric, String, Time
+from sqlalchemy import Boolean, Column, Enum, Float, Integer, Numeric, String, Time
 
 from app.models.base import Base
 from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility, enum_values
@@ -36,5 +36,7 @@ class Space(PublicIdMixin, TimestampMixin, Base):
         ),
         default=SpaceVisibility.PUBLIC,
     )
+    priddy_points_enabled = Column(Boolean, nullable=True)
+    owner_points_enabled = Column(Boolean, nullable=True)
     amenities = Column(String(1024), nullable=True)
     floor_plan_id = Column(Integer, nullable=True)

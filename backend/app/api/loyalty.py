@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.db.deps import get_db
 from app.models.enums import UserRole
-from app.models.loyalty import LoyaltyCampaign, LoyaltyLedgerEntry, LoyaltyWallet
+from app.models.loyalty import LoyaltyCampaign, LoyaltyLedgerEntry, LoyaltyWallet, PriddyPointsLedgerEntry
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.loyalty import (
@@ -21,14 +21,19 @@ from app.schemas.loyalty import (
     LoyaltyOwnerSummaryOut,
     LoyaltyRedemptionLockIn,
     LoyaltyRedemptionLockOut,
+    LoyaltyRedemptionBucketOut,
     LoyaltyRedemptionPreviewIn,
     LoyaltyRedemptionPreviewOut,
     LoyaltyWalletOut,
+    PriddyPointsWalletOut,
 )
 from app.services.auth_user import get_or_create_user
 from app.services.authz import get_org_member, list_org_members, require_owner_or_admin
 from app.services.loyalty import (
     earn_points_per_dollar,
+    earn_points_per_100_dollars,
+    earn_rate_bps_for_points_per_100,
+    get_or_create_priddy_wallet,
     get_or_create_wallet,
     get_settings,
     lock_redemption,
@@ -38,6 +43,7 @@ from app.services.loyalty import (
     wallet_expiration_summary,
     write_ledger_entry,
 )
+from app.services.platform_auth import get_or_create_platform_settings
 from app.services.org_member_stats import interacted_user_ids
 
 router = APIRouter(prefix="/loyalty", tags=["loyalty"])
@@ -78,10 +84,15 @@ def _settings_out(org: Organization, setting) -> LoyaltyOwnerSettingsOut:
         public_id=setting.public_id,
         organization_public_id=org.public_id,
         is_enabled=setting.is_enabled,
+        accepts_priddy_points=setting.accepts_priddy_points,
+        owner_points_redemption_enabled=setting.owner_points_redemption_enabled,
         point_value_cents=setting.point_value_cents,
         earn_rate_bps=setting.earn_rate_bps,
         earn_points_per_dollar=earn_points_per_dollar(setting),
+        earn_points_per_100_dollars=earn_points_per_100_dollars(setting),
         max_redemption_percent=setting.max_redemption_percent,
+        allowed_space_types=setting.allowed_space_types or ["conference_room", "shared_desk", "virtual_office"],
+        allowed_booking_modes=setting.allowed_booking_modes or ["hourly", "day_pass"],
         promo_expiration_days=setting.promo_expiration_days,
         earned_expiration_days=setting.earned_expiration_days,
         campaign_daily_issue_cap=setting.campaign_daily_issue_cap,
@@ -108,6 +119,19 @@ def _wallet_out(db: Session, wallet: LoyaltyWallet, org: Organization) -> Loyalt
         cash_value_cents=total * point_value,
         next_expiration_at=next_expiry,
         expiring_points=expiring_points,
+    )
+
+
+def _priddy_wallet_out(db: Session, user: User) -> PriddyPointsWalletOut:
+    settings = get_or_create_platform_settings(db)
+    wallet = get_or_create_priddy_wallet(db, user)
+    point_value = settings.priddy_point_value_cents or 1
+    return PriddyPointsWalletOut(
+        public_id=wallet.public_id,
+        balance=wallet.balance or 0,
+        lifetime_earned_points=wallet.lifetime_earned_points or 0,
+        point_value_cents=point_value,
+        cash_value_cents=(wallet.balance or 0) * point_value,
     )
 
 
@@ -145,6 +169,47 @@ def list_wallets(
         .all()
     }
     return [_wallet_out(db, wallet, orgs[wallet.organization_id]) for wallet in wallets if wallet.organization_id in orgs]
+
+
+@router.get("/priddy-wallet", response_model=PriddyPointsWalletOut)
+def get_priddy_wallet(
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    result = _priddy_wallet_out(db, user)
+    db.commit()
+    return result
+
+
+@router.get("/priddy-wallet/transactions", response_model=list[LoyaltyLedgerEntryOut])
+def priddy_wallet_transactions(
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    wallet = get_or_create_priddy_wallet(db, user)
+    db.commit()
+    rows = (
+        db.query(PriddyPointsLedgerEntry)
+        .filter(PriddyPointsLedgerEntry.wallet_id == wallet.id)
+        .order_by(PriddyPointsLedgerEntry.created_at.desc())
+        .all()
+    )
+    return [
+        LoyaltyLedgerEntryOut(
+            public_id=row.public_id,
+            entry_type=row.entry_type,
+            point_type="priddy",
+            points=row.points,
+            source=row.source,
+            source_public_id=row.source_public_id,
+            expires_at=row.expires_at,
+            note=row.note,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/wallets/{organization_public_id}/transactions", response_model=list[LoyaltyLedgerEntryOut])
@@ -188,8 +253,10 @@ def redemption_preview(
         booking_mode=payload.booking_mode,
         full_day=payload.full_day,
         points_requested=payload.points_requested,
+        priddy_points_requested=payload.priddy_points_requested,
+        owner_points_requested=payload.owner_points_requested,
     )
-    # Preview may lazily create an owner-scoped wallet and apply a signup grant.
+    # Preview may lazily create empty wallets so the UI has stable public ids.
     db.commit()
     wallet = preview.wallet
     return LoyaltyRedemptionPreviewOut(
@@ -206,6 +273,24 @@ def redemption_preview(
         max_discount_cents=preview.max_discount_cents,
         requested_points=preview.requested_points,
         discount_cents=preview.discount_cents,
+        priddy=LoyaltyRedemptionBucketOut(
+            eligible=preview.priddy.eligible,
+            reason=preview.priddy.reason,
+            balance=preview.priddy.balance,
+            point_value_cents=preview.priddy.point_value_cents,
+            max_redeemable_points=preview.priddy.max_redeemable_points,
+            requested_points=preview.priddy.requested_points,
+            discount_cents=preview.priddy.discount_cents,
+        ),
+        owner=LoyaltyRedemptionBucketOut(
+            eligible=preview.owner.eligible,
+            reason=preview.owner.reason,
+            balance=preview.owner.balance,
+            point_value_cents=preview.owner.point_value_cents,
+            max_redeemable_points=preview.owner.max_redeemable_points,
+            requested_points=preview.owner.requested_points,
+            discount_cents=preview.owner.discount_cents,
+        ),
     )
 
 
@@ -225,6 +310,8 @@ def create_redemption_lock(
         booking_mode=payload.booking_mode,
         full_day=payload.full_day,
         points_requested=payload.points_requested,
+        priddy_points_requested=payload.priddy_points_requested,
+        owner_points_requested=payload.owner_points_requested,
         idempotency_key=payload.idempotency_key,
     )
     org = db.query(Organization).filter(Organization.id == lock.organization_id).first()
@@ -232,6 +319,7 @@ def create_redemption_lock(
         public_id=lock.public_id,
         organization_public_id=org.public_id if org else "",
         points=lock.points,
+        priddy_points=lock.priddy_points,
         promo_points=lock.promo_points,
         earned_points=lock.earned_points,
         discount_cents=lock.discount_cents,
@@ -266,7 +354,15 @@ def update_owner_settings(
     _require_mutation_access(db, org, user)
     setting = get_settings(db, org.id, actor_id=user.id)
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "earn_points_per_100_dollars":
+            setting.earn_rate_bps = earn_rate_bps_for_points_per_100(value or 0, setting.point_value_cents)
+            continue
         setattr(setting, field, value)
+    if payload.point_value_cents is not None and payload.earn_points_per_100_dollars is not None:
+        setting.earn_rate_bps = earn_rate_bps_for_points_per_100(
+            payload.earn_points_per_100_dollars,
+            setting.point_value_cents,
+        )
     setting.updated_by_user_id = user.id
     validate_settings(setting)
     db.add(setting)

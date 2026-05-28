@@ -28,6 +28,11 @@ interface CurrentAdmin {
 
 interface SettingsResponse {
   default_owner_commission_pct: number;
+  priddy_points_enabled: boolean;
+  priddy_signup_points: number;
+  priddy_point_value_cents: number;
+  priddy_allowed_space_types: string[];
+  priddy_allowed_booking_modes: string[];
   current_admin: CurrentAdmin;
 }
 
@@ -48,6 +53,10 @@ const SECTIONS: Array<{
 export default function AdminSettingsPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [commission, setCommission] = useState("0");
+  const [priddyEnabled, setPriddyEnabled] = useState(true);
+  const [priddySignupPoints, setPriddySignupPoints] = useState("1000");
+  const [priddySpaceTypes, setPriddySpaceTypes] = useState<string[]>(["shared_desk"]);
+  const [priddyBookingModes, setPriddyBookingModes] = useState<string[]>(["day_pass"]);
   const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -71,6 +80,10 @@ export default function AdminSettingsPage() {
     apiFetch<SettingsResponse>("/api/admin/settings", { method: "GET" }, token)
       .then((settings) => {
         setCommission(String(settings.default_owner_commission_pct));
+        setPriddyEnabled(settings.priddy_points_enabled);
+        setPriddySignupPoints(String(settings.priddy_signup_points));
+        setPriddySpaceTypes(settings.priddy_allowed_space_types || ["shared_desk"]);
+        setPriddyBookingModes(settings.priddy_allowed_booking_modes || ["day_pass"]);
         setCurrentAdmin(settings.current_admin);
         setFirstName(settings.current_admin.first_name ?? "");
         setLastName(settings.current_admin.last_name ?? "");
@@ -93,7 +106,14 @@ export default function AdminSettingsPage() {
         "/api/admin/settings",
         {
           method: "PATCH",
-          body: JSON.stringify({ default_owner_commission_pct: Number(commission) }),
+          body: JSON.stringify({
+            default_owner_commission_pct: Number(commission),
+            priddy_points_enabled: priddyEnabled,
+            priddy_signup_points: Number(priddySignupPoints || 0),
+            priddy_point_value_cents: 1,
+            priddy_allowed_space_types: priddySpaceTypes,
+            priddy_allowed_booking_modes: priddyBookingModes,
+          }),
         },
         token
       );
@@ -160,6 +180,10 @@ export default function AdminSettingsPage() {
     if (node) {
       node.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  }
+
+  function toggleList(current: string[], value: string, setter: (value: string[]) => void) {
+    setter(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   }
 
   // Group section nav by `group`.
@@ -276,6 +300,59 @@ export default function AdminSettingsPage() {
                   >
                     Save defaults
                   </Button>
+                </div>
+                <div className="mt-5 border-t border-border pt-5">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[14px] font-semibold">Priddy Points</div>
+                      <div className="text-[12px] text-text-3">
+                        Member signup grant and platform eligibility for point redemption.
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-[13px] text-text-2">
+                      <input
+                        type="checkbox"
+                        checked={priddyEnabled}
+                        onChange={(event) => setPriddyEnabled(event.target.checked)}
+                      />
+                      Enabled
+                    </label>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Signup points" hint="Applies only to future member registrations.">
+                      <Input
+                        value={priddySignupPoints}
+                        onChange={(e) => setPriddySignupPoints(e.target.value)}
+                        placeholder="1000"
+                      />
+                    </Field>
+                    <Field label="Point value">
+                      <Input value="1 cent" readOnly />
+                    </Field>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <Checklist
+                      title="Eligible space types"
+                      options={[
+                        ["shared_desk", "Shared desk"],
+                        ["conference_room", "Conference room"],
+                        ["virtual_office", "Virtual office"],
+                        ["private_office", "Private office"],
+                        ["suite", "Suite"],
+                      ]}
+                      selected={priddySpaceTypes}
+                      onToggle={(value) => toggleList(priddySpaceTypes, value, setPriddySpaceTypes)}
+                    />
+                    <Checklist
+                      title="Eligible booking types"
+                      options={[
+                        ["day_pass", "Day pass"],
+                        ["hourly", "Hourly"],
+                      ]}
+                      selected={priddyBookingModes}
+                      onToggle={(value) => toggleList(priddyBookingModes, value, setPriddyBookingModes)}
+                    />
+                  </div>
                 </div>
               </Card>
             </div>
@@ -444,6 +521,32 @@ function SectionHeader({
         {title}
       </div>
       {sub ? <div className="text-[12px] text-text-3 mt-0.5">{sub}</div> : null}
+    </div>
+  );
+}
+
+function Checklist({
+  title,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  options: Array<[string, string]>;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border p-3">
+      <div className="text-[13px] font-semibold">{title}</div>
+      <div className="mt-3 grid gap-2">
+        {options.map(([value, label]) => (
+          <label key={value} className="flex items-center gap-2 text-[13px] text-text-2">
+            <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} />
+            {label}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

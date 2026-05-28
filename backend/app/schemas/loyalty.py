@@ -8,10 +8,15 @@ class LoyaltyOwnerSettingsOut(BaseModel):
     public_id: str
     organization_public_id: str
     is_enabled: bool
+    accepts_priddy_points: bool
+    owner_points_redemption_enabled: bool
     point_value_cents: int
     earn_rate_bps: int
     earn_points_per_dollar: float
+    earn_points_per_100_dollars: float
     max_redemption_percent: int
+    allowed_space_types: list[str]
+    allowed_booking_modes: list[str]
     promo_expiration_days: int
     earned_expiration_days: int
     campaign_daily_issue_cap: int
@@ -21,9 +26,14 @@ class LoyaltyOwnerSettingsOut(BaseModel):
 
 class LoyaltyOwnerSettingsUpdate(BaseModel):
     is_enabled: bool | None = None
+    accepts_priddy_points: bool | None = None
+    owner_points_redemption_enabled: bool | None = None
     point_value_cents: int | None = Field(default=None, ge=1, le=10)
     earn_rate_bps: int | None = Field(default=None, ge=0, le=2000)
-    max_redemption_percent: int | None = Field(default=None, ge=0, le=50)
+    earn_points_per_100_dollars: float | None = Field(default=None, ge=0, le=1000)
+    max_redemption_percent: int | None = Field(default=None, ge=0, le=100)
+    allowed_space_types: list[str] | None = None
+    allowed_booking_modes: list[str] | None = None
     promo_expiration_days: int | None = Field(default=None, ge=1, le=730)
     earned_expiration_days: int | None = Field(default=None, ge=30, le=1095)
     campaign_daily_issue_cap: int | None = Field(default=None, ge=0, le=5000000)
@@ -43,6 +53,14 @@ class LoyaltyWalletOut(BaseModel):
     cash_value_cents: int
     next_expiration_at: datetime | None = None
     expiring_points: int = 0
+
+
+class PriddyPointsWalletOut(BaseModel):
+    public_id: str
+    balance: int
+    lifetime_earned_points: int
+    point_value_cents: int
+    cash_value_cents: int
 
 
 class LoyaltyLedgerEntryOut(BaseModel):
@@ -66,6 +84,18 @@ class LoyaltyRedemptionPreviewIn(BaseModel):
     booking_mode: str | None = None
     full_day: bool = False
     points_requested: int | None = Field(default=None, ge=0)
+    priddy_points_requested: int | None = Field(default=None, ge=0)
+    owner_points_requested: int | None = Field(default=None, ge=0)
+
+
+class LoyaltyRedemptionBucketOut(BaseModel):
+    eligible: bool = False
+    reason: str | None = None
+    balance: int = 0
+    point_value_cents: int = 1
+    max_redeemable_points: int = 0
+    requested_points: int = 0
+    discount_cents: int = 0
 
 
 class LoyaltyRedemptionPreviewOut(BaseModel):
@@ -82,17 +112,27 @@ class LoyaltyRedemptionPreviewOut(BaseModel):
     max_discount_cents: int = 0
     requested_points: int = 0
     discount_cents: int = 0
+    priddy: LoyaltyRedemptionBucketOut = Field(default_factory=LoyaltyRedemptionBucketOut)
+    owner: LoyaltyRedemptionBucketOut = Field(default_factory=LoyaltyRedemptionBucketOut)
 
 
 class LoyaltyRedemptionLockIn(LoyaltyRedemptionPreviewIn):
-    points_requested: int = Field(ge=1)
+    points_requested: int | None = Field(default=None, ge=1)
     idempotency_key: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def _validate_points(self):
+        requested = (self.points_requested or 0) + (self.priddy_points_requested or 0) + (self.owner_points_requested or 0)
+        if requested <= 0:
+            raise ValueError("At least one point must be requested")
+        return self
 
 
 class LoyaltyRedemptionLockOut(BaseModel):
     public_id: str
     organization_public_id: str
     points: int
+    priddy_points: int = 0
     promo_points: int
     earned_points: int
     discount_cents: int

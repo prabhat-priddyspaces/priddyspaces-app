@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
-from app.models.enums import PaymentStatus, SpaceType
+from app.models.enums import BookingMode, PaymentStatus, SpaceType, UserAppRole
 from app.models.location import Location
 from app.models.loyalty import (
     LoyaltyCampaign,
@@ -20,6 +20,8 @@ from app.models.loyalty import (
     LoyaltyRedemption,
     LoyaltyRedemptionLock,
     LoyaltyWallet,
+    PriddyPointsLedgerEntry,
+    PriddyPointsWallet,
 )
 from app.models.organization import Organization
 from app.models.payment import Payment
@@ -29,16 +31,31 @@ from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.models.tax_config import TaxConfig
 from app.models.user import User
 from app.services.org_member_stats import interacted_user_ids
+from app.services.platform_auth import get_or_create_platform_settings
 from app.services.pricing import VolumeDiscount, estimate_booking_price
 
 POINT_VALUE_CENTS_MIN = 1
 POINT_VALUE_CENTS_MAX = 10
 EARN_RATE_BPS_MIN = 0
 EARN_RATE_BPS_MAX = 2000
-MAX_REDEMPTION_PERCENT_MAX = 50
+MAX_REDEMPTION_PERCENT_MAX = 100
 PROMO_GRANT_MAX_POINTS = 1_000_000
 LOCK_TTL_MINUTES = 30
-REDEEMABLE_SPACE_TYPES = {SpaceType.CONFERENCE_ROOM, SpaceType.SHARED_DESK, SpaceType.VIRTUAL_OFFICE}
+DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES = ["conference_room", "shared_desk", "virtual_office"]
+DEFAULT_OWNER_REDEEMABLE_BOOKING_MODES = ["hourly", "day_pass"]
+DEFAULT_PRIDDY_REDEEMABLE_SPACE_TYPES = ["shared_desk"]
+DEFAULT_PRIDDY_REDEEMABLE_BOOKING_MODES = ["day_pass"]
+
+
+@dataclass(frozen=True)
+class RedemptionBucket:
+    eligible: bool
+    reason: str | None
+    balance: int
+    point_value_cents: int
+    max_redeemable_points: int
+    requested_points: int
+    discount_cents: int
 
 
 @dataclass(frozen=True)
@@ -47,12 +64,15 @@ class RedemptionPreview:
     reason: str | None
     organization: Organization | None
     wallet: LoyaltyWallet | None
+    priddy_wallet: PriddyPointsWallet | None
     settings: LoyaltyOwnerSetting | None
     subtotal_cents: int
     max_redeemable_points: int
     max_discount_cents: int
     requested_points: int
     discount_cents: int
+    priddy: RedemptionBucket
+    owner: RedemptionBucket
 
 
 def now_utc() -> datetime:
@@ -88,18 +108,63 @@ def earn_points_per_dollar(settings: LoyaltyOwnerSetting) -> float:
     return round(settings.earn_rate_bps / (100 * settings.point_value_cents), 4)
 
 
+def earn_points_per_100_dollars(settings: LoyaltyOwnerSetting) -> float:
+    return round(earn_points_per_dollar(settings) * 100, 4)
+
+
+def earn_rate_bps_for_points_per_100(points_per_100: float, point_value_cents: int) -> int:
+    return int(round(float(points_per_100 or 0) * max(1, point_value_cents)))
+
+
+def _list_or_default(value: Any, default: list[str]) -> list[str]:
+    if isinstance(value, list):
+        cleaned = [str(item) for item in value if str(item)]
+        return cleaned or list(default)
+    return list(default)
+
+
+def _booking_mode_value(booking_mode: str | None, full_day: bool) -> str:
+    if full_day or booking_mode == BookingMode.DAY_PASS.value:
+        return BookingMode.DAY_PASS.value
+    return BookingMode.HOURLY.value
+
+
+def _space_type_value(space: Space) -> str:
+    return getattr(space.space_type, "value", space.space_type)
+
+
+def _empty_bucket(reason: str | None, *, point_value_cents: int = 1, balance: int = 0) -> RedemptionBucket:
+    return RedemptionBucket(
+        eligible=False,
+        reason=reason,
+        balance=max(0, balance),
+        point_value_cents=point_value_cents,
+        max_redeemable_points=0,
+        requested_points=0,
+        discount_cents=0,
+    )
+
+
 def get_settings(db: Session, organization_id: int, *, create: bool = True, actor_id: int | None = None) -> LoyaltyOwnerSetting | None:
     setting = (
         db.query(LoyaltyOwnerSetting)
         .filter(LoyaltyOwnerSetting.organization_id == organization_id)
         .first()
     )
-    if setting or not create:
+    if setting:
+        if not setting.allowed_space_types:
+            setting.allowed_space_types = list(DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES)
+        if not setting.allowed_booking_modes:
+            setting.allowed_booking_modes = list(DEFAULT_OWNER_REDEEMABLE_BOOKING_MODES)
+        return setting
+    if not create:
         return setting
     setting = LoyaltyOwnerSetting(
         organization_id=organization_id,
         tenant_id=organization_id,
         updated_by_user_id=actor_id,
+        allowed_space_types=list(DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES),
+        allowed_booking_modes=list(DEFAULT_OWNER_REDEEMABLE_BOOKING_MODES),
     )
     db.add(setting)
     db.flush()
@@ -115,6 +180,11 @@ def validate_settings(setting: LoyaltyOwnerSetting) -> None:
         raise HTTPException(status_code=400, detail="Redemption cap is outside platform guardrails")
     if setting.max_promo_grant_points > PROMO_GRANT_MAX_POINTS:
         raise HTTPException(status_code=400, detail="Promo grant cap is outside platform guardrails")
+    allowed_space_types = set(DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES + ["private_office", "suite"])
+    if any(space_type not in allowed_space_types for space_type in _list_or_default(setting.allowed_space_types, DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES)):
+        raise HTTPException(status_code=400, detail="Unsupported loyalty space type")
+    if any(mode not in {"hourly", "day_pass"} for mode in _list_or_default(setting.allowed_booking_modes, DEFAULT_OWNER_REDEEMABLE_BOOKING_MODES)):
+        raise HTTPException(status_code=400, detail="Unsupported loyalty booking mode")
 
 
 def get_wallet(db: Session, organization_id: int, user_id: int) -> LoyaltyWallet | None:
@@ -144,6 +214,101 @@ def get_or_create_wallet(
     db.flush()
     if grant_signup and user.email_verified:
         grant_signup_campaigns(db, organization, user, wallet)
+    return wallet
+
+
+def get_priddy_wallet(db: Session, user_id: int) -> PriddyPointsWallet | None:
+    return db.query(PriddyPointsWallet).filter(PriddyPointsWallet.user_id == user_id).first()
+
+
+def get_or_create_priddy_wallet(db: Session, user: User) -> PriddyPointsWallet:
+    wallet = get_priddy_wallet(db, user.id)
+    if wallet:
+        return wallet
+    wallet = PriddyPointsWallet(user_id=user.id)
+    db.add(wallet)
+    db.flush()
+    return wallet
+
+
+def _priddy_delta(wallet: PriddyPointsWallet, points: int) -> None:
+    wallet.balance += points
+    if wallet.balance < 0:
+        raise HTTPException(status_code=400, detail="Insufficient Priddy Points")
+    if points > 0:
+        wallet.lifetime_earned_points += points
+
+
+def write_priddy_ledger_entry(
+    db: Session,
+    wallet: PriddyPointsWallet,
+    *,
+    entry_type: str,
+    points: int,
+    source: str,
+    source_public_id: str | None = None,
+    booking_request_id: int | None = None,
+    booking_id: int | None = None,
+    payment_id: int | None = None,
+    redemption_id: int | None = None,
+    redemption_lock_id: int | None = None,
+    expires_at: datetime | None = None,
+    idempotency_key: str | None = None,
+    note: str | None = None,
+    metadata_json: dict[str, Any] | None = None,
+) -> PriddyPointsLedgerEntry:
+    if idempotency_key:
+        existing = (
+            db.query(PriddyPointsLedgerEntry)
+            .filter(PriddyPointsLedgerEntry.idempotency_key == idempotency_key)
+            .first()
+        )
+        if existing:
+            return existing
+    if points == 0:
+        raise HTTPException(status_code=400, detail="Point ledger entries cannot be zero")
+    _priddy_delta(wallet, points)
+    entry = PriddyPointsLedgerEntry(
+        wallet_id=wallet.id,
+        user_id=wallet.user_id,
+        entry_type=entry_type,
+        points=points,
+        source=source,
+        source_public_id=source_public_id,
+        booking_request_id=booking_request_id,
+        booking_id=booking_id,
+        payment_id=payment_id,
+        redemption_id=redemption_id,
+        redemption_lock_id=redemption_lock_id,
+        expires_at=expires_at,
+        idempotency_key=idempotency_key,
+        note=note,
+        metadata_json=metadata_json or {},
+    )
+    db.add(wallet)
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def grant_priddy_signup_points(db: Session, user: User) -> PriddyPointsWallet | None:
+    if user.role != UserAppRole.MEMBER:
+        return None
+    settings = get_or_create_platform_settings(db)
+    if not settings.priddy_points_enabled or settings.priddy_signup_points <= 0:
+        return get_or_create_priddy_wallet(db, user)
+    wallet = get_or_create_priddy_wallet(db, user)
+    write_priddy_ledger_entry(
+        db,
+        wallet,
+        entry_type="signup_grant",
+        points=settings.priddy_signup_points,
+        source="signup",
+        source_public_id=user.public_id,
+        idempotency_key=f"priddy_signup:{user.public_id}",
+        note="Signup Priddy Points",
+        metadata_json={"point_value_cents": settings.priddy_point_value_cents},
+    )
     return wallet
 
 
@@ -353,6 +518,16 @@ def record_earned_for_payment(
     settings = get_settings(db, organization.id)
     if settings is None or not settings.is_enabled:
         return
+    space_id = booking.space_id if booking else booking_request.space_id if booking_request else None
+    if not space_id:
+        return
+    space = db.query(Space).filter(Space.id == space_id).first()
+    if not space:
+        return
+    mode = BookingMode.DAY_PASS.value if booking_request and getattr(booking_request.request_kind, "value", booking_request.request_kind) == "daily_booking" else BookingMode.HOURLY.value
+    allowed, _reason = _owner_points_allowed(settings, space, mode, for_redemption=False)
+    if not allowed:
+        return
     wallet = get_or_create_wallet(db, organization, user)
     net_amount_cents = _payment_amount_cents(payment)
     points = calculate_earned_points(settings, net_amount_cents)
@@ -456,6 +631,77 @@ def calculate_booking_subtotal_cents(
     return max(0, int(result.total_cents))
 
 
+def _owner_points_allowed(
+    settings: LoyaltyOwnerSetting | None,
+    space: Space,
+    booking_mode: str,
+    *,
+    for_redemption: bool,
+) -> tuple[bool, str | None]:
+    if settings is None or not settings.is_enabled:
+        return False, "Owner points are not enabled for this owner"
+    if for_redemption and not settings.owner_points_redemption_enabled:
+        return False, "Owner points cannot be redeemed for this owner"
+    if space.owner_points_enabled is False:
+        return False, "Owner points are not available for this space"
+    if space.owner_points_enabled is True:
+        return True, None
+    if _space_type_value(space) not in _list_or_default(settings.allowed_space_types, DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES):
+        return False, "Owner points are not available for this space type"
+    if booking_mode not in _list_or_default(settings.allowed_booking_modes, DEFAULT_OWNER_REDEEMABLE_BOOKING_MODES):
+        return False, "Owner points are not available for this booking type"
+    return True, None
+
+
+def _priddy_points_allowed(
+    db: Session,
+    settings: LoyaltyOwnerSetting | None,
+    space: Space,
+    booking_mode: str,
+) -> tuple[bool, str | None, int]:
+    platform = get_or_create_platform_settings(db)
+    point_value = platform.priddy_point_value_cents or 1
+    if not platform.priddy_points_enabled:
+        return False, "Priddy Points are not enabled", point_value
+    if settings is None or not settings.accepts_priddy_points:
+        return False, "This owner does not accept Priddy Points", point_value
+    if space.priddy_points_enabled is False:
+        return False, "Priddy Points are not available for this space", point_value
+    if _space_type_value(space) not in _list_or_default(platform.priddy_allowed_space_types, DEFAULT_PRIDDY_REDEEMABLE_SPACE_TYPES):
+        return False, "Priddy Points are not available for this space type", point_value
+    if booking_mode not in _list_or_default(platform.priddy_allowed_booking_modes, DEFAULT_PRIDDY_REDEEMABLE_BOOKING_MODES):
+        return False, "Priddy Points are not available for this booking type", point_value
+    return True, None, point_value
+
+
+def _bucket_from_balance(
+    *,
+    eligible: bool,
+    reason: str | None,
+    balance: int,
+    point_value_cents: int,
+    remaining_discount_cents: int,
+    requested_points: int | None,
+) -> RedemptionBucket:
+    if not eligible:
+        return _empty_bucket(reason, point_value_cents=point_value_cents, balance=balance)
+    if balance <= 0:
+        return _empty_bucket("No points available", point_value_cents=point_value_cents, balance=0)
+    max_points_by_value = floor(max(0, remaining_discount_cents) / point_value_cents) if point_value_cents else 0
+    max_redeemable_points = max(0, min(balance, max_points_by_value))
+    requested = min(requested_points if requested_points is not None else max_redeemable_points, max_redeemable_points)
+    discount_cents = min(requested * point_value_cents, max(0, remaining_discount_cents))
+    return RedemptionBucket(
+        eligible=max_redeemable_points > 0,
+        reason=None if max_redeemable_points > 0 else "No redeemable amount remains",
+        balance=balance,
+        point_value_cents=point_value_cents,
+        max_redeemable_points=max_redeemable_points,
+        requested_points=requested,
+        discount_cents=discount_cents,
+    )
+
+
 def preview_redemption(
     db: Session,
     user: User,
@@ -466,6 +712,8 @@ def preview_redemption(
     booking_mode: str | None = None,
     full_day: bool = False,
     points_requested: int | None = None,
+    priddy_points_requested: int | None = None,
+    owner_points_requested: int | None = None,
 ) -> RedemptionPreview:
     space = db.query(Space).filter(Space.public_id == space_public_id).first()
     if not space:
@@ -474,7 +722,8 @@ def preview_redemption(
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
     settings = get_settings(db, organization.id)
-    wallet = get_or_create_wallet(db, organization, user)
+    wallet = get_or_create_wallet(db, organization, user, grant_signup=False)
+    priddy_wallet = get_or_create_priddy_wallet(db, user)
     subtotal_cents = calculate_booking_subtotal_cents(
         db,
         space,
@@ -483,31 +732,61 @@ def preview_redemption(
         booking_mode=booking_mode,
         full_day=full_day,
     )
+    mode = _booking_mode_value(booking_mode, full_day)
+    if points_requested is not None and owner_points_requested is None and priddy_points_requested is None:
+        owner_points_requested = points_requested
 
-    if settings is None or not settings.is_enabled:
-        return RedemptionPreview(False, "Loyalty is not enabled for this owner", organization, wallet, settings, subtotal_cents, 0, 0, 0, 0)
-    if space.space_type not in REDEEMABLE_SPACE_TYPES:
-        return RedemptionPreview(False, "Rewards cannot be redeemed for this space type", organization, wallet, settings, subtotal_cents, 0, 0, 0, 0)
-    total_balance = (wallet.promo_balance or 0) + (wallet.earned_balance or 0)
-    if total_balance <= 0:
-        return RedemptionPreview(False, "No points available for this owner", organization, wallet, settings, subtotal_cents, 0, 0, 0, 0)
+    max_discount_cents = floor(subtotal_cents * ((settings.max_redemption_percent if settings else 100) or 100) / 100)
+    max_discount_cents = min(subtotal_cents, max_discount_cents)
 
-    max_discount_cents = floor(subtotal_cents * settings.max_redemption_percent / 100)
-    max_points_by_value = floor(max_discount_cents / settings.point_value_cents) if settings.point_value_cents else 0
-    max_redeemable_points = max(0, min(total_balance, max_points_by_value))
-    requested = min(points_requested if points_requested is not None else max_redeemable_points, max_redeemable_points)
-    discount_cents = min(requested * settings.point_value_cents, max_discount_cents)
+    priddy_allowed, priddy_reason, priddy_point_value = _priddy_points_allowed(db, settings, space, mode)
+    priddy_bucket = _bucket_from_balance(
+        eligible=priddy_allowed,
+        reason=priddy_reason,
+        balance=priddy_wallet.balance or 0,
+        point_value_cents=priddy_point_value,
+        remaining_discount_cents=max_discount_cents,
+        requested_points=priddy_points_requested,
+    )
+
+    owner_allowed, owner_reason = _owner_points_allowed(settings, space, mode, for_redemption=True)
+    owner_balance = (wallet.promo_balance or 0) + (wallet.earned_balance or 0)
+    owner_bucket = _bucket_from_balance(
+        eligible=owner_allowed,
+        reason=owner_reason,
+        balance=owner_balance,
+        point_value_cents=settings.point_value_cents if settings else 1,
+        remaining_discount_cents=max(0, max_discount_cents - priddy_bucket.discount_cents),
+        requested_points=owner_points_requested,
+    )
+
+    requested = priddy_bucket.requested_points + owner_bucket.requested_points
+    discount_cents = priddy_bucket.discount_cents + owner_bucket.discount_cents
+    max_redeemable_points = priddy_bucket.max_redeemable_points + owner_bucket.max_redeemable_points
+    eligible = priddy_bucket.eligible or owner_bucket.eligible
+    reason = None
+    if not eligible:
+        if owner_bucket.balance > 0 or (owner_points_requested or 0) > 0:
+            reason = owner_bucket.reason or priddy_bucket.reason
+        elif priddy_bucket.balance > 0 or (priddy_points_requested or 0) > 0:
+            reason = priddy_bucket.reason or owner_bucket.reason
+        else:
+            reason = priddy_bucket.reason or owner_bucket.reason
+        reason = reason or "Rewards are not available for this booking"
     return RedemptionPreview(
-        True,
-        None,
+        eligible,
+        reason,
         organization,
         wallet,
+        priddy_wallet,
         settings,
         subtotal_cents,
         max_redeemable_points,
         max_discount_cents,
         requested,
         discount_cents,
+        priddy_bucket,
+        owner_bucket,
     )
 
 
@@ -520,7 +799,9 @@ def lock_redemption(
     end_datetime: datetime,
     booking_mode: str | None,
     full_day: bool,
-    points_requested: int,
+    points_requested: int | None = None,
+    priddy_points_requested: int | None = None,
+    owner_points_requested: int | None = None,
     idempotency_key: str | None = None,
 ) -> LoyaltyRedemptionLock:
     if not user.email_verified:
@@ -533,6 +814,12 @@ def lock_redemption(
         )
         if existing:
             return existing
+    if points_requested is not None and priddy_points_requested is None and owner_points_requested is None:
+        owner_points_requested = points_requested
+    if priddy_points_requested is not None or owner_points_requested is not None:
+        priddy_points_requested = priddy_points_requested or 0
+        owner_points_requested = owner_points_requested or 0
+        points_requested = None
     preview = preview_redemption(
         db,
         user,
@@ -542,23 +829,30 @@ def lock_redemption(
         booking_mode=booking_mode,
         full_day=full_day,
         points_requested=points_requested,
+        priddy_points_requested=priddy_points_requested,
+        owner_points_requested=owner_points_requested,
     )
     if not preview.eligible or preview.requested_points <= 0 or not preview.wallet or not preview.organization:
         raise HTTPException(status_code=400, detail=preview.reason or "Points are not redeemable")
-    if points_requested > preview.max_redeemable_points:
+    requested_total = (points_requested or 0) + (priddy_points_requested or 0) + (owner_points_requested or 0)
+    if requested_total > preview.max_redeemable_points:
         raise HTTPException(status_code=400, detail="Requested points exceed redeemable balance")
     wallet = preview.wallet
-    promo_points = min(wallet.promo_balance or 0, preview.requested_points)
-    earned_points = preview.requested_points - promo_points
+    owner_requested = preview.owner.requested_points
+    promo_points = min(wallet.promo_balance or 0, owner_requested)
+    earned_points = owner_requested - promo_points
+    priddy_points = preview.priddy.requested_points
     lock = LoyaltyRedemptionLock(
         organization_id=preview.organization.id,
         tenant_id=preview.organization.id,
         wallet_id=wallet.id,
+        priddy_wallet_id=preview.priddy_wallet.id if preview.priddy_wallet and priddy_points else None,
         user_id=user.id,
         space_id=db.query(Space.id).filter(Space.public_id == space_public_id).scalar(),
+        priddy_points=priddy_points,
         promo_points=promo_points,
         earned_points=earned_points,
-        points=preview.requested_points,
+        points=priddy_points + promo_points + earned_points,
         discount_cents=preview.discount_cents,
         status="active",
         expires_at=now_utc() + timedelta(minutes=LOCK_TTL_MINUTES),
@@ -574,6 +868,18 @@ def lock_redemption(
     )
     db.add(lock)
     db.flush()
+    if priddy_points and preview.priddy_wallet:
+        write_priddy_ledger_entry(
+            db,
+            preview.priddy_wallet,
+            entry_type="redemption_lock",
+            points=-priddy_points,
+            source="redemption_lock",
+            source_public_id=lock.public_id,
+            redemption_lock_id=lock.id,
+            idempotency_key=f"priddy_lock:{lock.public_id}",
+            note="Priddy Points locked for booking checkout",
+        )
     if promo_points:
         write_ledger_entry(
             db,
@@ -608,22 +914,9 @@ def lock_redemption(
 def attach_lock_to_booking_request(db: Session, req: BookingRequest, lock_public_id: str | None, user: User, space: Space) -> None:
     if not lock_public_id:
         return
-    lock = (
-        db.query(LoyaltyRedemptionLock)
-        .filter(LoyaltyRedemptionLock.public_id == lock_public_id)
-        .with_for_update()
-        .first()
-    )
+    lock = active_lock_by_public_id(db, lock_public_id, user, space)
     if not lock:
-        raise HTTPException(status_code=404, detail="Redemption lock not found")
-    if lock.user_id != user.id or lock.organization_id != space.tenant_id or lock.space_id != space.id:
-        raise HTTPException(status_code=403, detail="Redemption lock does not match this booking")
-    if lock.status != "active":
-        raise HTTPException(status_code=400, detail="Redemption lock is not active")
-    expires = as_utc(lock.expires_at)
-    if expires and expires <= now_utc():
-        release_redemption_lock(db, lock, reason="expired")
-        raise HTTPException(status_code=400, detail="Redemption lock has expired")
+        return
     if lock.booking_request_id and lock.booking_request_id != req.id:
         raise HTTPException(status_code=400, detail="Redemption lock is already attached")
     lock.booking_request_id = req.id
@@ -650,11 +943,53 @@ def discount_cents_for_request(db: Session, req: BookingRequest) -> int:
     return lock.discount_cents if lock else 0
 
 
+def active_lock_by_public_id(db: Session, lock_public_id: str | None, user: User, space: Space) -> LoyaltyRedemptionLock | None:
+    if not lock_public_id:
+        return None
+    lock = (
+        db.query(LoyaltyRedemptionLock)
+        .filter(LoyaltyRedemptionLock.public_id == lock_public_id)
+        .with_for_update()
+        .first()
+    )
+    if not lock:
+        raise HTTPException(status_code=404, detail="Redemption lock not found")
+    if lock.user_id != user.id or lock.organization_id != space.tenant_id or lock.space_id != space.id:
+        raise HTTPException(status_code=403, detail="Redemption lock does not match this booking")
+    if lock.status != "active":
+        raise HTTPException(status_code=400, detail="Redemption lock is not active")
+    expires = as_utc(lock.expires_at)
+    if expires and expires <= now_utc():
+        release_redemption_lock(db, lock, reason="expired")
+        raise HTTPException(status_code=400, detail="Redemption lock has expired")
+    return lock
+
+
 def release_redemption_lock(db: Session, lock: LoyaltyRedemptionLock, *, reason: str = "released") -> None:
     if lock.status != "active":
         return
     wallet = db.query(LoyaltyWallet).filter(LoyaltyWallet.id == lock.wallet_id).first()
+    priddy_wallet = (
+        db.query(PriddyPointsWallet).filter(PriddyPointsWallet.id == lock.priddy_wallet_id).first()
+        if lock.priddy_wallet_id
+        else None
+    )
+    if lock.priddy_points and priddy_wallet:
+        write_priddy_ledger_entry(
+            db,
+            priddy_wallet,
+            entry_type="redemption_release",
+            points=lock.priddy_points,
+            source="redemption_lock",
+            source_public_id=lock.public_id,
+            redemption_lock_id=lock.id,
+            idempotency_key=f"priddy_lock_release:{lock.public_id}",
+            note=f"Priddy Points lock {reason}",
+        )
     if not wallet:
+        lock.status = reason if reason in {"released", "expired"} else "released"
+        db.add(lock)
+        db.flush()
         return
     if lock.promo_points:
         write_ledger_entry(
@@ -706,11 +1041,13 @@ def finalize_redemption_for_payment(db: Session, req: BookingRequest, booking: B
         organization_id=lock.organization_id,
         tenant_id=lock.tenant_id,
         wallet_id=lock.wallet_id,
+        priddy_wallet_id=lock.priddy_wallet_id,
         user_id=lock.user_id,
         redemption_lock_id=lock.id,
         booking_request_id=req.id,
         booking_id=booking.id,
         payment_id=payment.id,
+        priddy_points=lock.priddy_points,
         promo_points=lock.promo_points,
         earned_points=lock.earned_points,
         points=lock.points,
@@ -732,6 +1069,17 @@ def finalize_redemption_for_payment(db: Session, req: BookingRequest, booking: B
         entry.booking_id = booking.id
         entry.payment_id = payment.id
         db.add(entry)
+    priddy_entries = (
+        db.query(PriddyPointsLedgerEntry)
+        .filter(PriddyPointsLedgerEntry.redemption_lock_id == lock.id, PriddyPointsLedgerEntry.entry_type == "redemption_lock")
+        .all()
+    )
+    for entry in priddy_entries:
+        entry.redemption_id = redemption.id
+        entry.booking_request_id = req.id
+        entry.booking_id = booking.id
+        entry.payment_id = payment.id
+        db.add(entry)
 
 
 def reverse_for_payment_refund(db: Session, payment: Payment) -> None:
@@ -744,7 +1092,27 @@ def reverse_for_payment_refund(db: Session, payment: Payment) -> None:
     )
     for redemption in redemptions:
         wallet = db.query(LoyaltyWallet).filter(LoyaltyWallet.id == redemption.wallet_id).first()
+        priddy_wallet = (
+            db.query(PriddyPointsWallet).filter(PriddyPointsWallet.id == redemption.priddy_wallet_id).first()
+            if redemption.priddy_wallet_id
+            else None
+        )
+        if redemption.priddy_points and priddy_wallet:
+            write_priddy_ledger_entry(
+                db,
+                priddy_wallet,
+                entry_type="redemption_reversal",
+                points=redemption.priddy_points,
+                source="refund",
+                source_public_id=payment.public_id,
+                payment_id=payment.id,
+                redemption_id=redemption.id,
+                idempotency_key=f"priddy_redemption_refund:{redemption.public_id}",
+                note="Restored after refund",
+            )
         if not wallet:
+            redemption.status = "reversed"
+            db.add(redemption)
             continue
         if redemption.promo_points:
             write_ledger_entry(

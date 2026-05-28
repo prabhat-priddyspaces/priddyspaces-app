@@ -8,6 +8,7 @@ import { getAccessToken } from "@/lib/auth";
 import {
   LoyaltyLedgerEntry,
   LoyaltyWallet,
+  PriddyPointsWallet,
   formatCents,
   formatDate,
   formatPoints,
@@ -15,15 +16,23 @@ import {
 
 export default function MemberRewardsPage() {
   const [wallets, setWallets] = useState<LoyaltyWallet[]>([]);
+  const [priddyWallet, setPriddyWallet] = useState<PriddyPointsWallet | null>(null);
   const [selectedOrg, setSelectedOrg] = useState("");
   const [transactions, setTransactions] = useState<LoyaltyLedgerEntry[]>([]);
+  const [priddyTransactions, setPriddyTransactions] = useState<LoyaltyLedgerEntry[]>([]);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     const token = getAccessToken() ?? undefined;
-    apiFetch<LoyaltyWallet[]>("/api/loyalty/wallets", { method: "GET" }, token)
-      .then((list) => {
+    Promise.all([
+      apiFetch<PriddyPointsWallet>("/api/loyalty/priddy-wallet", { method: "GET" }, token),
+      apiFetch<LoyaltyWallet[]>("/api/loyalty/wallets", { method: "GET" }, token),
+      apiFetch<LoyaltyLedgerEntry[]>("/api/loyalty/priddy-wallet/transactions", { method: "GET" }, token),
+    ])
+      .then(([priddy, list, priddyHistory]) => {
+        setPriddyWallet(priddy);
         setWallets(list);
+        setPriddyTransactions(priddyHistory);
         if (list[0]) setSelectedOrg(list[0].organization_public_id);
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load rewards"));
@@ -69,6 +78,34 @@ export default function MemberRewardsPage() {
       </div>
 
       {message ? <div className="text-sm text-textMuted">{message}</div> : null}
+
+      {priddyWallet ? (
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-textPrimary">Priddy Points</div>
+              <div className="mt-1 text-sm text-textSecondary">Platform points for eligible desks and passes.</div>
+            </div>
+            <div className="text-left md:text-right">
+              <div className="text-2xl font-semibold text-textPrimary">{formatPoints(priddyWallet.balance)}</div>
+              <div className="text-xs text-textMuted">{formatCents(priddyWallet.cash_value_cents)} value</div>
+            </div>
+          </div>
+          {priddyTransactions.length > 0 ? (
+            <div className="mt-4 grid gap-2">
+              {priddyTransactions.slice(0, 3).map((entry) => (
+                <div key={entry.public_id} className="flex items-center justify-between rounded-sm border border-border px-3 py-2 text-sm">
+                  <span className="capitalize text-textSecondary">{entry.entry_type.replaceAll("_", " ")}</span>
+                  <span className={`font-semibold ${entry.points >= 0 ? "text-emerald-700" : "text-error"}`}>
+                    {entry.points >= 0 ? "+" : ""}
+                    {formatPoints(entry.points)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
 
       {selected ? (
         <>
