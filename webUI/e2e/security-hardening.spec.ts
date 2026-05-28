@@ -2,6 +2,17 @@ import { expect, test } from "@playwright/test";
 
 import { json, meResponse, mockSession } from "./helpers/mock-api";
 
+test("CSP allows Clerk Smart CAPTCHA (Cloudflare Turnstile) so auth works on our domain", async ({ request }) => {
+  const response = await request.get("/");
+  const csp = response.headers()["content-security-policy"] ?? "";
+
+  const scriptSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("script-src")) ?? "";
+  const frameSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("frame-src")) ?? "";
+
+  expect(scriptSrc).toContain("https://challenges.cloudflare.com");
+  expect(frameSrc).toContain("https://challenges.cloudflare.com");
+});
+
 test("marketing template preview renders in a sandboxed iframe", async ({ page }) => {
   await mockSession(page, "owner");
 

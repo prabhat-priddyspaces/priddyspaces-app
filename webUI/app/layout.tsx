@@ -46,6 +46,10 @@ export default function RootLayout({
   }
   return (
     <ClerkProvider
+      // Keep all auth UI on our own domain instead of Clerk's hosted Account
+      // Portal (accounts.dev) by pointing at our custom catch-all pages.
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
       // Both flows funnel through /dashboard, which reads /api/me and routes
       // by role: no role → /onboarding/personal; owner-no-org →
       // /onboarding/organization; owner → /owner; member → /spaces;
