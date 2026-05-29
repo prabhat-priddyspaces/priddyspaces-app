@@ -137,7 +137,7 @@ export function PublicMarketplaceMap({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-sm">
-      <div ref={containerRef} className="h-[380px] w-full lg:h-[calc(100vh-13rem)]" />
+      <div ref={containerRef} className="h-[260px] sm:h-[320px] lg:h-[calc(100vh-13rem)] w-full" />
       {missingCoordinateCount > 0 ? (
         <div className="border-t border-line bg-surface px-4 py-3 text-xs text-text-2">
           {missingCoordinateCount} {missingCoordinateCount === 1 ? "location is" : "locations are"} listed without a map pin because latitude and longitude are missing.
