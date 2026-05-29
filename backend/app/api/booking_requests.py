@@ -28,6 +28,7 @@ from datetime import datetime, time, timezone
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.membership_plan import MembershipPlan
 from app.models.organization_member import OrganizationMember
+from app.models.organization import Organization
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.space import Space
@@ -245,8 +246,10 @@ def _to_out(
     price_monthly = space.price_monthly if space else None
     price_hourly = space.price_hourly if space else None
     location = None
+    organization = None
     if db and space:
         location = db.query(Location).filter(Location.id == space.location_id).first()
+        organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
     estimated = None
     estimate: EstimateResult | None = None
     member = None
@@ -257,8 +260,6 @@ def _to_out(
     )
     membership_plan_public_id = None
     membership_plan_name = None
-    if db and space:
-        location = db.query(Location).filter(Location.id == space.location_id).first()
     if db and req.user_id:
         member = db.query(User).filter(User.id == req.user_id).first()
     if db and is_membership and req.membership_plan_id:
@@ -370,6 +371,7 @@ def _to_out(
         space_public_id=space.public_id if space else None,
         space_name=space.name if space else None,
         space_type=_space_type_value(space),
+        organization_name=organization.name if organization else None,
         location_public_id=location.public_id if location else None,
         location_name=location.name if location else None,
         location_address=location.address if location else None,

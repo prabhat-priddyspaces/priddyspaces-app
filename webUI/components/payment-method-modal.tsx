@@ -45,6 +45,7 @@ function useStripePromise(publishableKey: string | null) {
 function StripeSetupForm({
   spacePublicId,
   session,
+  organizationName,
   billingName,
   billingZip,
   consent,
@@ -55,6 +56,7 @@ function StripeSetupForm({
 }: {
   spacePublicId: string;
   session: SetupSession;
+  organizationName?: string | null;
   billingName: string;
   billingZip: string;
   consent: boolean;
@@ -129,7 +131,7 @@ function StripeSetupForm({
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-1"
         />
-        <span>I authorize this owner to charge this card for approved or instant bookings.</span>
+        <span>{bookingCardAuthorizationText(organizationName)}</span>
       </label>
       {message ? <div className="text-sm text-error">{message}</div> : null}
       <Button onClick={save} disabled={!stripe || saving || !consent}>
@@ -142,6 +144,7 @@ function StripeSetupForm({
 function CardPointeSetupForm({
   spacePublicId,
   session,
+  organizationName,
   billingName,
   billingZip,
   consent,
@@ -152,6 +155,7 @@ function CardPointeSetupForm({
 }: {
   spacePublicId: string;
   session: SetupSession;
+  organizationName?: string | null;
   billingName: string;
   billingZip: string;
   consent: boolean;
@@ -242,7 +246,7 @@ function CardPointeSetupForm({
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-1"
         />
-        <span>I authorize this owner to charge this card for approved or instant bookings.</span>
+        <span>{bookingCardAuthorizationText(organizationName)}</span>
       </label>
       {message ? <div className="text-sm text-error">{message}</div> : null}
       <Button onClick={save} disabled={saving || !consent || !tokenValue || !last4 || !expiration}>
@@ -291,6 +295,14 @@ function formatExpiration(value: string): string {
   return value;
 }
 
+function ownerChargeName(organizationName: string | null | undefined) {
+  return organizationName?.trim() || "this owner";
+}
+
+function bookingCardAuthorizationText(organizationName: string | null | undefined) {
+  return `I authorize ${ownerChargeName(organizationName)} to charge this card for approved or instant bookings.`;
+}
+
 function safeJson(value: string) {
   try {
     return JSON.parse(value);
@@ -302,12 +314,14 @@ function safeJson(value: string) {
 export function PaymentMethodModal({
   open,
   spacePublicId,
+  organizationName,
   initialMode = "select",
   onClose,
   onSaved,
 }: {
   open: boolean;
   spacePublicId: string;
+  organizationName?: string | null;
   initialMode?: "select" | "add";
   onClose: () => void;
   onSaved: (paymentMethodPublicId: string) => void;
@@ -408,7 +422,8 @@ export function PaymentMethodModal({
               {mode === "select" && savedMethods.length > 0 ? "Choose booking card" : "Add booking card"}
             </div>
             <p className="mt-1 text-sm text-textSecondary">
-              You won&apos;t be charged by this step. This card is authorized for booking charges with this owner.
+              You won&apos;t be charged by this step. This card is authorized for booking charges with{" "}
+              {ownerChargeName(organizationName)}.
             </p>
           </div>
           <button onClick={onClose} className="text-sm text-textMuted">
@@ -460,7 +475,7 @@ export function PaymentMethodModal({
                 onChange={(event) => setConsent(event.target.checked)}
                 className="mt-1"
               />
-              <span>I authorize this owner to charge this card for approved or instant bookings.</span>
+              <span>{bookingCardAuthorizationText(organizationName)}</span>
             </label>
             <div className="flex flex-wrap gap-2">
               <Button onClick={useExisting} disabled={!selectedMethodId || !consent || savingExisting}>
@@ -483,6 +498,7 @@ export function PaymentMethodModal({
               <StripeSetupForm
                 spacePublicId={spacePublicId}
                 session={session}
+                organizationName={organizationName}
                 billingName={billingName}
                 billingZip={billingZip}
                 consent={consent}
@@ -508,6 +524,7 @@ export function PaymentMethodModal({
             <CardPointeSetupForm
               spacePublicId={spacePublicId}
               session={session}
+              organizationName={organizationName}
               billingName={billingName}
               billingZip={billingZip}
               consent={consent}

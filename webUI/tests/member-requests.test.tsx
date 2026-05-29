@@ -28,6 +28,7 @@ describe("MemberRequestsPage", () => {
         space_public_id: "space_1",
         space_name: "Bridge Meeting Room",
         space_type: "conference_room",
+        organization_name: "Skyline Works",
         location_public_id: "loc_1",
         location_name: "Brooklyn Loft",
         location_address: "55 Washington St",

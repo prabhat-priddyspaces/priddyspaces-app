@@ -28,6 +28,7 @@ interface BookingRequest {
   space_public_id: string | null;
   space_name: string | null;
   space_type: string | null;
+  organization_name: string | null;
   location_public_id: string | null;
   location_name: string | null;
   location_address: string | null;
@@ -136,6 +137,10 @@ function paymentFailureReason(reason: string | null) {
     return "The payment processor declined the charge. Update the card or contact the card issuer for details.";
   }
   return text;
+}
+
+function retryOwnerName(booking: BookingRequest) {
+  return booking.organization_name?.trim() || "the owner";
 }
 
 export default function BookingDetailClient({ bookingId }: { bookingId: string }) {
@@ -439,7 +444,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                   <div className="mt-1 text-textSecondary">
                     {booking.instant_booking
                       ? "Update your card to retry this booking."
-                      : "Update your card, then the owner can retry the charge."}
+                      : `Update your card, then ${retryOwnerName(booking)} can retry the charge.`}
                   </div>
                   {booking.space_public_id ? (
                     <div className="mt-3">
@@ -499,6 +504,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
       <PaymentMethodModal
         open={paymentMethodOpen && Boolean(booking?.space_public_id)}
         spacePublicId={booking?.space_public_id || ""}
+        organizationName={booking?.organization_name || null}
         initialMode="add"
         onClose={() => setPaymentMethodOpen(false)}
         onSaved={handlePaymentMethodSaved}

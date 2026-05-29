@@ -21,6 +21,7 @@ test("member can see payment and invoice status for an approved booking request"
         space_public_id: "space_3",
         space_name: "Training Room East",
         space_type: "conference_room",
+        organization_name: "North Loop Cowork",
         location_public_id: "loc_3",
         location_name: "North Loop",
         location_address: "300 North Loop",
@@ -125,6 +126,7 @@ test("member can update a failed instant booking card and retry", async ({ page 
         space_public_id: "space_3",
         space_name: "Training Room East",
         space_type: "conference_room",
+        organization_name: "North Loop Cowork",
         location_public_id: "loc_3",
         location_name: "North Loop",
         location_address: "300 North Loop",
@@ -213,6 +215,7 @@ test("member can update a failed instant booking card and retry", async ({ page 
   await expect(page.getByText("The card was declined by the issuer.")).toBeVisible();
   await page.getByRole("button", { name: "Update card and retry" }).click();
   await expect(page.getByText("Add booking card")).toBeVisible();
+  await expect(page.getByText("I authorize North Loop Cowork to charge this card for approved or instant bookings.")).toBeVisible();
   await expect(page.getByTitle("CardPointe tokenizer")).toBeVisible();
 
   await page.evaluate(() => {

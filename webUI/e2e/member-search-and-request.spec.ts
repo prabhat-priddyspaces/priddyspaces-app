@@ -9,6 +9,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
     space_public_id: "space_1",
     space_name: "Conference 14-B",
     space_type: "conference_room",
+    organization_name: "Downtown Cowork",
     location_public_id: "loc_1",
     location_name: "Downtown Hub",
     location_address: "100 Congress Ave",
@@ -92,6 +93,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
         images: [],
         location: {
           location_public_id: "loc_1",
+          organization_name: "Downtown Cowork",
           name: "Downtown Hub",
           address: "100 Congress Ave",
           city: "Austin",
@@ -202,7 +204,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
 
   // Auto-populate fills the date and a slot once availability resolves.
   await expect(page.getByRole("button", { name: "Reserve & Pay" })).toBeEnabled();
-  await page.getByLabel("I authorize this owner to charge my card now for instant bookings or upon approval for request-to-book spaces.").check();
+  await page.getByLabel("I authorize Downtown Cowork to charge my card now for instant bookings or upon approval for request-to-book spaces.").check();
   await page.getByRole("button", { name: "Reserve & Pay" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests$/);

@@ -33,10 +33,12 @@ def _space_display_name(raw_name: str | None, space_type: str) -> str:
 def _serialize_space(
     space: Space,
     *,
+    organization_name: str | None = None,
     location_amenities_text: str | None = None,
 ) -> SpaceOut:
     return SpaceOut(
         public_id=space.public_id,
+        organization_name=organization_name,
         name=_space_display_name(space.name, space.space_type.value),
         space_type=space.space_type,
         capacity=space.capacity,
@@ -126,7 +128,11 @@ def get_space(
     amenity_text = ", ".join(str(item["name"]) for item in location_amenities) if location_amenities else None
 
     if _space_publicly_visible(space, location, organization):
-        return _serialize_space(space, location_amenities_text=amenity_text)
+        return _serialize_space(
+            space,
+            organization_name=organization.name if organization else None,
+            location_amenities_text=amenity_text,
+        )
 
     if token is None:
         raise HTTPException(status_code=404, detail="Space not found")
@@ -142,7 +148,11 @@ def get_space(
         detail="Space not found",
         status_code=404,
     )
-    return _serialize_space(space, location_amenities_text=amenity_text)
+    return _serialize_space(
+        space,
+        organization_name=organization.name if organization else None,
+        location_amenities_text=amenity_text,
+    )
 
 
 @router.patch("/spaces/{public_id}", response_model=SpaceOut)

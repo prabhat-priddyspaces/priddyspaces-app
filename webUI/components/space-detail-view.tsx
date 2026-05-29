@@ -17,6 +17,7 @@ import { PaymentMethodModal } from "@/components/payment-method-modal";
 
 interface Space {
   public_id: string;
+  organization_name: string | null;
   space_type: string;
   capacity: number;
   price_monthly: MoneyValue | null;
@@ -75,6 +76,8 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
   const [authorizationConsent, setAuthorizationConsent] = useState(false);
   const isAuthenticated = useMemo(() => Boolean(getAccessToken()), []);
+  const organizationName = space?.organization_name?.trim() || null;
+  const chargeOwnerName = organizationName || "this owner";
 
   useEffect(() => {
     if (!spaceId) return;
@@ -162,7 +165,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
         token
       );
       if (!resolved.is_configured) {
-        throw new Error(resolved.message || "This owner has not configured payments.");
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
       }
       if (!resolved.has_payment_method) {
         setPendingReservation(payload);
@@ -267,7 +270,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
                       onChange={(event) => setAuthorizationConsent(event.target.checked)}
                       className="mt-1"
                     />
-                    <span>I authorize this owner to charge my card upon approval.</span>
+                    <span>I authorize {chargeOwnerName} to charge my card upon approval.</span>
                   </label>
                 ) : null}
                 <Button onClick={handleRequest} disabled={requesting}>
@@ -319,6 +322,7 @@ export function SpaceDetailView({ spaceId, backHref }: SpaceDetailViewProps) {
         <PaymentMethodModal
           open={paymentMethodOpen}
           spacePublicId={space.public_id}
+          organizationName={organizationName}
           onClose={() => setPaymentMethodOpen(false)}
           onSaved={(paymentMethodPublicId) => {
             setPaymentMethodOpen(false);

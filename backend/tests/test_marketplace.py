@@ -464,6 +464,7 @@ def test_public_space_detail_and_media_are_accessible_without_login(db_session):
         detail = client.get(f"/api/spaces/{public_space.public_id}")
         assert detail.status_code == 200
         assert detail.json()["public_id"] == public_space.public_id
+        assert detail.json()["organization_name"] == "Org"
         assert detail.json()["name"] == "Conference Room"
         assert detail.json()["amenities"] == "Coffee, WiFi"
 
@@ -685,6 +686,7 @@ def test_public_marketplace_space_detail_returns_listing_content(db_session, cli
     assert body["space"]["hourly_price"] == "60.00"
     assert body["images"][0]["image_url"] == "https://images.example.com/conference-primary.jpg"
     assert body["images"][1]["image_url"] == "https://images.example.com/conference-secondary.jpg"
+    assert body["location"]["organization_name"] == "Public Org"
     assert body["location"]["public_phone"] == "(954) 906-7565"
     assert body["location"]["public_email"] == "hello@harborrooms.test"
     assert body["location"]["public_working_hours_enabled"] is True

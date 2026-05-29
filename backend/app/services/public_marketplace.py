@@ -893,6 +893,7 @@ def get_public_space_detail(
         ],
         "location": {
             "location_public_id": location.public_id,
+            "organization_name": organization.name,
             "name": location.name,
             "address": location.address,
             "city": location.city,

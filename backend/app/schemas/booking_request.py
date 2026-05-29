@@ -149,6 +149,7 @@ class BookingRequestOut(BaseModel):
     space_public_id: str | None = None
     space_name: str | None = None
     space_type: str | None = None
+    organization_name: str | None = None
     location_public_id: str | None = None
     location_name: str | None = None
     location_address: str | None = None

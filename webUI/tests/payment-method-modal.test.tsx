@@ -41,6 +41,7 @@ describe("PaymentMethodModal", () => {
       <PaymentMethodModal
         open
         spacePublicId="space_1"
+        organizationName="Skyline Works"
         initialMode="add"
         onClose={vi.fn()}
         onSaved={onSaved}
@@ -48,6 +49,9 @@ describe("PaymentMethodModal", () => {
     );
 
     expect(await screen.findByTitle("CardPointe tokenizer")).toBeInTheDocument();
+    expect(
+      screen.getByText("I authorize Skyline Works to charge this card for approved or instant bookings."),
+    ).toBeInTheDocument();
     const saveButton = screen.getByRole("button", { name: "Save payment method" });
     expect(saveButton).toBeDisabled();
 
