@@ -24,7 +24,11 @@ const bypass = process.env.E2E_BYPASS_CLERK === "1";
 
 const protectedMiddleware = clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
-    await auth.protect();
+    // Redirect unauthenticated users to our own sign-in page instead of
+    // Clerk's hosted Account Portal (accounts.dev).
+    await auth.protect({
+      unauthenticatedUrl: new URL("/sign-in", req.url).toString(),
+    });
   }
 });
 
