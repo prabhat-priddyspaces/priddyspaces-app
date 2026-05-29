@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 
 import { useAppSignOut } from "@/hooks/useAppSignOut";
+import { consumeOauthNext } from "@/lib/auth-redirect";
 import { getDefaultRoute } from "@/lib/me";
 import { useMe } from "@/hooks/useMe";
 
@@ -23,7 +24,17 @@ export default function DashboardPage() {
       router.replace("/sign-in");
       return;
     }
-    if (!error && me) router.replace(getDefaultRoute(me));
+    if (!error && me) {
+      const defaultRoute = getDefaultRoute(me);
+      if (defaultRoute.startsWith("/onboarding")) {
+        // New user — leave stash intact for onboarding to consume
+        router.replace(defaultRoute);
+      } else {
+        // Returning user — consume stash and redirect to original destination
+        const next = consumeOauthNext();
+        router.replace(next ?? defaultRoute);
+      }
+    }
   }, [isLoaded, isSignedIn, loading, error, me, router]);
 
   if (isLoaded && isSignedIn && error) {

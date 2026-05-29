@@ -1,4 +1,7 @@
+import { Suspense } from "react";
 import { SignIn } from "@clerk/nextjs";
+
+import { AuthNextStash } from "@/components/auth-next-stash";
 
 // `output: export` requires every catch-all route to declare its static
 // params upfront. Clerk's <SignIn routing="hash"> handles all internal
@@ -10,6 +13,9 @@ export function generateStaticParams() {
 export default function SignInPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
+      <Suspense fallback={null}>
+        <AuthNextStash />
+      </Suspense>
       <SignIn
         routing="hash"
         appearance={{

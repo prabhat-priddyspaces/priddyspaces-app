@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { useUser, useAuth } from "@clerk/nextjs";
 
 import { API_BASE_URL } from "@/lib/api";
+import { consumeOauthNext } from "@/lib/auth-redirect";
+import { COUNTRIES } from "@/lib/countries";
 import { type MeResponse } from "@/lib/me";
 import { updateMeCache } from "@/hooks/useMe";
 import { Button } from "@/components/ui/button";
@@ -26,7 +28,7 @@ export default function OnboardingPersonalPage() {
     role: "member" as "owner" | "member",
     full_name: "",
     phone: "",
-    country: "",
+    country: "US",
     timezone: "",
     terms_accepted: false,
     privacy_policy_accepted: false,
@@ -93,7 +95,8 @@ export default function OnboardingPersonalPage() {
       updateMeCache(me);
       // Reload Clerk session so new publicMetadata.role is reflected in the JWT
       await user?.reload();
-      router.replace(me.default_route);
+      const next = consumeOauthNext();
+      router.replace(next ?? me.default_route);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -153,15 +156,20 @@ export default function OnboardingPersonalPage() {
           {/* Country */}
           <div className="space-y-2">
             <Label htmlFor="country">Country</Label>
-            <Input
+            <select
               id="country"
+              className="w-full rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] text-text"
               value={form.country}
               onChange={(e) => setForm({ ...form, country: e.target.value })}
-              placeholder="US"
-              maxLength={2}
               required
               autoComplete="country"
-            />
+            >
+              {COUNTRIES.map(({ code, name }) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Timezone */}
