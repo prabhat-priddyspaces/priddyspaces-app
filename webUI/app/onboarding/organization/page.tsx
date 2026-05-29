@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { type MeResponse } from "@/lib/me";
 import { updateMeCache } from "@/hooks/useMe";
 import { Button } from "@/components/ui/button";
@@ -42,25 +42,16 @@ export default function OnboardingOrganizationPage() {
     }
     setLoading(true);
     try {
-      const token = await getToken();
-      const res = await fetch(`${API_BASE_URL}/api/onboarding/organization`, {
+      const token = await getToken({ skipCache: true });
+      const me = await apiFetch<MeResponse>("/api/onboarding/organization", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           name: form.name.trim(),
           industry: form.industry || undefined,
           size: form.size || undefined,
           website: form.website || undefined,
         }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Organization creation failed");
-      }
-      const me: MeResponse = await res.json();
+      }, token ?? undefined);
       updateMeCache(me);
       router.replace("/owner");
     } catch (err: unknown) {

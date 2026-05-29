@@ -13,7 +13,7 @@ import {
   formatNumber,
 } from "@/components/charts";
 import { Card } from "@/components/ui/card";
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { apiFetch, fetchApiWithAuthRetry } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
 interface PlatformResp {
@@ -106,10 +106,7 @@ export default function AdminAnalyticsPage() {
 
   function downloadExport(path: string, filename: string) {
     const token = getAccessToken() ?? "";
-    fetch(`${API_BASE_URL}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
-    })
+    fetchApiWithAuthRetry(path, {}, token)
       .then((res) => {
         if (!res.ok) throw new Error("Download failed");
         return res.blob();

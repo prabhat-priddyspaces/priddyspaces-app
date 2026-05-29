@@ -21,6 +21,8 @@ vi.mock("@/components/use-address-autocomplete", () => ({
 vi.mock("../lib/auth", () => ({
   getAccessToken: vi.fn(() => null),
   getActiveImpersonationToken: vi.fn(() => null),
+  getValidAccessToken: vi.fn((token: string | null | undefined = null) => Promise.resolve(token ?? null)),
+  isImpersonationToken: vi.fn(() => false),
 }));
 
 vi.mock("../lib/api", async () => {

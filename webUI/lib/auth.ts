@@ -1,6 +1,12 @@
 export const AUTH_TOKEN_KEY = "priddyspaces_access_token";
 
+export type AccessTokenProvider = (options?: { skipCache?: boolean }) => Promise<string | null>;
+
+const TOKEN_REFRESH_SKEW_SECONDS = 15;
+
 let memoryAccessToken: string | null = null;
+let accessTokenProvider: AccessTokenProvider | null = null;
+let refreshPromise: Promise<string | null> | null = null;
 
 function shouldUsePersistedTestToken(): boolean {
   return process.env.NEXT_PUBLIC_E2E_BYPASS_CLERK === "1";
@@ -42,6 +48,10 @@ export function clearAccessToken() {
   storage.removeItem(AUTH_TOKEN_KEY);
 }
 
+export function registerAccessTokenProvider(provider: AccessTokenProvider | null): void {
+  accessTokenProvider = provider;
+}
+
 function decodeBase64Url(value: string): string | null {
   try {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -75,4 +85,55 @@ export function isImpersonationToken(token: string | null | undefined): boolean 
 export function getActiveImpersonationToken(): string | null {
   const token = getAccessToken();
   return isImpersonationToken(token) ? token : null;
+}
+
+export function isAccessTokenExpired(
+  token: string | null | undefined,
+  nowMs = Date.now(),
+): boolean {
+  const payload = getAccessTokenPayload(token);
+  const exp = payload?.exp;
+  return typeof exp === "number" && exp <= Math.floor(nowMs / 1000);
+}
+
+export function shouldRefreshAccessToken(
+  token: string | null | undefined,
+  skewSeconds = TOKEN_REFRESH_SKEW_SECONDS,
+  nowMs = Date.now(),
+): boolean {
+  const payload = getAccessTokenPayload(token);
+  const exp = payload?.exp;
+  return typeof exp === "number" && exp <= Math.floor(nowMs / 1000) + skewSeconds;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (!accessTokenProvider) return null;
+  if (!refreshPromise) {
+    refreshPromise = accessTokenProvider({ skipCache: true })
+      .then((token) => {
+        if (token) setAccessToken(token);
+        else clearAccessToken();
+        return token;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+export async function getValidAccessToken(
+  token: string | null | undefined = getAccessToken(),
+  options: { forceRefresh?: boolean } = {},
+): Promise<string | null> {
+  const candidate = token ?? null;
+  if (isImpersonationToken(candidate)) return candidate;
+  if (!options.forceRefresh && !shouldRefreshAccessToken(candidate)) return candidate;
+
+  try {
+    const refreshed = await refreshAccessToken();
+    return refreshed ?? candidate;
+  } catch {
+    return candidate;
+  }
 }
