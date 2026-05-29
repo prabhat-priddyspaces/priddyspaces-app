@@ -48,33 +48,29 @@ function useClerkAppSignOut() {
   return useCallback(
     async ({ redirectTo, onSignedOut }: AppSignOutOptions = {}) => {
       const target = getRedirectTarget(redirectTo);
-      let notified = false;
-      let finished = false;
 
-      const clearAndNotify = () => {
-        clearAppSession();
-        if (!notified) {
-          notified = true;
-          onSignedOut?.();
+      // Tear down our own session bridge before Clerk clears its cookie so the
+      // access-token helpers and /api/me cache don't outlive the session.
+      clearAppSession();
+      onSignedOut?.();
+
+      try {
+        if (target) {
+          // Let Clerk own the post-sign-out navigation. Without redirectUrl,
+          // clearing the session re-renders the current protected route and the
+          // middleware bounces to Clerk's hosted Account Portal (accounts.dev)
+          // before any client-side redirect of ours can run.
+          await signOut({ redirectUrl: target });
+        } else {
+          // No redirect requested (e.g. signing out from a public page): pass a
+          // no-op callback so Clerk stays put instead of using its default
+          // afterSignOutUrl.
+          await signOut(() => {});
         }
-      };
-
-      const finish = () => {
-        clearAndNotify();
-        if (finished) return;
-        finished = true;
+      } catch {
         if (target) {
           router.replace(target);
         }
-      };
-
-      clearAndNotify();
-
-      try {
-        await signOut(finish);
-        finish();
-      } catch {
-        finish();
       }
     },
     [router, signOut],
