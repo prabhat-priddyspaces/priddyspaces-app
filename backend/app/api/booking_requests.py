@@ -305,6 +305,7 @@ def _to_out(
         )
         estimated = cents_to_money(estimate.total_cents) if estimate else None
     payment_method_public_id = None
+    payment_method = None
     booking_series_public_id = None
     if db and req.booking_series_id:
         series = db.query(BookingSeries).filter(BookingSeries.id == req.booking_series_id).first()

@@ -139,7 +139,7 @@ def test_member_portal_session_created(db_session, client_factory, monkeypatch):
     assert created_customers == [member.email]
     assert created_portal_sessions
     assert created_portal_sessions[0][0] == "cus_test_123"
-    assert created_portal_sessions[0][1].endswith("/member/subscriptions")
+    assert created_portal_sessions[0][1].endswith("/member/payments")
 
     db_session.refresh(member)
     assert member.stripe_customer_id == "cus_test_123"
