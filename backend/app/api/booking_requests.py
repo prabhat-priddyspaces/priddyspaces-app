@@ -90,7 +90,7 @@ from app.services.pricing import (
     estimate_booking_price,
 )
 from app.services.money import cents_to_money
-from app.services.loyalty import attach_lock_to_booking_request, release_redemption_for_request
+from app.services.loyalty import active_lock_by_public_id, attach_lock_to_booking_request, release_redemption_for_request
 from app.services.notifications import (
     send_booking_confirmed_email,
     send_booking_cancelled_email,
@@ -932,7 +932,36 @@ def create_booking_request(
     db.query(Space).filter(Space.id == space.id).with_for_update().first()
     validate_occurrences_available(db, space=space, location=location, occurrences=occurrences)
 
-    if settings.PAYMENT_METHOD_REQUIRED_FOR_REQUEST:
+    lock = active_lock_by_public_id(db, payload.redemption_lock_public_id, user, space) if payload.redemption_lock_public_id else None
+    points_cover_total = False
+    if lock:
+        estimated_total_cents = 0
+        try:
+            tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
+            tax_rate = tax.rate_percent if tax else None
+            granularity_minutes = _granularity_to_minutes(location.booking_granularity) if location.booking_granularity else 60
+            rule = _get_active_pricing_rule(db, space.id)
+            est = estimate_booking_price(
+                occurrences[0].start_datetime,
+                occurrences[0].end_datetime,
+                price_hourly=space.price_hourly,
+                price_daily=space.price_daily,
+                price_monthly=space.price_monthly,
+                rate_type=rule.rate_type if rule else None,
+                rate_amount=rule.rate_amount if rule else None,
+                booking_mode="day_pass" if is_day_pass else "hourly",
+                full_day=is_day_pass,
+                volume_discounts=_active_volume_discounts(db, space.id),
+                granularity_minutes=granularity_minutes,
+                tax_rate_percent=tax_rate,
+            )
+            estimated_total_cents = int(est.total_cents) if est else 0
+        except Exception:
+            estimated_total_cents = 0
+        estimated_total_cents *= max(1, len(occurrences))
+        points_cover_total = estimated_total_cents > 0 and (lock.discount_cents or 0) >= estimated_total_cents
+
+    if settings.PAYMENT_METHOD_REQUIRED_FOR_REQUEST and not points_cover_total:
         require_verified_email_for_payments(user)
         owner_payment_setting, payment_method, consent_at = require_payment_method_for_request(
             db,

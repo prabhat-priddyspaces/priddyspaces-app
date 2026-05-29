@@ -8,6 +8,8 @@ from app.models.enums import (
     AvailabilityStatus,
     BillingCycle,
     LocationStatus,
+    OrganizationReviewStatus,
+    PlatformTeamRole,
     SpaceType,
     SpaceVisibility,
     UserAppRole,
@@ -19,6 +21,7 @@ from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
 from app.models.organization_amenity import OrganizationAmenity
 from app.models.organization_member import OrganizationMember
+from app.models.platform_team_member import PlatformTeamMember
 from app.models.location import Location
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
@@ -38,7 +41,11 @@ def _seed_spaces(db):
     db.commit()
     db.refresh(owner)
 
-    org = Organization(name="Org", owner_id=owner.id)
+    org = Organization(
+        name="Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -140,7 +147,11 @@ def _seed_public_location_marketplace(db):
     db.commit()
     db.refresh(owner)
 
-    org = Organization(name="Public Org", owner_id=owner.id)
+    org = Organization(
+        name="Public Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -548,6 +559,52 @@ def test_public_location_search_filters_within_radius(db_session, client_factory
     assert seeded["coworking_location"].public_id in ids
     miami = next(item for item in payload["results"] if item["location_public_id"] == seeded["coworking_location"].public_id)
     assert miami["distance_miles"] is not None and miami["distance_miles"] < 1.0
+
+
+def test_pending_organization_inventory_waits_for_admin_approval(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    org = db_session.query(Organization).filter(Organization.id == seeded["meeting_room"].tenant_id).one()
+    org.review_status = OrganizationReviewStatus.PENDING
+    db_session.add(org)
+    db_session.commit()
+
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+    pending_search = client.get("/api/marketplace/locations?category=meeting_room&q=harbor")
+    assert pending_search.status_code == 200
+    assert pending_search.json()["meta"]["total_locations"] == 0
+
+    pending_detail = client.get(f"/api/marketplace/spaces/{seeded['meeting_room'].public_id}")
+    assert pending_detail.status_code == 404
+
+    admin = User(
+        email="approval-admin@example.com",
+        auth_subject="approval-admin",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+    db_session.refresh(admin)
+    db_session.add(PlatformTeamMember(user_id=admin.id, role=PlatformTeamRole.SUPERADMIN, is_active=True))
+    db_session.commit()
+
+    admin_client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+    approved = admin_client.patch(
+        f"/api/admin/owner-companies/{org.public_id}",
+        json={"review_status": "approved"},
+    )
+    assert approved.status_code == 200
+
+    approved_search = admin_client.get("/api/marketplace/locations?category=meeting_room&q=harbor")
+    assert approved_search.status_code == 200
+    payload = approved_search.json()
+    assert payload["meta"]["total_locations"] == 1
+    assert payload["results"][0]["location_public_id"] == seeded["meeting_location"].public_id
 
 
 def test_public_location_search_radius_excludes_far_locations(db_session, client_factory):

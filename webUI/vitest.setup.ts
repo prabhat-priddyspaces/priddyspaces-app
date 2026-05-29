@@ -39,8 +39,10 @@ vi.mock("@clerk/nextjs", () => ({
     getToken: vi.fn(() => Promise.resolve(null)),
   }),
   useClerk: () => ({
-    signOut: vi.fn((callback?: () => void) => {
-      callback?.();
+    signOut: vi.fn((optionsOrCallback?: unknown) => {
+      if (typeof optionsOrCallback === "function") {
+        (optionsOrCallback as () => void)();
+      }
       return Promise.resolve();
     }),
   }),

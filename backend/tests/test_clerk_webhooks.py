@@ -152,10 +152,20 @@ class TestUserUpsert:
 
 
 class TestOrgUpsert:
-    def test_org_created_inserts_row(self, db_session):
+    def test_org_created_inserts_pending_row_and_requests_approval(self, db_session, monkeypatch):
         user = User(email="owner@example.com", auth_subject="user_owner")
         db_session.add(user)
         db_session.commit()
+        sent: list[tuple[str, str]] = []
+
+        def fake_send_approval(db, *, org, requester):
+            sent.append((org.public_id, requester.email))
+            return 1
+
+        monkeypatch.setattr(
+            "app.api.webhooks_clerk.send_organization_approval_request_email",
+            fake_send_approval,
+        )
 
         _handle_org_upsert(db_session, {"id": "org_abc", "name": "Acme Coworking", "created_by": "user_owner"})
         db_session.commit()
@@ -164,6 +174,8 @@ class TestOrgUpsert:
         assert org is not None
         assert org.name == "Acme Coworking"
         assert org.owner_id == user.id
+        assert org.review_status == OrganizationReviewStatus.PENDING
+        assert sent == [(org.public_id, user.email)]
 
     def test_org_updated_changes_name(self, db_session):
         user = User(email="owner@example.com", auth_subject="user_owner")
@@ -497,8 +509,18 @@ class TestOnboardingOrganization:
         )
         assert resp.status_code == 422
 
-    def test_valid_org_created_with_onboarding_complete(self, client_factory, db_session):
+    def test_valid_org_created_with_onboarding_complete(self, client_factory, db_session, monkeypatch):
         user, token = self._owner(db_session)
+        sent: list[tuple[str, str]] = []
+
+        def fake_send_approval(db, *, org, requester):
+            sent.append((org.public_id, requester.email))
+            return 1
+
+        monkeypatch.setattr(
+            "app.api.onboarding.send_organization_approval_request_email",
+            fake_send_approval,
+        )
 
         with patch("app.services.amenities.seed_default_amenities"):
             resp = client_factory(token).post(
@@ -512,6 +534,8 @@ class TestOnboardingOrganization:
         assert org.name == "Acme Spaces"
         assert org.onboarding_completed is True
         assert org.industry == "Coworking"
+        assert org.review_status == OrganizationReviewStatus.PENDING
+        assert sent == [(org.public_id, user.email)]
 
     def test_duplicate_call_updates_not_creates(self, client_factory, db_session):
         user, token = self._owner(db_session, "dup")

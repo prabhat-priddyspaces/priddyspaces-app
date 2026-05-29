@@ -22,7 +22,7 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
     review_status = Column(
         Enum(OrganizationReviewStatus, values_callable=enum_values),
         nullable=False,
-        default=OrganizationReviewStatus.APPROVED,
+        default=OrganizationReviewStatus.PENDING,
     )
     review_notes = Column(String(2048), nullable=True)
     reviewed_by_user_id = Column(Integer, nullable=True)

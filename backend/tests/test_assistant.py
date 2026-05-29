@@ -8,7 +8,14 @@ from app.assistant import runtime as assistant_runtime
 from app.assistant.redaction import redact_pii
 from app.core.config import settings
 from app.models.assistant import AssistantConversation, AssistantMessage, OwnerPolicyKB
-from app.models.enums import AvailabilityStatus, PlatformTeamRole, SpaceType, UserAppRole, UserRole
+from app.models.enums import (
+    AvailabilityStatus,
+    OrganizationReviewStatus,
+    PlatformTeamRole,
+    SpaceType,
+    UserAppRole,
+    UserRole,
+)
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
@@ -29,7 +36,11 @@ def _seed_owner_location(db):
     db.commit()
     db.refresh(owner)
 
-    org = Organization(name="Assistant Org", owner_id=owner.id)
+    org = Organization(
+        name="Assistant Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)

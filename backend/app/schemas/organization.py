@@ -24,3 +24,9 @@ class OrganizationOut(BaseModel):
     reviewed_at: datetime | None = None
     commission_override_pct: int | None = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class OrganizationApprovalRequestOut(BaseModel):
+    public_id: str
+    review_status: OrganizationReviewStatus
+    recipients_notified: int

@@ -281,7 +281,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
   }
 
   return (
-    <main className="min-h-screen bg-bg text-text">
+    <main className="w-full min-h-screen bg-bg text-text">
       <PublicTopbar />
 
       <section className="mx-auto max-w-[1440px] px-6 pt-6 lg:pt-8">

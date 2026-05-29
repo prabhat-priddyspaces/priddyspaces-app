@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -148,7 +148,8 @@ export function PublicSpaceDetailView({
   const [guestCheckoutOpen, setGuestCheckoutOpen] = useState(false);
   const [guestPayload, setGuestPayload] = useState<ReservationPayload | null>(null);
   const [loyaltyPreview, setLoyaltyPreview] = useState<LoyaltyRedemptionPreview | null>(null);
-  const [loyaltyPoints, setLoyaltyPoints] = useState("");
+  const [priddyPoints, setPriddyPoints] = useState("");
+  const [ownerPoints, setOwnerPoints] = useState("");
   const [loyaltyLoading, setLoyaltyLoading] = useState(false);
 
   useEffect(() => {
@@ -327,7 +328,7 @@ export function PublicSpaceDetailView({
     return diff > 0 ? diff / 60 : 0;
   }, [allDay, dayOpenSpan, startTime, endTime]);
 
-  const volumeDiscounts = detail?.space.volume_discounts ?? [];
+  const volumeDiscounts = useMemo(() => detail?.space.volume_discounts ?? [], [detail?.space.volume_discounts]);
 
   const breakdown = useMemo(() => {
     if (allDay) {
@@ -381,7 +382,6 @@ export function PublicSpaceDetailView({
     };
   }, [allDay, dailyAmount, hourlyAmount, dayOpenSpan, hours, volumeDiscounts]);
 
-  const subtotal = breakdown?.total ?? null;
   const bufferBefore = availability?.buffer_before_minutes ?? detail?.space.buffer_before_minutes ?? 0;
   const bufferAfter = availability?.buffer_after_minutes ?? detail?.space.buffer_after_minutes ?? 0;
   const cancellationTiers = detail?.cancellation_policy?.tiers ?? [];
@@ -407,7 +407,7 @@ export function PublicSpaceDetailView({
     return qs ? `/spaces/${spaceId}?${qs}` : `/spaces/${spaceId}`;
   }
 
-  function currentReservationPayload(): ReservationPayload | null {
+  const currentReservationPayload = useCallback((): ReservationPayload | null => {
     if (!detail || !date) return null;
     const effectiveStart = allDay ? openWindow.start : startTime;
     const effectiveEnd = allDay ? openWindow.end : endTime;
@@ -435,14 +435,26 @@ export function PublicSpaceDetailView({
       full_day: allDay,
       recurrence,
     };
-  }
+  }, [
+    allDay,
+    availability?.timezone,
+    date,
+    detail,
+    endTime,
+    openWindow.end,
+    openWindow.start,
+    recurrenceCount,
+    recurrenceFrequency,
+    startTime,
+  ]);
 
   useEffect(() => {
     const token = getAccessToken() ?? undefined;
     const payload = currentReservationPayload();
     if (!token || !payload || leaseBookingMode) {
       setLoyaltyPreview(null);
-      setLoyaltyPoints("");
+      setPriddyPoints("");
+      setOwnerPoints("");
       return;
     }
     let active = true;
@@ -455,16 +467,28 @@ export function PublicSpaceDetailView({
       .then((preview) => {
         if (!active) return;
         setLoyaltyPreview(preview);
-        setLoyaltyPoints((current) => {
+        setPriddyPoints((current) => {
           if (current) {
             const parsed = Number(current);
-            if (Number.isFinite(parsed) && parsed > preview.max_redeemable_points) {
-              return String(preview.max_redeemable_points);
+            if (Number.isFinite(parsed) && parsed > preview.priddy.max_redeemable_points) {
+              return String(preview.priddy.max_redeemable_points);
             }
             return current;
           }
-          return preview.eligible && preview.max_redeemable_points > 0
-            ? String(preview.max_redeemable_points)
+          return preview.priddy.eligible && preview.priddy.max_redeemable_points > 0
+            ? String(preview.priddy.max_redeemable_points)
+            : "";
+        });
+        setOwnerPoints((current) => {
+          if (current) {
+            const parsed = Number(current);
+            if (Number.isFinite(parsed) && parsed > preview.owner.max_redeemable_points) {
+              return String(preview.owner.max_redeemable_points);
+            }
+            return current;
+          }
+          return preview.owner.eligible && preview.owner.max_redeemable_points > 0
+            ? String(preview.owner.max_redeemable_points)
             : "";
         });
       })
@@ -477,19 +501,21 @@ export function PublicSpaceDetailView({
     return () => {
       active = false;
     };
-  }, [detail?.space.public_id, date, startTime, endTime, allDay, openWindow.start, openWindow.end, leaseBookingMode, recurrenceFrequency, recurrenceCount]);
+  }, [currentReservationPayload, leaseBookingMode]);
 
   async function createLoyaltyLock(payload: ReservationPayload): Promise<string | null> {
     const token = getAccessToken() ?? undefined;
-    const requested = Number(loyaltyPoints || 0);
-    if (!token || !loyaltyPreview?.eligible || requested <= 0) return null;
+    const priddyRequested = Math.max(0, Number(priddyPoints || 0));
+    const ownerRequested = Math.max(0, Number(ownerPoints || 0));
+    if (!token || !loyaltyPreview?.eligible || priddyRequested + ownerRequested <= 0) return null;
     const lock = await apiFetch<LoyaltyRedemptionLock>(
       "/api/loyalty/redemptions/lock",
       {
         method: "POST",
         body: JSON.stringify({
           ...payload,
-          points_requested: requested,
+          priddy_points_requested: priddyRequested,
+          owner_points_requested: ownerRequested,
         }),
       },
       token,
@@ -549,7 +575,7 @@ export function PublicSpaceDetailView({
       setGuestCheckoutOpen(true);
       return;
     }
-    if (!authorizationConsent) {
+    if (!authorizationConsent && !pointsCoverTotal) {
       setError("Authorize card billing before reserving.");
       return;
     }
@@ -557,6 +583,10 @@ export function PublicSpaceDetailView({
     setRequesting(true);
     setError("");
     try {
+      if (pointsCoverTotal) {
+        await submitReservation(payload, null);
+        return;
+      }
       const resolved = await apiFetch<PaymentMethodResolve>(
         `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(detail.space.public_id)}`,
         { method: "GET" },
@@ -588,14 +618,26 @@ export function PublicSpaceDetailView({
     setSubscriptionOpen(true);
   }
 
-  const requestedLoyaltyPoints = Math.max(0, Number(loyaltyPoints || 0));
-  const loyaltyDiscountCents = loyaltyPreview
-    ? Math.min(requestedLoyaltyPoints * loyaltyPreview.point_value_cents, loyaltyPreview.max_discount_cents)
+  const requestedPriddyPoints = Math.max(0, Number(priddyPoints || 0));
+  const requestedOwnerPoints = Math.max(0, Number(ownerPoints || 0));
+  const priddyDiscountCents = loyaltyPreview
+    ? Math.min(requestedPriddyPoints * loyaltyPreview.priddy.point_value_cents, loyaltyPreview.priddy.max_redeemable_points * loyaltyPreview.priddy.point_value_cents)
     : 0;
+  const ownerDiscountCents = loyaltyPreview
+    ? Math.min(requestedOwnerPoints * loyaltyPreview.owner.point_value_cents, loyaltyPreview.owner.max_redeemable_points * loyaltyPreview.owner.point_value_cents)
+    : 0;
+  const loyaltyDiscountCents = Math.min(
+    (breakdown ? Math.round(breakdown.total * 100) : loyaltyPreview?.subtotal_cents || 0),
+    priddyDiscountCents + ownerDiscountCents,
+  );
+  const pointsCoverTotal =
+    recurrenceFrequency === "none" &&
+    loyaltyDiscountCents > 0 &&
+    loyaltyDiscountCents >= (breakdown ? Math.round(breakdown.total * 100) : loyaltyPreview?.subtotal_cents || 0);
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-bg">
+      <main className="w-full min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-[1320px] px-6 py-8 text-sm text-text-3">Loading listing…</div>
       </main>
@@ -604,7 +646,7 @@ export function PublicSpaceDetailView({
 
   if (error && !detail) {
     return (
-      <main className="min-h-screen bg-bg">
+      <main className="w-full min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-[1320px] px-6 py-8">
           <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
@@ -622,7 +664,7 @@ export function PublicSpaceDetailView({
   }
 
   return (
-    <main className="min-h-screen bg-bg">
+    <main className="w-full min-h-screen bg-bg">
       <PublicTopbar />
       <div className="mx-auto max-w-[1320px] px-6 py-8">
         <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
@@ -1032,7 +1074,7 @@ export function PublicSpaceDetailView({
                     </label>
                   ) : null}
 
-                  {isAuthenticated && !leaseBookingMode ? (
+                  {!leaseBookingMode ? (
                     <div className="rounded-[18px] border border-line bg-surface px-4 py-3">
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-success-soft text-success">
@@ -1040,25 +1082,41 @@ export function PublicSpaceDetailView({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-semibold text-text">Rewards</div>
-                          {loyaltyLoading ? (
+                          {!isAuthenticated ? (
+                            <div className="mt-1 text-sm text-text-3">Sign in to view and redeem points.</div>
+                          ) : loyaltyLoading ? (
                             <div className="mt-1 text-sm text-text-3">Checking your balance...</div>
                           ) : loyaltyPreview?.eligible ? (
                             <>
                               <div className="mt-1 text-sm text-text-2">
-                                {formatPoints(loyaltyPreview.total_balance)} points available. Use up to{" "}
-                                {formatPoints(loyaltyPreview.max_redeemable_points)} points on this booking.
+                                Apply eligible points before payment. Discounts can cover up to the full booking total.
                               </div>
-                              <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={loyaltyPreview.max_redeemable_points}
-                                  value={loyaltyPoints}
-                                  onChange={(event) => setLoyaltyPoints(event.target.value)}
-                                  className="h-10 rounded-2xl border border-line px-3 text-sm font-medium text-text outline-none"
-                                />
-                                <div className="flex h-10 items-center rounded-2xl bg-success-soft px-3 text-sm font-semibold text-success">
-                                  Save {formatCents(loyaltyDiscountCents)}
+                              <div className="mt-3 grid gap-3">
+                                {loyaltyPreview.priddy.eligible ? (
+                                  <RewardInput
+                                    label="Priddy Points"
+                                    balance={loyaltyPreview.priddy.balance}
+                                    max={loyaltyPreview.priddy.max_redeemable_points}
+                                    value={priddyPoints}
+                                    onChange={setPriddyPoints}
+                                  />
+                                ) : loyaltyPreview.priddy.reason ? (
+                                  <div className="text-xs text-text-3">{loyaltyPreview.priddy.reason}</div>
+                                ) : null}
+                                {loyaltyPreview.owner.eligible ? (
+                                  <RewardInput
+                                    label="Owner points"
+                                    balance={loyaltyPreview.owner.balance}
+                                    max={loyaltyPreview.owner.max_redeemable_points}
+                                    value={ownerPoints}
+                                    onChange={setOwnerPoints}
+                                  />
+                                ) : loyaltyPreview.owner.reason ? (
+                                  <div className="text-xs text-text-3">{loyaltyPreview.owner.reason}</div>
+                                ) : null}
+                                <div className="flex h-10 items-center justify-between rounded-2xl bg-success-soft px-3 text-sm font-semibold text-success">
+                                  <span>Rewards savings</span>
+                                  <span>{formatCents(loyaltyDiscountCents)}</span>
                                 </div>
                               </div>
                             </>
@@ -1215,5 +1273,35 @@ export function PublicSpaceDetailView({
         />
       ) : null}
     </main>
+  );
+}
+
+function RewardInput({
+  label,
+  balance,
+  max,
+  value,
+  onChange,
+}: {
+  label: string;
+  balance: number;
+  max: number;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-1 text-xs text-text-3">
+      <span>
+        {label}: {formatPoints(balance)} available, up to {formatPoints(max)}
+      </span>
+      <input
+        type="number"
+        min={0}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 rounded-2xl border border-line px-3 text-sm font-medium text-text outline-none"
+      />
+    </label>
   );
 }

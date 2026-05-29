@@ -49,6 +49,8 @@ def _serialize_space(
         buffer_before_minutes=space.buffer_before_minutes or 0,
         buffer_after_minutes=space.buffer_after_minutes or 0,
         visibility=space.visibility,
+        priddy_points_enabled=space.priddy_points_enabled,
+        owner_points_enabled=space.owner_points_enabled,
         amenities=location_amenities_text or space.amenities,
     )
 
@@ -97,6 +99,8 @@ def create_space(
         buffer_before_minutes=payload.buffer_before_minutes,
         buffer_after_minutes=payload.buffer_after_minutes,
         visibility=payload.visibility,
+        priddy_points_enabled=payload.priddy_points_enabled,
+        owner_points_enabled=payload.owner_points_enabled,
         amenities=payload.amenities
     )
     db.add(space)
@@ -183,6 +187,10 @@ def update_space(
         space.buffer_after_minutes = payload.buffer_after_minutes
     if payload.visibility is not None:
         space.visibility = payload.visibility
+    if "priddy_points_enabled" in payload.model_fields_set:
+        space.priddy_points_enabled = payload.priddy_points_enabled
+    if "owner_points_enabled" in payload.model_fields_set:
+        space.owner_points_enabled = payload.owner_points_enabled
     if payload.amenities is not None:
         space.amenities = payload.amenities
 

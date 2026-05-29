@@ -125,7 +125,7 @@ def get_or_create_platform_settings(db: Session) -> PlatformSetting:
         return settings
     settings = PlatformSetting(default_owner_commission_pct=0)
     db.add(settings)
-    db.commit()
+    db.flush()
     db.refresh(settings)
     return settings
 

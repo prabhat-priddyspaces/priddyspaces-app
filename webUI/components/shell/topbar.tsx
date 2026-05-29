@@ -35,7 +35,7 @@ export function Topbar({
   return (
     <header
       className={cn(
-        "flex items-center gap-4 px-7 border-b border-line bg-bg min-h-[60px]",
+        "flex items-center gap-3 px-4 sm:gap-4 sm:px-7 border-b border-line bg-bg min-h-[60px]",
         className
       )}
     >

@@ -121,13 +121,13 @@ export function OwnerDashboardEmpty({ firstName }: { firstName?: string }) {
       {/* Welcome card */}
       <Card
         padded={false}
-        className="relative overflow-hidden p-8"
+        className="relative overflow-hidden p-5 sm:p-8"
         style={{
           background:
             "linear-gradient(135deg, var(--brand-soft) 0%, transparent 60%), var(--surface)",
         }}
       >
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
           <div
             className="w-14 h-14 rounded-2xl grid place-items-center flex-none"
             style={{
@@ -147,8 +147,8 @@ export function OwnerDashboardEmpty({ firstName }: { firstName?: string }) {
               booking can pay.
             </div>
           </div>
-          <Link href="/owner/locations/new">
-            <Button variant="primary" size="lg">
+          <Link href="/owner/locations/new" className="w-full sm:w-auto">
+            <Button variant="primary" size="lg" className="w-full justify-center sm:w-auto">
               Continue setup
               <ArrowRight size={16} />
             </Button>
@@ -156,7 +156,7 @@ export function OwnerDashboardEmpty({ firstName }: { firstName?: string }) {
         </div>
 
         {/* Progress */}
-        <div className="flex items-center gap-1 mt-7">
+        <div className="flex items-center gap-1 mt-7 overflow-x-auto -mx-1 px-1">
           {STEPS.map((step, i) => (
             <React.Fragment key={i}>
               <div className="flex flex-col items-center gap-1.5 flex-none">

@@ -3,14 +3,14 @@ from datetime import datetime, timezone
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import AvailabilityStatus, BookingRequestStatus, PaymentStatus, SpaceType, UserAppRole, UserRole
 from app.models.location import Location
-from app.models.loyalty import LoyaltyWallet
+from app.models.loyalty import LoyaltyWallet, PriddyPointsWallet
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.space import Space
 from app.models.user import User
-from app.services.loyalty import get_or_create_wallet, write_ledger_entry
+from app.services.loyalty import get_or_create_wallet, grant_priddy_signup_points, write_ledger_entry
 from app.services.payment_providers import ChargeResult
 
 
@@ -222,3 +222,75 @@ def test_private_office_redemption_is_blocked(db_session, client_factory):
     assert preview.status_code == 200
     assert preview.json()["eligible"] is False
     assert "space type" in preview.json()["reason"]
+
+
+def test_member_registration_gets_priddy_points(db_session, client_factory):
+    client = client_factory({"sub": "unused", "email": "unused@example.com", "email_verified": True})
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "new-member@example.com",
+            "password": "Password123!",
+            "first_name": "New",
+            "last_name": "Member",
+            "role": "member",
+            "terms_accepted": True,
+            "privacy_policy_accepted": True,
+        },
+    )
+
+    assert response.status_code == 200
+    wallet = db_session.query(PriddyPointsWallet).join(User, User.id == PriddyPointsWallet.user_id).filter(
+        User.email == "new-member@example.com"
+    ).first()
+    assert wallet is not None
+    assert wallet.balance == 1000
+
+
+def test_priddy_points_cover_day_pass_without_card(db_session, client_factory):
+    owner, customer, org, space, _method = _seed(db_session, space_type=SpaceType.SHARED_DESK)
+    space.price_daily = 10
+    db_session.add(space)
+    grant_priddy_signup_points(db_session, customer)
+    db_session.commit()
+
+    owner_client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+    settings = owner_client.put(
+        f"/api/loyalty/settings?organization_public_id={org.public_id}",
+        json={"accepts_priddy_points": True},
+    )
+    assert settings.status_code == 200
+
+    customer_client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+    booking_payload = {
+        "space_public_id": space.public_id,
+        "start_datetime": datetime(2026, 6, 7, 9, 0, tzinfo=timezone.utc).isoformat(),
+        "end_datetime": datetime(2026, 6, 7, 17, 0, tzinfo=timezone.utc).isoformat(),
+        "booking_mode": "day_pass",
+        "full_day": True,
+    }
+
+    preview = customer_client.post("/api/loyalty/redemptions/preview", json=booking_payload)
+    assert preview.status_code == 200
+    assert preview.json()["priddy"]["eligible"] is True
+    assert preview.json()["priddy"]["max_redeemable_points"] == 1000
+
+    lock = customer_client.post(
+        "/api/loyalty/redemptions/lock",
+        json={**booking_payload, "priddy_points_requested": 1000},
+    )
+    assert lock.status_code == 200
+    assert lock.json()["discount_cents"] == 1000
+
+    create = customer_client.post(
+        "/api/booking-requests",
+        json={**booking_payload, "redemption_lock_public_id": lock.json()["public_id"]},
+    )
+    assert create.status_code == 200
+    assert create.json()["status"] == BookingRequestStatus.APPROVED.value
+    assert create.json()["payment_status"] == "succeeded"
+    priddy_wallet = db_session.query(PriddyPointsWallet).filter(PriddyPointsWallet.user_id == customer.id).first()
+    assert priddy_wallet is not None
+    db_session.refresh(priddy_wallet)
+    assert priddy_wallet.balance == 0

@@ -4,6 +4,7 @@ from app.models.enums import (
     BillingCycle,
     BookingMode,
     LocationStatus,
+    OrganizationReviewStatus,
     SpaceType,
     SpaceVisibility,
     UserAppRole,
@@ -30,7 +31,11 @@ def _seed_owner_with_space(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFI
     db.commit()
     db.refresh(owner)
 
-    org = Organization(name="Owner Org", owner_id=owner.id)
+    org = Organization(
+        name="Owner Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
