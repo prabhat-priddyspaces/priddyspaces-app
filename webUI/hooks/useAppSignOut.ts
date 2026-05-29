@@ -6,17 +6,12 @@ import { useRouter } from "next/navigation";
 
 import { invalidateMeCache } from "@/hooks/useMe";
 import { clearAccessToken } from "@/lib/auth";
+import { getSignOutRedirectTarget } from "@/lib/clerk-urls";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
 interface AppSignOutOptions {
   redirectTo?: string | null;
   onSignedOut?: () => void;
-}
-
-const DEFAULT_SIGN_OUT_REDIRECT = "/spaces";
-
-function getRedirectTarget(redirectTo: AppSignOutOptions["redirectTo"]) {
-  return typeof redirectTo === "undefined" ? DEFAULT_SIGN_OUT_REDIRECT : redirectTo;
 }
 
 function clearAppSession() {
@@ -32,7 +27,7 @@ function useLocalAppSignOut() {
       clearAppSession();
       onSignedOut?.();
 
-      const target = getRedirectTarget(redirectTo);
+      const target = getSignOutRedirectTarget(redirectTo);
       if (target) {
         router.replace(target);
       }
@@ -47,7 +42,7 @@ function useClerkAppSignOut() {
 
   return useCallback(
     async ({ redirectTo, onSignedOut }: AppSignOutOptions = {}) => {
-      const target = getRedirectTarget(redirectTo);
+      const target = getSignOutRedirectTarget(redirectTo);
 
       // Tear down our own session bridge before Clerk clears its cookie so the
       // access-token helpers and /api/me cache don't outlive the session.

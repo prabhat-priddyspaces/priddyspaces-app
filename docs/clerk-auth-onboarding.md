@@ -185,6 +185,32 @@ Local dev: create `backend/.env` (see `backend/.env.example`).
 
 Local dev: copy `webUI/.env.local.example` to `webUI/.env.local` and fill in the key.
 
+Clerk redirect URLs must point at the deployed app domain, not Clerk's hosted
+`*.accounts.dev` account portal. The frontend deployment resolves
+`frontend_origin` from SSM (`/priddyspaces/{env}/deploy/frontend_origin`, with
+`frontend_url` and environment defaults as fallback), then derives:
+
+```bash
+NEXT_PUBLIC_APP_ORIGIN=https://app.dev.priddyspaces.com
+CLERK_SIGN_IN_URL=https://app.dev.priddyspaces.com/sign-in
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=https://app.dev.priddyspaces.com/sign-in
+CLERK_SIGN_UP_URL=https://app.dev.priddyspaces.com/sign-up
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=https://app.dev.priddyspaces.com/sign-up
+CLERK_SIGN_IN_FORCE_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+CLERK_SIGN_UP_FORCE_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=https://app.dev.priddyspaces.com/dashboard
+```
+
+Use the matching `app.staging.priddyspaces.com` or `app.priddyspaces.com` origin
+for staging and production. These values are required at Docker build time
+because `NEXT_PUBLIC_*` values are embedded in the client bundle, and they are
+also written into the ECS task definition for server-side Clerk middleware.
+
 ### Mobile (Expo)
 `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is embedded in the app bundle at build time. Set it in your EAS build profile or CI environment. See `mobile/.env.example`.
 

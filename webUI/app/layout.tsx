@@ -8,6 +8,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { AssistantMount } from "@/components/assistant-mount";
 import { ClerkTokenSync } from "@/components/clerk-token-sync";
 import { CommandPalette } from "@/components/command-palette";
+import { getClerkProviderRedirectProps } from "@/lib/clerk-urls";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 
 const geistSans = Geist({
@@ -33,6 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const fontClasses = `${geistSans.variable} ${geistMono.variable} font-sans`;
+  const clerkRedirectProps = getClerkProviderRedirectProps();
   if (IS_E2E_BYPASS) {
     return (
       <html lang="en" className={fontClasses}>
@@ -48,16 +50,11 @@ export default function RootLayout({
     <ClerkProvider
       // Keep all auth UI on our own domain instead of Clerk's hosted Account
       // Portal (accounts.dev) by pointing at our custom catch-all pages.
-      signInUrl="/sign-in"
-      signUpUrl="/sign-up"
       // Both flows funnel through /dashboard, which reads /api/me and routes
       // by role: no role → /onboarding/personal; owner-no-org →
       // /onboarding/organization; owner → /owner; member → /spaces;
       // platform → /admin.
-      signInForceRedirectUrl="/dashboard"
-      signUpForceRedirectUrl="/dashboard"
-      signInFallbackRedirectUrl="/dashboard"
-      signUpFallbackRedirectUrl="/dashboard"
+      {...clerkRedirectProps}
     >
       <html lang="en" className={fontClasses}>
         <body>
