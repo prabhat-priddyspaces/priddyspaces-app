@@ -1,18 +1,10 @@
-from datetime import datetime, timezone
-
-from html import escape
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
-from app.core.config import settings
 from app.db.deps import get_db
-from app.models.audit_log import AuditLog
-from app.models.enums import OrganizationReviewStatus, PlatformTeamRole, UserRole
+from app.models.enums import OrganizationReviewStatus, UserRole
 from app.models.organization import Organization
-from app.models.platform_team_member import PlatformTeamMember
-from app.models.user import User
 from app.schemas.organization import (
     OrganizationApprovalRequestOut,
     OrganizationCreate,
@@ -24,75 +16,13 @@ from app.services.auth_user import get_or_create_user
 from app.models.organization_member import OrganizationMember
 from app.services.audit import write_audit_log
 from app.services.authz import get_org_member, require_owner_admin_staff
-from app.services.notifications import send_email
-from app.services.platform_auth import get_audit_actor_context, get_platform_member_for_token
+from app.services.organization_approval import (
+    send_organization_approval_request_email,
+    superadmin_approval_recipients,
+)
+from app.services.platform_auth import get_audit_actor_context
 
 router = APIRouter()
-
-
-def _frontend_href(path: str) -> str:
-    return f"{settings.FRONTEND_URL.rstrip('/')}{path}"
-
-
-def _superadmin_emails(db: Session) -> list[str]:
-    rows = (
-        db.query(User.email)
-        .join(PlatformTeamMember, PlatformTeamMember.user_id == User.id)
-        .filter(
-            PlatformTeamMember.role == PlatformTeamRole.SUPERADMIN,
-            PlatformTeamMember.is_active.is_(True),
-            User.is_active.is_(True),
-        )
-        .all()
-    )
-    emails = [row.email for row in rows if row.email]
-    emails.extend(
-        email.strip()
-        for email in settings.PLATFORM_ADMIN_EMAILS.split(",")
-        if email.strip()
-    )
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for email in emails:
-        key = email.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(email)
-    return deduped
-
-
-def _send_approval_request_email(
-    db: Session,
-    *,
-    org: Organization,
-    requester: User,
-    recipients: list[str],
-) -> None:
-    view_url = _frontend_href(f"/admin/owner-companies?company={org.public_id}")
-    approve_url = _frontend_href(
-        f"/admin/owner-companies?company={org.public_id}&action=approve"
-    )
-    subject = f"Owner company approval requested: {org.name}"
-    text = "\n".join(
-        [
-            f"{requester.email} requested marketplace approval for {org.name}.",
-            f"Current status: {org.review_status.value}",
-            "",
-            f"View company: {view_url}",
-            f"Approve company: {approve_url}",
-        ]
-    )
-    html = "\n".join(
-        [
-            f"<p>{escape(requester.email)} requested marketplace approval for <strong>{escape(org.name)}</strong>.</p>",
-            f"<p>Current status: <strong>{escape(org.review_status.value)}</strong></p>",
-            f'<p><a href="{escape(view_url)}">View company</a></p>',
-            f'<p><a href="{escape(approve_url)}">Approve company</a></p>',
-        ]
-    )
-    for recipient in recipients:
-        send_email(recipient, subject, text, db=db, html_body=html)
 
 
 @router.post("/orgs", response_model=OrganizationOut)
@@ -122,6 +52,7 @@ def create_org(
     db.add(member)
     seed_default_amenities(db, org.id)
     db.commit()
+    send_organization_approval_request_email(db, org=org, requester=user)
     return org
 
 
@@ -231,7 +162,7 @@ def request_org_approval(
     if org.review_status == OrganizationReviewStatus.APPROVED:
         raise HTTPException(status_code=400, detail="Organization is already approved")
 
-    recipients = _superadmin_emails(db)
+    recipients = superadmin_approval_recipients(db)
     if not recipients:
         raise HTTPException(status_code=400, detail="No platform super admins are configured for approval notifications")
 
@@ -248,7 +179,12 @@ def request_org_approval(
         db.commit()
         db.refresh(org)
 
-    _send_approval_request_email(db, org=org, requester=requester, recipients=recipients)
+    recipients_notified = send_organization_approval_request_email(
+        db,
+        org=org,
+        requester=requester,
+        recipients=recipients,
+    )
 
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
@@ -261,7 +197,7 @@ def request_org_approval(
         after_state={
             "review_status": org.review_status.value,
             "review_notes": org.review_notes,
-            "recipients_notified": len(recipients),
+            "recipients_notified": recipients_notified,
         },
         acting_as_user_id=acting_as_user_id,
         context=context,
@@ -270,5 +206,5 @@ def request_org_approval(
     return OrganizationApprovalRequestOut(
         public_id=org.public_id,
         review_status=org.review_status,
-        recipients_notified=len(recipients),
+        recipients_notified=recipients_notified,
     )

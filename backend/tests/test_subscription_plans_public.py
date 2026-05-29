@@ -1,4 +1,12 @@
-from app.models.enums import UserAppRole, UserRole, SpaceType, BillingCycle, LocationStatus, SpaceVisibility
+from app.models.enums import (
+    BillingCycle,
+    LocationStatus,
+    OrganizationReviewStatus,
+    SpaceType,
+    SpaceVisibility,
+    UserAppRole,
+    UserRole,
+)
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
@@ -19,7 +27,11 @@ def _seed_public_space_with_plan(db):
     db.commit()
     db.refresh(owner)
 
-    org = Organization(name="Org", owner_id=owner.id)
+    org = Organization(
+        name="Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)

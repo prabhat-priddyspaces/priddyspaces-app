@@ -24,6 +24,7 @@ from app.models.user import User
 from app.schemas.auth import MeOut
 from app.services.amenities import seed_default_amenities
 from app.services.loyalty import grant_priddy_signup_points
+from app.services.organization_approval import send_organization_approval_request_email
 from app.services.platform_auth import (
     build_default_route,
     get_effective_user,
@@ -246,7 +247,7 @@ def complete_organization(
     org = Organization(
         name=payload.name,
         owner_id=user.id,
-        review_status=OrganizationReviewStatus.APPROVED,
+        review_status=OrganizationReviewStatus.PENDING,
         onboarding_completed=True,
         industry=payload.industry,
         size=payload.size,
@@ -265,5 +266,7 @@ def complete_organization(
     db.add(member)
     seed_default_amenities(db, org.id)
     db.commit()
+    db.refresh(org)
+    send_organization_approval_request_email(db, org=org, requester=user)
 
     return _build_me_out(db, user, token)
