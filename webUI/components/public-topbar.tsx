@@ -46,7 +46,7 @@ export function PublicTopbar({
 
   return (
     <div className="w-full border-b border-line bg-bg-elev/90 backdrop-blur sticky top-0 z-30">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-4">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 py-4">
         <Link
           href="/spaces"
           className="flex items-center gap-3"

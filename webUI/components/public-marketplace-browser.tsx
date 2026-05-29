@@ -284,7 +284,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
     <main className="w-full min-h-screen bg-bg text-text">
       <PublicTopbar />
 
-      <section className="mx-auto max-w-[1440px] px-6 pt-6 lg:pt-8">
+      <section className="mx-auto max-w-[1440px] px-4 sm:px-6 pt-6 lg:pt-8">
         <div className="flex flex-col gap-1.5 mb-4">
           <h1 className="text-[28px] lg:text-[32px] font-semibold tracking-[-0.02em] text-text">
             {config.title}
@@ -457,7 +457,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             <div className="p-2 flex items-stretch">
               <button
                 type="submit"
-                className="inline-flex h-11 lg:h-auto items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-white transition hover:bg-brand-hover lg:min-w-[120px]"
+                className="inline-flex w-full h-11 lg:h-auto items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-white transition hover:bg-brand-hover lg:min-w-[120px]"
               >
                 <Search size={14} strokeWidth={2.5} />
                 Search
@@ -524,7 +524,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1440px] px-6 pb-12">
+      <section className="mx-auto max-w-[1440px] px-4 sm:px-6 pb-12">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
           <div className="space-y-3.5">
             <div className="flex items-end justify-between gap-3">
@@ -603,9 +603,9 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       : undefined
                   }
                 >
-                  <div className="flex gap-3">
+                  <div className="flex gap-2 sm:gap-3">
                     <div
-                      className="relative w-32 h-28 rounded-xl overflow-hidden flex-none"
+                      className="relative w-24 h-24 sm:w-32 sm:h-28 rounded-xl overflow-hidden flex-none"
                       style={{
                         background:
                           "linear-gradient(135deg, var(--ps-violet-100), var(--ps-mint-100))",
@@ -669,8 +669,8 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                           </div>
                         ) : null}
                       </div>
-                      <div className="flex items-end justify-between gap-2 mt-2">
-                        <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex flex-wrap items-end gap-x-2 gap-y-2 mt-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <div className="flex items-center gap-1 text-[11px] text-text-3">
                             <Star
                               size={11}
@@ -697,7 +697,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                             </span>
                           ) : null}
                         </div>
-                        <div className="flex gap-1.5 flex-none">
+                        <div className="flex gap-1.5 shrink-0 ml-auto">
                           <Link
                             href={locationHref}
                             onClick={(event) => event.stopPropagation()}
