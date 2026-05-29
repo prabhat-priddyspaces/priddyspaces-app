@@ -22,6 +22,7 @@ from app.models.platform_team_member import PlatformTeamMember
 from app.models.user import User
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.loyalty import grant_priddy_signup_points
+from app.services.organization_approval import send_organization_approval_request_email
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -189,10 +190,13 @@ def _handle_org_upsert(db: Session, data: dict) -> None:
             clerk_org_id=clerk_org_id,
             name=name,
             owner_id=creator.id if creator else 0,
-            review_status=OrganizationReviewStatus.APPROVED,
+            review_status=OrganizationReviewStatus.PENDING,
             onboarding_completed=False,
         )
         db.add(org)
+        db.flush()
+        if creator:
+            send_organization_approval_request_email(db, org=org, requester=creator)
 
     _write_audit(db, "org.synced", "organization", clerk_org_id, {"name": name})
 

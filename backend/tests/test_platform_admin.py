@@ -423,7 +423,7 @@ def test_owner_can_request_org_approval_email(db_session, client_factory, monkey
             }
         )
 
-    monkeypatch.setattr("app.api.organizations.send_email", fake_send_email)
+    monkeypatch.setattr("app.services.organization_approval.send_email", fake_send_email)
     client = client_factory({
         "sub": str(owner.public_id),
         "email": owner.email,
@@ -454,7 +454,7 @@ def test_rejected_org_approval_request_resubmits_to_pending(db_session, client_f
         email="superadmin-resubmit@example.com",
         role=PlatformTeamRole.SUPERADMIN,
     )
-    monkeypatch.setattr("app.api.organizations.send_email", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.services.organization_approval.send_email", lambda *args, **kwargs: None)
     client = client_factory({
         "sub": str(owner.public_id),
         "email": owner.email,
