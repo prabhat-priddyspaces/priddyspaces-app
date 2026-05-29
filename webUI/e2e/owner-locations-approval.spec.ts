@@ -4,6 +4,7 @@ import { json, meResponse, mockSession } from "./helpers/mock-api";
 
 test("owner sees company review status on locations and can request approval", async ({ page }) => {
   let approvalRequested = false;
+  let approvalAttempts = 0;
 
   await mockSession(page, "owner");
   await page.route("**/api/**", async (route) => {
@@ -48,6 +49,11 @@ test("owner sees company review status on locations and can request approval", a
     }
 
     if (key === "POST /api/orgs/org_1/approval-request") {
+      approvalAttempts += 1;
+      if (approvalAttempts === 1) {
+        await json(route, { detail: "Token expired" }, 401);
+        return;
+      }
       approvalRequested = true;
       await json(route, {
         public_id: "org_1",
@@ -67,8 +73,9 @@ test("owner sees company review status on locations and can request approval", a
   await expect(page.getByText("Marketplace in review")).toBeVisible();
   await page.getByRole("button", { name: "Request approval" }).click();
 
-  expect(approvalRequested).toBe(true);
   await expect(page.getByText("Approval request sent to Admins.")).toBeVisible();
+  expect(approvalRequested).toBe(true);
+  expect(approvalAttempts).toBe(2);
 });
 
 test("super admin approval email link opens the company and approves it", async ({ page }) => {

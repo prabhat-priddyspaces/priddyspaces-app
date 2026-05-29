@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useUser, useAuth } from "@clerk/nextjs";
 
-import { API_BASE_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { consumeOauthNext } from "@/lib/auth-redirect";
 import { COUNTRIES } from "@/lib/countries";
 import { type MeResponse } from "@/lib/me";
@@ -69,13 +69,9 @@ export default function OnboardingPersonalPage() {
     }
     setLoading(true);
     try {
-      const token = await getToken();
-      const res = await fetch(`${API_BASE_URL}/api/onboarding/profile`, {
+      const token = await getToken({ skipCache: true });
+      const me = await apiFetch<MeResponse>("/api/onboarding/profile", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           role: form.role,
           full_name: form.full_name,
@@ -85,12 +81,7 @@ export default function OnboardingPersonalPage() {
           terms_accepted: form.terms_accepted,
           privacy_policy_accepted: form.privacy_policy_accepted,
         }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Profile update failed");
-      }
-      const me: MeResponse = await res.json();
+      }, token ?? undefined);
       // Prime the shared cache so layout guards read fresh data on redirect
       updateMeCache(me);
       // Reload Clerk session so new publicMetadata.role is reflected in the JWT

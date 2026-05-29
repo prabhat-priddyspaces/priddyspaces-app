@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/api";
+import { fetchApiWithAuthRetry } from "@/lib/api";
 import type { AssistantChatResponse } from "@/lib/assistantTypes";
 
 export async function assistantStream(
@@ -6,14 +6,11 @@ export async function assistantStream(
   token?: string | null,
   onMessage?: (response: AssistantChatResponse) => void,
 ): Promise<AssistantChatResponse> {
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(`${API_BASE_URL}/api/assistant/chat?stream=true`, {
+  const res = await fetchApiWithAuthRetry("/api/assistant/chat?stream=true", {
     method: "POST",
-    credentials: "include",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  }, token);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || "Assistant request failed");

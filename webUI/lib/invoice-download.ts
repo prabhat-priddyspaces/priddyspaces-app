@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/api";
+import { fetchApiWithAuthRetry } from "@/lib/api";
 
 function filenameFromDisposition(disposition: string | null, fallback: string): string {
   if (!disposition) return fallback;
@@ -7,15 +7,7 @@ function filenameFromDisposition(disposition: string | null, fallback: string): 
 }
 
 export async function downloadInvoicePdf(publicId: string, token?: string): Promise<void> {
-  const headers = new Headers();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/invoices/${publicId}/pdf`, {
-    credentials: "include",
-    headers,
-  });
+  const response = await fetchApiWithAuthRetry(`/api/invoices/${publicId}/pdf`, {}, token);
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || "Unable to download invoice PDF");

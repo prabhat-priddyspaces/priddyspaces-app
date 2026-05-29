@@ -17,7 +17,12 @@
 import { useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 
-import { clearAccessToken, getActiveImpersonationToken, setAccessToken } from "@/lib/auth";
+import {
+  clearAccessToken,
+  getActiveImpersonationToken,
+  registerAccessTokenProvider,
+  setAccessToken,
+} from "@/lib/auth";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -28,16 +33,19 @@ export function ClerkTokenSync() {
     if (!isLoaded) return;
 
     if (!isSignedIn) {
+      registerAccessTokenProvider(null);
       clearAccessToken();
       return;
     }
+
+    registerAccessTokenProvider((options) => getToken(options));
 
     let cancelled = false;
 
     const sync = async () => {
       try {
         if (getActiveImpersonationToken()) return;
-        const token = await getToken();
+        const token = await getToken({ skipCache: true });
         if (!cancelled) {
           if (token) setAccessToken(token);
           else clearAccessToken();
@@ -52,6 +60,7 @@ export function ClerkTokenSync() {
     const id = window.setInterval(sync, REFRESH_INTERVAL_MS);
     return () => {
       cancelled = true;
+      registerAccessTokenProvider(null);
       window.clearInterval(id);
     };
   }, [isLoaded, isSignedIn, getToken]);

@@ -25,7 +25,7 @@ import { StatCard } from "@/components/charts/stat-card";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { apiFetch, fetchApiWithAuthRetry } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
 type Tab = "overview" | "occupancy" | "revenue" | "members" | "heatmap";
@@ -170,10 +170,7 @@ export default function OwnerAnalyticsPage() {
 
   function downloadExport(path: string, filename: string) {
     const token = getAccessToken() ?? "";
-    fetch(`${API_BASE_URL}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
-    })
+    fetchApiWithAuthRetry(path, {}, token)
       .then((res) => {
         if (!res.ok) throw new Error("Download failed");
         return res.blob();
