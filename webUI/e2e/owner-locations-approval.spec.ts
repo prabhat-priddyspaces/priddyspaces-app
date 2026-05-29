@@ -68,7 +68,7 @@ test("owner sees company review status on locations and can request approval", a
   await page.getByRole("button", { name: "Request approval" }).click();
 
   expect(approvalRequested).toBe(true);
-  await expect(page.getByText("Approval request sent to 1 super admin.")).toBeVisible();
+  await expect(page.getByText("Approval request sent to Admins.")).toBeVisible();
 });
 
 test("super admin approval email link opens the company and approves it", async ({ page }) => {

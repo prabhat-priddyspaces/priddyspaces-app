@@ -72,6 +72,6 @@ describe("LocationList", () => {
         "token",
       ),
     );
-    expect(await screen.findByText("Approval request sent to 1 super admin.")).toBeInTheDocument();
+    expect(await screen.findByText("Approval request sent to Admins.")).toBeInTheDocument();
   });
 });
