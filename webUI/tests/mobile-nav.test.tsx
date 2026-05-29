@@ -59,6 +59,7 @@ describe("MobileSidebarDrawer customer variant", () => {
     const drawer = screen.getByTestId("mobile-sidebar-drawer");
     const links = within(drawer);
     expect(links.getByText("Memberships")).toBeInTheDocument();
+    expect(links.getByText("Rewards")).toBeInTheDocument();
     expect(links.getByText("Invoices")).toBeInTheDocument();
     expect(links.getByText("Billing")).toBeInTheDocument();
   });

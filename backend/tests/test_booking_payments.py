@@ -189,6 +189,37 @@ def test_retry_after_failure_uses_new_attempt_and_idempotency_key(db_session, mo
     assert calls == [first_key, payment2.idempotency_key]
 
 
+def test_charge_failure_logs_structured_sanitized_context(db_session, monkeypatch, caplog):
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method)
+
+    class FailingProvider:
+        def charge_saved_method(self, **kwargs):
+            return ChargeResult(
+                status="failed",
+                failure_reason="declined\nprovider trace",
+                raw_response={"x": "fail"},
+            )
+
+    monkeypatch.setattr(
+        "app.services.booking_payments.PaymentProviderFactory.get",
+        lambda setting: FailingProvider(),
+    )
+
+    with caplog.at_level("WARNING", logger="app.services.booking_payments"):
+        req, _booking, payment = charge_booking_request(db_session, req)
+
+    assert payment is not None
+    assert payment.failure_reason == "declined provider trace"
+    assert "booking_payment_failed" in caplog.text
+    assert f"request_public_id={req.public_id}" in caplog.text
+    assert f"payment_public_id={payment.public_id}" in caplog.text
+    assert "provider=stripe" in caplog.text
+    assert "attempt=1" in caplog.text
+    assert f"payment_method_public_id={method.public_id}" in caplog.text
+    assert "failure_reason=declined provider trace" in caplog.text
+
+
 def test_double_charge_short_circuits_after_success(db_session, monkeypatch):
     _, member, space, setting, method = _seed(db_session)
     req = _make_request(db_session, member, space, setting, method)

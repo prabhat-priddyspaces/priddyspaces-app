@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import AvailabilityStatus, BookingRequestStatus, PaymentStatus, SpaceType, UserAppRole, UserRole
 from app.models.location import Location
-from app.models.loyalty import LoyaltyWallet, PriddyPointsWallet
+from app.models.loyalty import LoyaltyWallet, PriddyPointsLedgerEntry, PriddyPointsWallet
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
@@ -246,6 +246,63 @@ def test_member_registration_gets_priddy_points(db_session, client_factory):
     ).first()
     assert wallet is not None
     assert wallet.balance == 1000
+
+
+def test_priddy_wallet_read_repairs_signup_points_without_duplicates(db_session, client_factory):
+    customer = User(
+        email="repair-priddy@example.com",
+        auth_subject="sub-repair-priddy",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(customer)
+    db_session.commit()
+    client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+
+    first = client.get("/api/loyalty/priddy-wallet")
+    second = client.get("/api/loyalty/priddy-wallet")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["balance"] == 1000
+    assert second.json()["balance"] == 1000
+    wallet = db_session.query(PriddyPointsWallet).filter(PriddyPointsWallet.user_id == customer.id).one()
+    entries = db_session.query(PriddyPointsLedgerEntry).filter(
+        PriddyPointsLedgerEntry.wallet_id == wallet.id,
+        PriddyPointsLedgerEntry.entry_type == "signup_grant",
+    ).all()
+    assert len(entries) == 1
+
+
+def test_redemption_preview_repairs_priddy_signup_points(db_session, client_factory):
+    owner, customer, org, space, _method = _seed(db_session, space_type=SpaceType.SHARED_DESK)
+    space.price_daily = 10
+    db_session.add(space)
+    db_session.commit()
+    owner_client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+    settings = owner_client.put(
+        f"/api/loyalty/settings?organization_public_id={org.public_id}",
+        json={"accepts_priddy_points": True},
+    )
+    assert settings.status_code == 200
+    customer_client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+
+    preview = customer_client.post(
+        "/api/loyalty/redemptions/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 6, 9, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 6, 9, 17, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "day_pass",
+            "full_day": True,
+        },
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["priddy"]["eligible"] is True
+    assert preview.json()["priddy"]["balance"] == 1000
+    assert preview.json()["priddy"]["max_redeemable_points"] == 1000
 
 
 def test_priddy_points_cover_day_pass_without_card(db_session, client_factory):

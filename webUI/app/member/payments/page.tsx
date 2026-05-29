@@ -40,6 +40,20 @@ interface Invoice {
   payment_id: number | null;
 }
 
+interface BookingPaymentMethod {
+  public_id: string;
+  organization_public_id: string | null;
+  provider: string;
+  last4: string | null;
+  brand: string | null;
+  exp_month: number | null;
+  exp_year: number | null;
+  is_default_for_owner: boolean;
+  status: string;
+  billing_name: string | null;
+  created_at: string | null;
+}
+
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -119,6 +133,7 @@ function paymentWhen(payment: Payment): string {
 export default function MemberPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [bookingMethods, setBookingMethods] = useState<BookingPaymentMethod[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -128,10 +143,12 @@ export default function MemberPaymentsPage() {
     Promise.all([
       apiFetch<Payment[]>("/api/payments", { method: "GET" }, token).catch(() => []),
       apiFetch<Invoice[]>("/api/invoices", { method: "GET" }, token).catch(() => []),
+      apiFetch<BookingPaymentMethod[]>("/api/payment-methods", { method: "GET" }, token).catch(() => []),
     ])
-      .then(([paymentsResp, invoicesResp]) => {
+      .then(([paymentsResp, invoicesResp, methodsResp]) => {
         setPayments(paymentsResp);
         setInvoices(invoicesResp);
+        setBookingMethods(methodsResp);
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payments"))
       .finally(() => setLoading(false));
@@ -205,6 +222,55 @@ export default function MemberPaymentsPage() {
             </Card>
           ))}
         </div>
+
+        <Card className="mt-6 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-textPrimary">Booking payment methods</h2>
+              <p className="mt-1 text-sm text-textSecondary">
+                Cards authorized for booking charges. Membership billing cards are managed from Memberships.
+              </p>
+            </div>
+            <Link href="/member/subscriptions">
+              <Button size="sm" variant="secondary">Membership billing</Button>
+            </Link>
+          </div>
+          {loading ? (
+            <div className="mt-4 text-sm text-textMuted">Loading payment methods...</div>
+          ) : bookingMethods.length === 0 ? (
+            <div className="mt-4 text-sm text-textMuted">No booking payment methods yet.</div>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              {bookingMethods.map((method) => (
+                <div key={method.public_id} className="rounded-lg border border-border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-textPrimary">
+                        <CreditCard size={16} className="text-accent" />
+                        {(method.brand || method.provider || "Card").toUpperCase()} •••• {method.last4 || "----"}
+                        {method.is_default_for_owner ? (
+                          <Badge variant="success" dot>Default</Badge>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 text-xs text-textMuted">
+                        {method.organization_public_id || "Owner"} · {method.provider}
+                      </div>
+                      <div className="mt-2 text-sm text-textSecondary">
+                        {method.exp_month != null && method.exp_year != null
+                          ? `Expires ${String(method.exp_month).padStart(2, "0")}/${method.exp_year}`
+                          : "Expiration unavailable"}
+                        {method.billing_name ? ` · ${method.billing_name}` : ""}
+                      </div>
+                    </div>
+                    <Badge variant={method.status === "active" ? "success" : "default"} dot>
+                      {method.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         <Card className="mt-6 p-4">
           {loading ? (

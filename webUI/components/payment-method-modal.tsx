@@ -8,7 +8,6 @@ import { CardElement, Elements, useElements, useStripe } from "@stripe/react-str
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 interface SetupSession {
@@ -130,7 +129,7 @@ function StripeSetupForm({
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-1"
         />
-        <span>I authorize this owner to charge my card upon approval.</span>
+        <span>I authorize this owner to charge this card for approved or instant bookings.</span>
       </label>
       {message ? <div className="text-sm text-error">{message}</div> : null}
       <Button onClick={save} disabled={!stripe || saving || !consent}>
@@ -224,7 +223,7 @@ function CardPointeSetupForm({
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-1"
         />
-        <span>I authorize this owner to charge my card upon approval.</span>
+        <span>I authorize this owner to charge this card for approved or instant bookings.</span>
       </label>
       {message ? <div className="text-sm text-error">{message}</div> : null}
       <Button onClick={save} disabled={saving || !consent || !tokenValue}>
@@ -333,10 +332,10 @@ export function PaymentMethodModal({
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <div className="text-base font-semibold text-textPrimary">
-              {mode === "select" && savedMethods.length > 0 ? "Choose payment method" : "Add payment method"}
+              {mode === "select" && savedMethods.length > 0 ? "Choose booking card" : "Add booking card"}
             </div>
             <p className="mt-1 text-sm text-textSecondary">
-              You won&apos;t be charged now. Your card is only charged if the owner approves.
+              You won&apos;t be charged by this step. This card is authorized for booking charges with this owner.
             </p>
           </div>
           <button onClick={onClose} className="text-sm text-textMuted">
@@ -388,7 +387,7 @@ export function PaymentMethodModal({
                 onChange={(event) => setConsent(event.target.checked)}
                 className="mt-1"
               />
-              <span>I authorize this owner to charge my card upon approval.</span>
+              <span>I authorize this owner to charge this card for approved or instant bookings.</span>
             </label>
             <div className="flex flex-wrap gap-2">
               <Button onClick={useExisting} disabled={!selectedMethodId || !consent || savingExisting}>

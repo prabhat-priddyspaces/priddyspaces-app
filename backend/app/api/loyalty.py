@@ -42,6 +42,7 @@ from app.services.loyalty import (
     validate_settings,
     wallet_expiration_summary,
     write_ledger_entry,
+    grant_priddy_signup_points,
 )
 from app.services.platform_auth import get_or_create_platform_settings
 from app.services.org_member_stats import interacted_user_ids
@@ -124,7 +125,7 @@ def _wallet_out(db: Session, wallet: LoyaltyWallet, org: Organization) -> Loyalt
 
 def _priddy_wallet_out(db: Session, user: User) -> PriddyPointsWalletOut:
     settings = get_or_create_platform_settings(db)
-    wallet = get_or_create_priddy_wallet(db, user)
+    wallet = grant_priddy_signup_points(db, user) or get_or_create_priddy_wallet(db, user)
     point_value = settings.priddy_point_value_cents or 1
     return PriddyPointsWalletOut(
         public_id=wallet.public_id,
@@ -188,7 +189,7 @@ def priddy_wallet_transactions(
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
-    wallet = get_or_create_priddy_wallet(db, user)
+    wallet = grant_priddy_signup_points(db, user) or get_or_create_priddy_wallet(db, user)
     db.commit()
     rows = (
         db.query(PriddyPointsLedgerEntry)

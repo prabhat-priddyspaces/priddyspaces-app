@@ -30,11 +30,14 @@ from app.services.authz import get_org_member, require_location_roles, require_o
 from app.services.notifications import send_email
 from app.services.owner_payments import (
     count_open_requests_for_setting,
+    ensure_platform_stripe_customer,
     get_default_payment_method,
     get_enabled_owner_payment_setting,
+    import_platform_payment_method_for_owner,
     normalize_provider,
     resolve_payment_provider,
     set_default_payment_method,
+    stripe_setting_matches_platform,
 )
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
 
@@ -319,6 +322,13 @@ def resolve_member_payment_method(
             message="Owner payment provider is not configured",
         )
     method = get_default_payment_method(db, user.id, org.id, provider, setting.id)
+    reused_platform_payment_method = False
+    if not method and provider == "stripe":
+        method = import_platform_payment_method_for_owner(db, user=user, organization=org, setting=setting)
+        if method:
+            reused_platform_payment_method = True
+            db.commit()
+            db.refresh(method)
     return PaymentMethodResolveOut(
         provider=provider,
         owner_payment_setting_public_id=setting.public_id,
@@ -326,6 +336,7 @@ def resolve_member_payment_method(
         is_configured=True,
         has_payment_method=method is not None,
         payment_method_public_id=method.public_id if method else None,
+        reused_platform_payment_method=reused_platform_payment_method,
         publishable_key=setting.stripe_publishable_key if provider == "stripe" else None,
         tokenizer_url=setting.cardpointe_tokenizer_url if provider == "cardpointe" else None,
     )
@@ -345,11 +356,14 @@ def create_payment_method_setup_session(
     provider_name, org, _location = resolve_payment_provider(db, space)
     setting = get_enabled_owner_payment_setting(db, org.id, provider_name)
     existing_method = get_default_payment_method(db, user.id, org.id, provider_name, setting.id)
+    provider_customer_id = existing_method.provider_customer_id if existing_method else None
+    if provider_name == "stripe" and not provider_customer_id and stripe_setting_matches_platform(setting):
+        provider_customer_id = ensure_platform_stripe_customer(db, user)
     try:
         provider = PaymentProviderFactory.get(setting)
         session = provider.create_setup_session(
             user,
-            provider_customer_id=existing_method.provider_customer_id if existing_method else None,
+            provider_customer_id=provider_customer_id,
         )
     except PaymentProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

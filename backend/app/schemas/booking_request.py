@@ -230,3 +230,8 @@ class BookingRequestDecision(BaseModel):
 
 class BookingRequestRetryPayment(BaseModel):
     operator_notes: str | None = None
+
+
+class BookingRequestPaymentMethodUpdate(BaseModel):
+    member_owner_payment_method_public_id: str
+    payment_authorization_consent: bool = False

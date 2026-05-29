@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import { formatUsd, type MoneyValue } from "@/lib/money";
+import { PaymentMethodModal } from "@/components/payment-method-modal";
 
 interface BookingRequest {
   public_id: string;
@@ -33,10 +34,12 @@ interface BookingRequest {
   status: string;
   payment_status: string | null;
   payment_provider: string | null;
+  instant_booking: boolean;
   approved_at: string | null;
   rejected_at: string | null;
   cancelled_at: string | null;
   cancellation_deadline_at: string | null;
+  failure_reason: string | null;
 }
 
 function memberRequestDetailHref(publicId: string) {
@@ -97,19 +100,21 @@ export default function MemberRequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [paymentUpdateRequest, setPaymentUpdateRequest] = useState<BookingRequest | null>(null);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   useEffect(() => {
-  async function load() {
-    try {
-      const token = getAccessToken() ?? undefined;
-      const list = await apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token);
-      setBookings(list);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load requests");
-    } finally {
-      setLoading(false);
+    async function load() {
+      try {
+        const token = getAccessToken() ?? undefined;
+        const list = await apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token);
+        setBookings(list);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to load requests");
+      } finally {
+        setLoading(false);
+      }
     }
-  }
     load();
   }, []);
 
@@ -132,6 +137,40 @@ export default function MemberRequestsPage() {
       setError(err instanceof Error ? err.message : "Unable to cancel request");
     } finally {
       setCancelling(null);
+    }
+  }
+
+  async function handlePaymentMethodSaved(paymentMethodPublicId: string) {
+    if (!paymentUpdateRequest) return;
+    const token = getAccessToken() ?? undefined;
+    if (!token) return;
+    setUpdatingPayment(true);
+    setError(null);
+    try {
+      await apiFetch(
+        `/api/booking-requests/${paymentUpdateRequest.public_id}/payment-method`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            member_owner_payment_method_public_id: paymentMethodPublicId,
+            payment_authorization_consent: true,
+          }),
+        },
+        token,
+      );
+      if (paymentUpdateRequest.instant_booking) {
+        await apiFetch(
+          `/api/booking-requests/${paymentUpdateRequest.public_id}/retry-payment`,
+          { method: "POST", body: JSON.stringify({ operator_notes: null }) },
+          token,
+        );
+      }
+      await refreshRequests();
+      setPaymentUpdateRequest(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to update payment method");
+    } finally {
+      setUpdatingPayment(false);
     }
   }
 
@@ -234,7 +273,22 @@ export default function MemberRequestsPage() {
                 </div>
                 {b.status === "payment_failed" ? (
                   <div className="mt-3 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
-                    Payment failed when the owner approved this request. The owner can retry the charge after you update your payment method.
+                    <div>{b.failure_reason || "Your card could not be charged."}</div>
+                    <div className="mt-1 text-textSecondary">
+                      {b.instant_booking
+                        ? "Update your card to retry this booking."
+                        : "Update your card, then the owner can retry the charge."}
+                    </div>
+                    {b.space_public_id ? (
+                      <Button
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => setPaymentUpdateRequest(b)}
+                        disabled={updatingPayment}
+                      >
+                        {b.instant_booking ? "Update card and retry" : "Update card"}
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </Card>
@@ -242,6 +296,12 @@ export default function MemberRequestsPage() {
           </div>
         )}
       </div>
+      <PaymentMethodModal
+        open={Boolean(paymentUpdateRequest?.space_public_id)}
+        spacePublicId={paymentUpdateRequest?.space_public_id || ""}
+        onClose={() => setPaymentUpdateRequest(null)}
+        onSaved={handlePaymentMethodSaved}
+      />
     </main>
   );
 }

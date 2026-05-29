@@ -108,6 +108,36 @@ def _seed_payment_method(db, member: User, space: Space) -> MemberOwnerPaymentMe
     return method
 
 
+def _seed_extra_payment_method(
+    db,
+    member: User,
+    space: Space,
+    setting_id: int,
+    *,
+    provider_payment_method_id: str,
+    last4: str,
+) -> MemberOwnerPaymentMethod:
+    method = MemberOwnerPaymentMethod(
+        user_id=member.id,
+        organization_id=space.tenant_id,
+        tenant_id=space.tenant_id,
+        provider="stripe",
+        owner_payment_setting_id=setting_id,
+        provider_customer_id="cus_test",
+        provider_payment_method_id=provider_payment_method_id,
+        last4=last4,
+        brand="visa",
+        exp_month=12,
+        exp_year=2030,
+        is_default_for_owner=False,
+        status="active",
+    )
+    db.add(method)
+    db.commit()
+    db.refresh(method)
+    return method
+
+
 class FakeProvider:
     def charge_saved_method(self, **kwargs):
         return ChargeResult(status="succeeded", provider_payment_id="pi_owner_test", raw_response={"ok": True})
@@ -1010,6 +1040,111 @@ def test_payment_failure_marks_request_payment_failed(db_session, client_factory
     assert body["status"] == BookingRequestStatus.PAYMENT_FAILED.value
     assert body["payment_status"] == "failed"
     assert body["booking_id"] is None
+
+
+def test_member_can_update_card_and_retry_own_failed_instant_booking(db_session, client_factory, monkeypatch):
+    charged_methods: list[str] = []
+
+    class RecordingProvider:
+        def charge_saved_method(self, **kwargs):
+            charged_methods.append(kwargs["payment_method"].provider_payment_method_id)
+            return ChargeResult(status="succeeded", provider_payment_id="pi_retry_ok", raw_response={"ok": True})
+
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: RecordingProvider())
+    _owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="retry-member@example.com",
+        auth_subject="sub-retry-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    old_method = _seed_payment_method(db_session, member, space)
+    new_method = _seed_extra_payment_method(
+        db_session,
+        member,
+        space,
+        old_method.owner_payment_setting_id,
+        provider_payment_method_id="pm_new_card",
+        last4="4242",
+    )
+    req = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=member.id,
+        space_id=space.id,
+        start_datetime=datetime(2026, 3, 20, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 3, 20, 12, 0, tzinfo=timezone.utc),
+        status=BookingRequestStatus.PAYMENT_FAILED,
+        payment_status="failed",
+        instant_booking=True,
+        owner_payment_setting_id=old_method.owner_payment_setting_id,
+        payment_provider="stripe",
+        member_owner_payment_method_id=old_method.id,
+        payment_attempt_count=1,
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+    member_client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    update = member_client.post(
+        f"/api/booking-requests/{req.public_id}/payment-method",
+        json={
+            "member_owner_payment_method_public_id": new_method.public_id,
+            "payment_authorization_consent": True,
+        },
+    )
+    assert update.status_code == 200
+    assert update.json()["member_owner_payment_method_public_id"] == new_method.public_id
+
+    retry = member_client.post(f"/api/booking-requests/{req.public_id}/retry-payment", json={})
+    assert retry.status_code == 200
+    body = retry.json()
+    assert body["status"] == BookingRequestStatus.APPROVED.value
+    assert body["payment_status"] == "succeeded"
+    assert body["booking_id"] is not None
+    assert charged_methods == ["pm_new_card"]
+
+
+def test_member_cannot_retry_non_instant_failed_request(db_session, client_factory):
+    _owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="retry-noninstant@example.com",
+        auth_subject="sub-retry-noninstant",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    req = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=member.id,
+        space_id=space.id,
+        start_datetime=datetime(2026, 3, 21, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 3, 21, 12, 0, tzinfo=timezone.utc),
+        status=BookingRequestStatus.PAYMENT_FAILED,
+        payment_status="failed",
+        instant_booking=False,
+        owner_payment_setting_id=method.owner_payment_setting_id,
+        payment_provider="stripe",
+        member_owner_payment_method_id=method.id,
+        payment_attempt_count=1,
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+    member_client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    retry = member_client.post(f"/api/booking-requests/{req.public_id}/retry-payment", json={})
+
+    assert retry.status_code == 400
+    assert "Only instant booking" in retry.json()["detail"]
 
 
 def test_provider_switch_does_not_break_frozen_request(db_session, client_factory, monkeypatch):

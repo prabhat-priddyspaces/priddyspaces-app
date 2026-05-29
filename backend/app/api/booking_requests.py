@@ -45,6 +45,7 @@ from app.schemas.booking_request import (
     BookingRequestCreate,
     BookingRequestDecision,
     BookingRequestOut,
+    BookingRequestPaymentMethodUpdate,
     BookingRequestRetryPayment,
     BookingRequestSupportContact,
     GuestBookingRequestCreate,
@@ -1321,6 +1322,56 @@ def approve_booking_request(
     return _to_out(req, space, booking, db, include_email_delivery=True)
 
 
+@router.post("/booking-requests/{public_id}/payment-method", response_model=BookingRequestOut)
+def update_booking_request_payment_method(
+    public_id: str,
+    payload: BookingRequestPaymentMethodUpdate,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    require_verified_email_for_payments(user)
+    if user.role != UserAppRole.MEMBER:
+        raise HTTPException(status_code=403, detail="Member only")
+    if not payload.payment_authorization_consent:
+        raise HTTPException(status_code=400, detail="Payment authorization consent is required")
+
+    req = db.query(BookingRequest).filter(BookingRequest.public_id == public_id).with_for_update().first()
+    if not req or req.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+    if req.status != BookingRequestStatus.PAYMENT_FAILED:
+        raise HTTPException(status_code=400, detail="Request is not payment failed")
+    if not req.owner_payment_setting_id:
+        raise HTTPException(status_code=400, detail="This request does not support card retry")
+
+    space = db.query(Space).filter(Space.id == req.space_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+
+    method = (
+        db.query(MemberOwnerPaymentMethod)
+        .filter(
+            MemberOwnerPaymentMethod.public_id == payload.member_owner_payment_method_public_id,
+            MemberOwnerPaymentMethod.user_id == user.id,
+            MemberOwnerPaymentMethod.organization_id == req.tenant_id,
+            MemberOwnerPaymentMethod.owner_payment_setting_id == req.owner_payment_setting_id,
+            MemberOwnerPaymentMethod.status == "active",
+        )
+        .first()
+    )
+    if not method:
+        raise HTTPException(status_code=400, detail="Payment method is not valid for this request")
+
+    req.member_owner_payment_method_id = method.id
+    req.payment_provider = method.provider
+    req.payment_authorization_consent_at = datetime.now(timezone.utc)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    booking = _booking_for_request(db, req)
+    return _to_out(req, space, booking, db)
+
+
 @router.post("/booking-requests/{public_id}/retry-payment", response_model=BookingRequestOut)
 def retry_booking_request_payment(
     public_id: str,
@@ -1339,7 +1390,16 @@ def retry_booking_request_payment(
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         raise HTTPException(status_code=404, detail="Booking request not found")
-    require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
+    is_member_retry = user.role == UserAppRole.MEMBER
+    if is_member_retry:
+        if req.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Booking request not found")
+        if not req.instant_booking:
+            raise HTTPException(status_code=400, detail="Only instant booking payment failures can be retried by members")
+        if not req.member_owner_payment_method_id:
+            raise HTTPException(status_code=400, detail="Update payment method before retrying")
+    else:
+        require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
     if req.status != BookingRequestStatus.PAYMENT_FAILED:
         raise HTTPException(status_code=400, detail="Request is not payment failed")
     existing_booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None

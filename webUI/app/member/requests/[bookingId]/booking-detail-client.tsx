@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
@@ -11,6 +11,7 @@ import { downloadInvoicePdf } from "@/lib/invoice-download";
 import { formatUsd, type MoneyValue } from "@/lib/money";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PaymentMethodModal } from "@/components/payment-method-modal";
 
 interface PaymentSummary {
   status: string | null;
@@ -44,6 +45,7 @@ interface BookingRequest {
   status: string;
   payment_status: string | null;
   payment_provider: string | null;
+  instant_booking: boolean;
   cancellation_deadline_at: string | null;
   cancelled_at: string | null;
   approved_at: string | null;
@@ -127,8 +129,10 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+  const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!effectiveBookingId) {
       throw new Error("Booking request not found");
     }
@@ -141,7 +145,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
     setBooking(bookingResp);
     setPayments(paymentsResp);
     setInvoices(invoicesResp);
-  }
+  }, [effectiveBookingId]);
 
   useEffect(() => {
     setError("");
@@ -149,7 +153,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
     load()
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load booking"))
       .finally(() => setLoading(false));
-  }, [effectiveBookingId]);
+  }, [load]);
 
   const relatedPayment = useMemo(() => {
     if (!booking?.booking_id) return null;
@@ -212,6 +216,40 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
       setError(err instanceof Error ? err.message : "Unable to download invoice PDF");
     } finally {
       setDownloadingInvoice(false);
+    }
+  }
+
+  async function handlePaymentMethodSaved(paymentMethodPublicId: string) {
+    if (!booking) return;
+    const token = getAccessToken() ?? undefined;
+    if (!token) return;
+    setUpdatingPayment(true);
+    setError("");
+    try {
+      await apiFetch(
+        `/api/booking-requests/${booking.public_id}/payment-method`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            member_owner_payment_method_public_id: paymentMethodPublicId,
+            payment_authorization_consent: true,
+          }),
+        },
+        token,
+      );
+      if (booking.instant_booking) {
+        await apiFetch(
+          `/api/booking-requests/${booking.public_id}/retry-payment`,
+          { method: "POST", body: JSON.stringify({ operator_notes: null }) },
+          token,
+        );
+      }
+      setPaymentMethodOpen(false);
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to update payment method");
+    } finally {
+      setUpdatingPayment(false);
     }
   }
 
@@ -376,14 +414,19 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                     <div className="mt-1">{booking.failure_reason}</div>
                   ) : (
                     <div className="mt-1">
-                      Your card could not be charged. Update your payment method and the owner can retry the charge.
+                      Your card could not be charged.
                     </div>
                   )}
+                  <div className="mt-1 text-textSecondary">
+                    {booking.instant_booking
+                      ? "Update your card to retry this booking."
+                      : "Update your card, then the owner can retry the charge."}
+                  </div>
                   {booking.space_public_id ? (
                     <div className="mt-3">
-                      <Link href={`/member/spaces/${booking.space_public_id}`}>
-                        <Button size="sm">Update payment method</Button>
-                      </Link>
+                      <Button size="sm" onClick={() => setPaymentMethodOpen(true)} disabled={updatingPayment}>
+                        {booking.instant_booking ? "Update card and retry" : "Update card"}
+                      </Button>
                     </div>
                   ) : null}
                 </div>
@@ -434,6 +477,12 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
         ) : null}
       </div>
 
+      <PaymentMethodModal
+        open={paymentMethodOpen && Boolean(booking?.space_public_id)}
+        spacePublicId={booking?.space_public_id || ""}
+        onClose={() => setPaymentMethodOpen(false)}
+        onSaved={handlePaymentMethodSaved}
+      />
     </main>
   );
 }

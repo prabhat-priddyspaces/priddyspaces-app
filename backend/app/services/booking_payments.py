@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -31,6 +32,8 @@ from app.services.loyalty import (
     release_redemption_for_request,
     reverse_for_payment_refund,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -173,6 +176,11 @@ def _create_invoice(db: Session, *, req: BookingRequest, booking: Booking, payme
     invoice.platform_fee_amount = payment.platform_fee_amount
     invoice.owner_net_amount = payment.owner_net_amount
     db.add(invoice)
+
+
+def _sanitized_failure_reason(reason: str | None) -> str:
+    cleaned = str(reason or "Payment failed").replace("\n", " ").replace("\r", " ").strip()
+    return cleaned[:512]
 
 
 def charge_booking_request(
@@ -390,7 +398,7 @@ def charge_booking_request(
         record_earned_for_payment(db, payment, booking=booking, booking_request=req)
         return req, booking, payment
 
-    failure_reason = result.failure_reason if result else failure_reason
+    failure_reason = _sanitized_failure_reason(result.failure_reason if result else failure_reason)
     payment.status = PaymentStatus.FAILED
     payment.failure_reason = failure_reason
     payment.raw_response = result.raw_response if result else {"error": failure_reason}
@@ -411,6 +419,15 @@ def charge_booking_request(
             Booking.status == BookingStatus.PENDING,
         ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
     release_redemption_for_request(db, req, reason="released")
+    logger.warning(
+        "booking_payment_failed request_public_id=%s payment_public_id=%s provider=%s attempt=%s payment_method_public_id=%s failure_reason=%s",
+        req.public_id,
+        payment.public_id,
+        setting.provider if setting else None,
+        attempt,
+        method.public_id if method else None,
+        failure_reason,
+    )
     db.add(payment)
     db.add(req)
     db.commit()

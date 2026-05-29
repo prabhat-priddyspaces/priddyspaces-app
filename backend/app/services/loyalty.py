@@ -723,7 +723,7 @@ def preview_redemption(
         raise HTTPException(status_code=404, detail="Organization not found")
     settings = get_settings(db, organization.id)
     wallet = get_or_create_wallet(db, organization, user, grant_signup=False)
-    priddy_wallet = get_or_create_priddy_wallet(db, user)
+    priddy_wallet = grant_priddy_signup_points(db, user) or get_or_create_priddy_wallet(db, user)
     subtotal_cents = calculate_booking_subtotal_cents(
         db,
         space,

@@ -49,6 +49,7 @@ class PaymentMethodResolveOut(BaseModel):
     is_configured: bool
     has_payment_method: bool
     payment_method_public_id: str | None = None
+    reused_platform_payment_method: bool = False
     publishable_key: str | None = None
     tokenizer_url: str | None = None
     message: str | None = None

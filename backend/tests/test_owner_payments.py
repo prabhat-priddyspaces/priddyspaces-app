@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+from app.core.config import settings
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import AvailabilityStatus, SpaceType, UserAppRole, UserRole
 from app.models.location import Location
@@ -61,6 +64,21 @@ def _owner_space(db):
     db.commit()
     db.refresh(space)
     return owner, org, space
+
+
+def _stripe_setting(db, org: Organization, secret: str = "sk_test_owner") -> OwnerPaymentSetting:
+    setting = OwnerPaymentSetting(
+        organization_id=org.id,
+        tenant_id=org.id,
+        provider="stripe",
+        is_enabled=True,
+        stripe_publishable_key="pk_test_owner",
+        stripe_secret_key_encrypted=secret,
+    )
+    db.add(setting)
+    db.commit()
+    db.refresh(setting)
+    return setting
 
 
 def test_owner_payment_settings_and_member_method_scope(db_session, client_factory):
@@ -132,6 +150,137 @@ def test_owner_payment_settings_and_member_method_scope(db_session, client_facto
     resolved = member_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
     assert resolved.json()["has_payment_method"] is True
     assert resolved.json()["payment_method_public_id"] == method.json()["public_id"]
+
+
+def test_same_account_stripe_portal_card_imports_for_owner_scope(db_session, client_factory, monkeypatch):
+    _owner, org, space = _owner_space(db_session)
+    _stripe_setting(db_session, org, secret="sk_platform")
+    member = _user(db_session, "portal-card@example.com", "sub-portal-card", UserAppRole.MEMBER)
+    member.stripe_customer_id = "cus_platform"
+    db_session.add(member)
+    db_session.commit()
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_platform")
+
+    def fake_customer_retrieve(*args, **kwargs):
+        assert args[0] == "cus_platform"
+        return {
+            "invoice_settings": {
+                "default_payment_method": {
+                    "id": "pm_portal_default",
+                    "customer": "cus_platform",
+                    "card": {"last4": "1111", "brand": "visa", "exp_month": 11, "exp_year": 2034},
+                    "billing_details": {"name": "Portal User", "address": {"postal_code": "10001"}},
+                }
+            }
+        }
+
+    monkeypatch.setattr("app.services.owner_payments.stripe.Customer.retrieve", fake_customer_retrieve)
+    client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    resolved = client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
+
+    assert resolved.status_code == 200
+    body = resolved.json()
+    assert body["has_payment_method"] is True
+    assert body["reused_platform_payment_method"] is True
+    method = db_session.query(MemberOwnerPaymentMethod).one()
+    assert method.provider_payment_method_id == "pm_portal_default"
+    assert method.provider_customer_id == "cus_platform"
+    assert method.last4 == "1111"
+
+
+def test_mismatched_stripe_account_does_not_import_platform_card(db_session, client_factory, monkeypatch):
+    _owner, org, space = _owner_space(db_session)
+    _stripe_setting(db_session, org, secret="sk_owner")
+    member = _user(db_session, "separate-account@example.com", "sub-separate-account", UserAppRole.MEMBER)
+    member.stripe_customer_id = "cus_platform"
+    db_session.add(member)
+    db_session.commit()
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_platform")
+
+    def fake_account_retrieve(*, api_key):
+        return {"id": "acct_platform" if api_key == "sk_platform" else "acct_owner"}
+
+    def fail_customer_retrieve(*args, **kwargs):
+        raise AssertionError("Platform cards should not be inspected for a separate owner Stripe account")
+
+    monkeypatch.setattr("app.services.owner_payments.stripe.Account.retrieve", fake_account_retrieve)
+    monkeypatch.setattr("app.services.owner_payments.stripe.Customer.retrieve", fail_customer_retrieve)
+    client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    resolved = client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
+
+    assert resolved.status_code == 200
+    assert resolved.json()["has_payment_method"] is False
+    assert db_session.query(MemberOwnerPaymentMethod).count() == 0
+
+
+def test_same_account_stripe_setup_uses_platform_customer(db_session, client_factory, monkeypatch):
+    _owner, org, space = _owner_space(db_session)
+    _stripe_setting(db_session, org, secret="sk_platform")
+    member = _user(db_session, "setup-platform@example.com", "sub-setup-platform", UserAppRole.MEMBER)
+    member.stripe_customer_id = "cus_platform"
+    db_session.add(member)
+    db_session.commit()
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_platform")
+    captured: dict[str, str | None] = {}
+
+    class Provider:
+        def create_setup_session(self, user, provider_customer_id=None):
+            captured["provider_customer_id"] = provider_customer_id
+            return SimpleNamespace(
+                provider="stripe",
+                provider_customer_id=provider_customer_id,
+                client_secret="seti_secret",
+                setup_intent_id="seti_1",
+                publishable_key="pk_test_owner",
+                tokenizer_url=None,
+            )
+
+    monkeypatch.setattr("app.api.owner_payments.PaymentProviderFactory.get", lambda setting: Provider())
+    client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    response = client.post("/api/payment-methods/setup-session", json={"space_public_id": space.public_id})
+
+    assert response.status_code == 200
+    assert captured["provider_customer_id"] == "cus_platform"
+    assert response.json()["provider_customer_id"] == "cus_platform"
+
+
+def test_separate_stripe_account_setup_keeps_owner_customer_scope(db_session, client_factory, monkeypatch):
+    _owner, org, space = _owner_space(db_session)
+    _stripe_setting(db_session, org, secret="sk_owner")
+    member = _user(db_session, "setup-owner@example.com", "sub-setup-owner", UserAppRole.MEMBER)
+    member.stripe_customer_id = "cus_platform"
+    db_session.add(member)
+    db_session.commit()
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "sk_platform")
+    captured: dict[str, str | None] = {}
+
+    def fake_account_retrieve(*, api_key):
+        return {"id": "acct_platform" if api_key == "sk_platform" else "acct_owner"}
+
+    class Provider:
+        def create_setup_session(self, user, provider_customer_id=None):
+            captured["provider_customer_id"] = provider_customer_id
+            return SimpleNamespace(
+                provider="stripe",
+                provider_customer_id="cus_owner_new",
+                client_secret="seti_secret",
+                setup_intent_id="seti_1",
+                publishable_key="pk_test_owner",
+                tokenizer_url=None,
+            )
+
+    monkeypatch.setattr("app.services.owner_payments.stripe.Account.retrieve", fake_account_retrieve)
+    monkeypatch.setattr("app.api.owner_payments.PaymentProviderFactory.get", lambda setting: Provider())
+    client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    response = client.post("/api/payment-methods/setup-session", json={"space_public_id": space.public_id})
+
+    assert response.status_code == 200
+    assert captured["provider_customer_id"] is None
+    assert response.json()["provider_customer_id"] == "cus_owner_new"
 
 
 def test_unverified_member_cannot_start_payment_setup(db_session, client_factory):
