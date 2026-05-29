@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -8,6 +8,7 @@ import { useMe } from "@/hooks/useMe";
 import { useAppSignOut } from "@/hooks/useAppSignOut";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
+import { MobileSidebarDrawer } from "@/components/shell/mobile-sidebar-drawer";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Topbar } from "@/components/shell/topbar";
@@ -37,6 +38,7 @@ export function AppShell({
   const { me } = useMe();
   const appSignOut = useAppSignOut();
   const router = useRouter();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const profile = me
     ? {
@@ -53,6 +55,7 @@ export function AppShell({
     <Topbar
       title={title}
       breadcrumb={breadcrumb}
+      onMenuClick={() => setMobileNavOpen(true)}
       actions={
         <>
           {me?.platform_role ? (
@@ -77,19 +80,28 @@ export function AppShell({
   );
 
   return (
-    <WorkspaceShell
-      sidebar="owner"
-      sidebarProfile={profile}
-      onProfileClick={() => router.push("/owner/account")}
-      topbar={topbar}
-      banner={
-        <ImpersonationBanner
-          impersonation={me?.impersonation ?? EMPTY_IMPERSONATION}
-        />
-      }
-    >
-      {children}
-      <MobileBottomNav variant="owner" />
-    </WorkspaceShell>
+    <>
+      <MobileSidebarDrawer
+        open={mobileNavOpen}
+        variant="owner"
+        profile={profile}
+        onClose={() => setMobileNavOpen(false)}
+        onProfileClick={() => router.push("/owner/account")}
+      />
+      <WorkspaceShell
+        sidebar="owner"
+        sidebarProfile={profile}
+        onProfileClick={() => router.push("/owner/account")}
+        topbar={topbar}
+        banner={
+          <ImpersonationBanner
+            impersonation={me?.impersonation ?? EMPTY_IMPERSONATION}
+          />
+        }
+      >
+        {children}
+        <MobileBottomNav variant="owner" />
+      </WorkspaceShell>
+    </>
   );
 }
