@@ -637,7 +637,7 @@ export function PublicSpaceDetailView({
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-bg">
+      <main className="w-full min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-[1320px] px-6 py-8 text-sm text-text-3">Loading listing…</div>
       </main>
@@ -646,7 +646,7 @@ export function PublicSpaceDetailView({
 
   if (error && !detail) {
     return (
-      <main className="min-h-screen bg-bg">
+      <main className="w-full min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-[1320px] px-6 py-8">
           <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
@@ -664,7 +664,7 @@ export function PublicSpaceDetailView({
   }
 
   return (
-    <main className="min-h-screen bg-bg">
+    <main className="w-full min-h-screen bg-bg">
       <PublicTopbar />
       <div className="mx-auto max-w-[1320px] px-6 py-8">
         <Link href={backHref} className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline">
