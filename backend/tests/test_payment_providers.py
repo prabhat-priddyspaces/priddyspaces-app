@@ -91,6 +91,26 @@ def test_stripe_charge_requires_pm_and_customer():
         )
 
 
+def test_stripe_save_requires_confirmed_card_metadata(monkeypatch):
+    provider = StripePaymentProvider(_stripe_setting())
+
+    monkeypatch.setattr(
+        "app.services.payment_providers.stripe.SetupIntent.retrieve",
+        lambda *args, **kwargs: {"payment_method": "pm_incomplete", "customer": "cus_1"},
+    )
+    monkeypatch.setattr(
+        "app.services.payment_providers.stripe.PaymentMethod.retrieve",
+        lambda *args, **kwargs: {
+            "id": "pm_incomplete",
+            "customer": "cus_1",
+            "card": {"brand": "visa", "last4": None, "exp_month": 12, "exp_year": 2030},
+        },
+    )
+
+    with pytest.raises(PaymentProviderError, match="Card details are incomplete"):
+        provider.save_payment_method({"setup_intent_id": "seti_1"})
+
+
 def test_cardpointe_charge_approved_response():
     provider = CardPointePaymentProvider(_cardpointe_setting())
     method = MemberOwnerPaymentMethod(
@@ -156,6 +176,11 @@ def test_cardpointe_failure_reason_known_code():
 def test_cardpointe_failure_reason_unknown_code_falls_back_to_resptext():
     reason = _cardpointe_failure_reason({"respcode": "999", "resptext": "Mystery"})
     assert reason == "Mystery"
+
+
+def test_cardpointe_failure_reason_raw_zero_is_generic():
+    reason = _cardpointe_failure_reason({"respcode": "999", "resptext": "0"})
+    assert "processor declined" in reason
 
 
 def test_cardpointe_respcode_table_has_essentials():

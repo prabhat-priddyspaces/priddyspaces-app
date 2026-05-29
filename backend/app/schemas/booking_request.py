@@ -173,6 +173,10 @@ class BookingRequestOut(BaseModel):
     payment_status: str | None = None
     payment_provider: str | None = None
     member_owner_payment_method_public_id: str | None = None
+    payment_method_brand: str | None = None
+    payment_method_last4: str | None = None
+    payment_method_exp_month: int | None = None
+    payment_method_exp_year: int | None = None
     redemption_lock_public_id: str | None = None
     loyalty_points_used: int = 0
     loyalty_discount_cents: int = 0

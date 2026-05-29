@@ -80,6 +80,7 @@ class MemberOwnerPaymentMethodCreate(BaseModel):
     brand: str | None = None
     exp_month: int | None = None
     exp_year: int | None = None
+    expiration: str | None = None
     billing_name: str | None = None
     billing_zip: str | None = None
 
@@ -87,6 +88,7 @@ class MemberOwnerPaymentMethodCreate(BaseModel):
 class MemberOwnerPaymentMethodOut(BaseModel):
     public_id: str
     organization_public_id: str | None = None
+    organization_name: str | None = None
     provider: str
     owner_payment_setting_public_id: str | None = None
     last4: str | None = None

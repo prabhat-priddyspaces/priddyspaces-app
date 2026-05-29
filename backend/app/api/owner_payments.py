@@ -31,10 +31,12 @@ from app.services.notifications import send_email
 from app.services.owner_payments import (
     count_open_requests_for_setting,
     ensure_platform_stripe_customer,
+    ensure_payment_method_chargeable,
     get_default_payment_method,
     get_enabled_owner_payment_setting,
     import_platform_payment_method_for_owner,
     normalize_provider,
+    payment_method_is_chargeable,
     resolve_payment_provider,
     set_default_payment_method,
     stripe_setting_matches_platform,
@@ -85,6 +87,7 @@ def _serialize_method(
     return MemberOwnerPaymentMethodOut(
         public_id=method.public_id,
         organization_public_id=organization.public_id if organization else None,
+        organization_name=organization.name if organization else None,
         provider=method.provider,
         owner_payment_setting_public_id=setting.public_id if setting else None,
         last4=method.last4,
@@ -329,6 +332,12 @@ def resolve_member_payment_method(
             reused_platform_payment_method = True
             db.commit()
             db.refresh(method)
+    if method:
+        if ensure_payment_method_chargeable(db, method, setting):
+            db.commit()
+            db.refresh(method)
+        else:
+            method = None
     return PaymentMethodResolveOut(
         provider=provider,
         owner_payment_setting_public_id=setting.public_id,
@@ -356,6 +365,12 @@ def create_payment_method_setup_session(
     provider_name, org, _location = resolve_payment_provider(db, space)
     setting = get_enabled_owner_payment_setting(db, org.id, provider_name)
     existing_method = get_default_payment_method(db, user.id, org.id, provider_name, setting.id)
+    if existing_method:
+        if ensure_payment_method_chargeable(db, existing_method, setting):
+            db.commit()
+            db.refresh(existing_method)
+        else:
+            existing_method = None
     provider_customer_id = existing_method.provider_customer_id if existing_method else None
     if provider_name == "stripe" and not provider_customer_id and stripe_setting_matches_platform(setting):
         provider_customer_id = ensure_platform_stripe_customer(db, user)
@@ -419,6 +434,8 @@ def save_member_payment_method(
         billing_name=payload.billing_name,
         billing_zip=payload.billing_zip,
     )
+    if not payment_method_is_chargeable(method):
+        raise HTTPException(status_code=400, detail="Card details are incomplete. Please add the card again.")
     set_default_payment_method(db, method)
     db.add(method)
     db.commit()
@@ -461,9 +478,14 @@ def list_member_payment_methods(
         organization.id: organization
         for organization in db.query(Organization).filter(Organization.id.in_(org_ids)).all()
     } if org_ids else {}
+    visible_methods: list[MemberOwnerPaymentMethod] = []
+    for method in methods:
+        if ensure_payment_method_chargeable(db, method, settings_by_id.get(method.owner_payment_setting_id)):
+            visible_methods.append(method)
+    db.commit()
     return [
         _serialize_method(method, orgs_by_id.get(method.organization_id), settings_by_id.get(method.owner_payment_setting_id))
-        for method in methods
+        for method in visible_methods
     ]
 
 
@@ -518,6 +540,9 @@ def make_member_payment_method_default(
     )
     if not method:
         raise HTTPException(status_code=404, detail="Payment method not found")
+    setting = db.query(OwnerPaymentSetting).filter(OwnerPaymentSetting.id == method.owner_payment_setting_id).first()
+    if not ensure_payment_method_chargeable(db, method, setting):
+        raise HTTPException(status_code=400, detail="Payment method is incomplete; add the card again")
     set_default_payment_method(db, method)
     db.commit()
     db.refresh(method)

@@ -47,8 +47,28 @@ const payment = {
   space_type: "conference_room",
   location_name: "Downtown Hub",
   location_city: "Miami",
+  organization_name: "Downtown Hub",
+  payment_method_brand: "visa",
+  payment_method_last4: "4242",
+  payment_method_exp_month: 12,
+  payment_method_exp_year: 2030,
   failure_reason: null,
   created_at: "2026-05-01T16:04:00.000Z",
+};
+
+const bookingMethod = {
+  public_id: "pm_booking_1",
+  organization_public_id: "org_1",
+  organization_name: "Downtown Hub",
+  provider: "stripe",
+  last4: "4242",
+  brand: "visa",
+  exp_month: 12,
+  exp_year: 2030,
+  is_default_for_owner: true,
+  status: "active",
+  billing_name: "Member User",
+  created_at: "2026-05-01T16:00:00.000Z",
 };
 
 async function mockBillingApi(page: import("@playwright/test").Page) {
@@ -70,6 +90,11 @@ async function mockBillingApi(page: import("@playwright/test").Page) {
 
     if (key === "GET /api/payments") {
       await json(route, [payment]);
+      return;
+    }
+
+    if (key === "GET /api/payment-methods") {
+      await json(route, [bookingMethod]);
       return;
     }
 
@@ -111,6 +136,8 @@ test("member payments show space context and download the invoice PDF", async ({
   await page.goto("/member/payments");
 
   await expect(page.getByRole("heading", { name: "Payments" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Membership billing" })).toBeVisible();
+  await expect(page.getByText("Visa ending in 4242").first()).toBeVisible();
   await expect(page.getByText("Booking payment · Board Room")).toBeVisible();
   await expect(page.getByText("Downtown Hub · Miami · Conference Room")).toBeVisible();
   await expect(page.getByText("Invoice inv_board_room_1")).toBeVisible();

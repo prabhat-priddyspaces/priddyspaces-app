@@ -34,6 +34,10 @@ interface BookingRequest {
   status: string;
   payment_status: string | null;
   payment_provider: string | null;
+  payment_method_brand: string | null;
+  payment_method_last4: string | null;
+  payment_method_exp_month: number | null;
+  payment_method_exp_year: number | null;
   instant_booking: boolean;
   approved_at: string | null;
   rejected_at: string | null;
@@ -93,6 +97,24 @@ function decisionLine(request: BookingRequest) {
     return `Cancelled at ${formatDateTime(request.cancelled_at)}`;
   }
   return null;
+}
+
+function cardLine(request: BookingRequest) {
+  if (!request.payment_method_last4) return null;
+  const brand = formatSpaceType(request.payment_method_brand || "card");
+  const expiry =
+    request.payment_method_exp_month != null && request.payment_method_exp_year != null
+      ? ` · Expires ${String(request.payment_method_exp_month).padStart(2, "0")}/${request.payment_method_exp_year}`
+      : "";
+  return `${brand} ending in ${request.payment_method_last4}${expiry}`;
+}
+
+function paymentFailureReason(reason: string | null) {
+  const text = (reason || "").trim();
+  if (!text || ["0", "failed", "payment failed"].includes(text.toLowerCase())) {
+    return "The payment processor declined the charge. Update the card or contact the card issuer for details.";
+  }
+  return text;
 }
 
 export default function MemberRequestsPage() {
@@ -237,8 +259,8 @@ export default function MemberRequestsPage() {
                     ) : null}
                     <div className="mt-1 text-textMuted">
                       Payment: <span className="capitalize">{formatStatus(b.payment_status || "not charged")}</span>
-                      {b.payment_provider ? ` • ${b.payment_provider}` : ""}
                     </div>
+                    {cardLine(b) ? <div className="mt-1 text-textMuted">{cardLine(b)}</div> : null}
                     {b.cancellation_deadline_at ? (
                       <div className="mt-1 text-textMuted">
                         Cancel by {new Date(b.cancellation_deadline_at).toLocaleString()}
@@ -273,7 +295,7 @@ export default function MemberRequestsPage() {
                 </div>
                 {b.status === "payment_failed" ? (
                   <div className="mt-3 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
-                    <div>{b.failure_reason || "Your card could not be charged."}</div>
+                    <div>{paymentFailureReason(b.failure_reason)}</div>
                     <div className="mt-1 text-textSecondary">
                       {b.instant_booking
                         ? "Update your card to retry this booking."
@@ -299,6 +321,7 @@ export default function MemberRequestsPage() {
       <PaymentMethodModal
         open={Boolean(paymentUpdateRequest?.space_public_id)}
         spacePublicId={paymentUpdateRequest?.space_public_id || ""}
+        initialMode="add"
         onClose={() => setPaymentUpdateRequest(null)}
         onSaved={handlePaymentMethodSaved}
       />

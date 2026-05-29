@@ -27,6 +27,7 @@ describe("MemberPaymentsPage", () => {
           {
             public_id: "pm_1",
             organization_public_id: "org_1",
+            organization_name: "Skyline Works",
             provider: "stripe",
             last4: "4242",
             brand: "visa",
@@ -47,11 +48,9 @@ describe("MemberPaymentsPage", () => {
     render(<MemberPaymentsPage />);
 
     expect(await screen.findByText("Booking payment methods")).toBeInTheDocument();
-    expect(await screen.findByText((text) => text.includes("VISA") && text.includes("4242"))).toBeInTheDocument();
-    expect(screen.getByText(/Membership billing cards are managed from Memberships\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Membership billing" })).toHaveAttribute(
-      "href",
-      "/member/subscriptions",
-    );
+    expect(await screen.findByText("Visa ending in 4242")).toBeInTheDocument();
+    expect(screen.getByText(/Membership billing is managed from this page\./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Membership billing" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Marketplace" })).not.toBeInTheDocument();
   });
 });

@@ -84,7 +84,8 @@ from app.services.membership_subscriptions import (
     MembershipBillingError,
     create_subscription as create_stripe_subscription,
 )
-from app.services.owner_payments import require_payment_method_for_request
+from app.services.owner_payments import ensure_payment_method_chargeable, require_payment_method_for_request
+from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.pricing import (
     EstimateResult,
     VolumeDiscount,
@@ -331,10 +332,10 @@ def _to_out(
                 amount_cents=last_payment.amount_cents,
                 currency=last_payment.currency,
                 attempt_number=last_payment.attempt_number,
-                failure_reason=last_payment.failure_reason,
+                failure_reason=normalize_payment_failure_reason(last_payment.failure_reason) if last_payment.failure_reason else None,
                 attempted_at=last_payment.created_at,
             )
-            failure_reason = last_payment.failure_reason
+            failure_reason = normalize_payment_failure_reason(last_payment.failure_reason) if last_payment.failure_reason else None
     payment_breakdown = None
     refund_policy_snapshot = None
     if req.pricing_snapshot:
@@ -396,6 +397,10 @@ def _to_out(
         payment_status=req.payment_status,
         payment_provider=req.payment_provider,
         member_owner_payment_method_public_id=payment_method_public_id,
+        payment_method_brand=payment_method.brand if payment_method else None,
+        payment_method_last4=payment_method.last4 if payment_method else None,
+        payment_method_exp_month=payment_method.exp_month if payment_method else None,
+        payment_method_exp_year=payment_method.exp_year if payment_method else None,
         redemption_lock_public_id=redemption_lock_public_id,
         loyalty_points_used=loyalty_points_used,
         loyalty_discount_cents=loyalty_discount_cents,
@@ -1361,6 +1366,13 @@ def update_booking_request_payment_method(
     )
     if not method:
         raise HTTPException(status_code=400, detail="Payment method is not valid for this request")
+    setting = (
+        db.query(OwnerPaymentSetting)
+        .filter(OwnerPaymentSetting.id == req.owner_payment_setting_id)
+        .first()
+    )
+    if not ensure_payment_method_chargeable(db, method, setting):
+        raise HTTPException(status_code=400, detail="Payment method is incomplete; add the card again")
 
     req.member_owner_payment_method_id = method.id
     req.payment_provider = method.provider

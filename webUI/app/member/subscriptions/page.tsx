@@ -36,22 +36,6 @@ export default function MemberSubscriptionsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleManageBilling() {
-    const token = getAccessToken() ?? undefined;
-    if (!token) return;
-    setMessage("");
-    try {
-      const session = await apiFetch<{ url: string }>(
-        "/api/payments/member-portal",
-        { method: "POST" },
-        token
-      );
-      window.location.assign(session.url);
-    } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : "Unable to open billing settings");
-    }
-  }
-
   async function handleCancel(publicId: string) {
     const token = getAccessToken() ?? undefined;
     if (!token) return;
@@ -94,13 +78,10 @@ export default function MemberSubscriptionsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-textPrimary">Memberships</h1>
             <p className="mt-1 text-textSecondary">
-              Manage your active workspace subscriptions and membership billing settings.
+              Manage your active workspace memberships.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={handleManageBilling}>
-              Membership billing
-            </Button>
             <Link href="/member">
               <Button variant="secondary">Find a space</Button>
             </Link>
@@ -113,7 +94,7 @@ export default function MemberSubscriptionsPage() {
           <Card className="mt-6 border border-border p-4">
             <div className="text-sm font-semibold text-textPrimary">Billing attention needed</div>
             <div className="mt-1 text-sm text-textSecondary">
-              One or more memberships are past due. Open membership billing to update the payment method.
+              One or more memberships are past due. Visit Payments to update membership billing.
             </div>
           </Card>
         ) : null}
@@ -163,9 +144,6 @@ export default function MemberSubscriptionsPage() {
                         </Button>
                       </Link>
                     ) : null}
-                    <Button size="sm" variant="secondary" onClick={handleManageBilling}>
-                      Membership billing
-                    </Button>
                     {subscription.status !== "canceled" && subscription.status !== "canceling" ? (
                       <Button
                         size="sm"

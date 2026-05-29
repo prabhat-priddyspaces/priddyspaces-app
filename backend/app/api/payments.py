@@ -8,7 +8,9 @@ from app.core.config import settings
 from app.db.deps import get_db
 from app.models.payment import Payment
 from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
 from app.models.location import Location
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.subscription import Subscription
 from app.models.space import Space
 from app.models.user import User
@@ -29,6 +31,7 @@ from app.models.tax_config import TaxConfig
 from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import accessible_location_ids, get_org_member, list_org_members, require_owner_or_admin
 from app.services.pricing import estimate_booking_amount
+from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.stripe_payments import (
     create_billing_portal_session,
     create_customer,
@@ -42,22 +45,33 @@ router = APIRouter()
 
 def _payment_context(
     db: Session, payment: Payment
-) -> tuple[Booking | None, Subscription | None, Space | None, Location | None]:
+) -> tuple[Booking | None, BookingRequest | None, Subscription | None, Space | None, Location | None]:
     booking = db.query(Booking).filter(Booking.id == payment.booking_id).first() if payment.booking_id else None
+    booking_request = (
+        db.query(BookingRequest).filter(BookingRequest.id == payment.booking_request_id).first()
+        if payment.booking_request_id
+        else None
+    )
     subscription = (
         db.query(Subscription).filter(Subscription.id == payment.subscription_id).first()
         if payment.subscription_id
         else None
     )
-    space_id = booking.space_id if booking else subscription.space_id if subscription else None
+    space_id = booking.space_id if booking else booking_request.space_id if booking_request else subscription.space_id if subscription else None
     space = db.query(Space).filter(Space.id == space_id).first() if space_id else None
     location = db.query(Location).filter(Location.id == space.location_id).first() if space else None
-    return booking, subscription, space, location
+    return booking, booking_request, subscription, space, location
 
 
 def _to_out(db: Session, payment: Payment) -> PaymentOut:
-    booking, subscription, space, location = _payment_context(db, payment)
+    booking, booking_request, subscription, space, location = _payment_context(db, payment)
     member = db.query(User).filter(User.id == payment.user_id).first() if payment.user_id else None
+    org = db.query(Organization).filter(Organization.id == payment.tenant_id).first() if payment.tenant_id else None
+    method = (
+        db.query(MemberOwnerPaymentMethod).filter(MemberOwnerPaymentMethod.id == payment.payment_method_id).first()
+        if payment.payment_method_id
+        else None
+    )
     return PaymentOut(
         id=payment.id,
         public_id=payment.public_id,
@@ -74,6 +88,7 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
         member_email=member.email if member else None,
         booking_id=payment.booking_id,
         booking_public_id=booking.public_id if booking else None,
+        booking_request_public_id=booking_request.public_id if booking_request else None,
         booking_start_datetime=booking.start_datetime if booking else None,
         booking_end_datetime=booking.end_datetime if booking else None,
         booking_request_id=payment.booking_request_id,
@@ -87,7 +102,14 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
         location_public_id=location.public_id if location else None,
         location_name=location.name if location else None,
         location_city=location.city if location else None,
+        organization_public_id=org.public_id if org else None,
+        organization_name=org.name if org else None,
         payment_method_id=payment.payment_method_id,
+        payment_method_public_id=method.public_id if method else None,
+        payment_method_brand=method.brand if method else None,
+        payment_method_last4=method.last4 if method else None,
+        payment_method_exp_month=method.exp_month if method else None,
+        payment_method_exp_year=method.exp_year if method else None,
         amount_cents=payment.amount_cents,
         subtotal_cents=payment.subtotal_cents,
         discount_cents=payment.discount_cents,
@@ -96,7 +118,7 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
         currency=payment.currency,
         provider_payment_id=payment.provider_payment_id,
         provider_reference_id=payment.provider_reference_id,
-        failure_reason=payment.failure_reason,
+        failure_reason=normalize_payment_failure_reason(payment.failure_reason) if payment.failure_reason else None,
         commission_rate_pct=payment.commission_rate_pct,
         platform_fee_amount=payment.platform_fee_amount,
         owner_net_amount=payment.owner_net_amount,
@@ -303,7 +325,7 @@ def create_member_portal(
 
     session = create_billing_portal_session(
         user.stripe_customer_id,
-        f"{settings.FRONTEND_URL}/member/subscriptions",
+        f"{settings.FRONTEND_URL}/member/payments",
     )
     return MemberPortalOut(url=session.url)
 

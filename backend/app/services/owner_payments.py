@@ -18,6 +18,12 @@ from app.models.organization import Organization
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.space import Space
 from app.models.user import User
+from app.services.payment_metadata import (
+    last4_from_card_token,
+    normalize_card_last4,
+    normalize_expiry,
+    payment_method_has_complete_metadata,
+)
 from app.services.stripe_payments import create_customer as create_platform_stripe_customer
 
 logger = logging.getLogger(__name__)
@@ -152,6 +158,77 @@ def _card_details(method: Any) -> dict[str, Any]:
     }
 
 
+def payment_method_is_chargeable(method: MemberOwnerPaymentMethod | None) -> bool:
+    if not method or method.status != "active":
+        return False
+    last4 = normalize_card_last4(method.last4)
+    if not last4 and method.provider == "cardpointe":
+        last4 = last4_from_card_token(method.card_token)
+    exp_month, exp_year = normalize_expiry(method.exp_month, method.exp_year)
+    return payment_method_has_complete_metadata(
+        provider=method.provider,
+        provider_customer_id=method.provider_customer_id,
+        provider_payment_method_id=method.provider_payment_method_id,
+        card_token=method.card_token,
+        last4=last4,
+        exp_month=exp_month,
+        exp_year=exp_year,
+    )
+
+
+def refresh_stripe_payment_method_metadata(
+    db: Session,
+    method: MemberOwnerPaymentMethod | None,
+    setting: OwnerPaymentSetting | None,
+) -> bool:
+    if not method or not setting or method.provider != "stripe" or setting.provider != "stripe":
+        return payment_method_is_chargeable(method)
+    if method.owner_payment_setting_id != setting.id or not method.provider_payment_method_id:
+        return payment_method_is_chargeable(method)
+    if payment_method_is_chargeable(method):
+        return True
+
+    owner_secret = decrypt_secret(setting.stripe_secret_key_encrypted)
+    if not owner_secret:
+        return False
+    try:
+        stripe_method = stripe.PaymentMethod.retrieve(method.provider_payment_method_id, api_key=owner_secret)
+    except Exception as exc:  # noqa: BLE001 - metadata refresh should not take down list pages.
+        logger.warning("Unable to refresh Stripe payment method metadata: %s", exc)
+        return False
+
+    details = _card_details(stripe_method)
+    last4 = normalize_card_last4(details.get("last4"))
+    exp_month, exp_year = normalize_expiry(details.get("exp_month"), details.get("exp_year"))
+    if not details.get("provider_customer_id") or not last4 or not details.get("brand") or not exp_month or not exp_year:
+        return False
+
+    method.provider_customer_id = details["provider_customer_id"]
+    method.last4 = last4
+    method.brand = details["brand"]
+    method.exp_month = exp_month
+    method.exp_year = exp_year
+    method.billing_name = method.billing_name or details.get("billing_name")
+    method.billing_zip = method.billing_zip or details.get("billing_zip")
+    db.add(method)
+    db.flush()
+    return True
+
+
+def ensure_payment_method_chargeable(
+    db: Session,
+    method: MemberOwnerPaymentMethod | None,
+    setting: OwnerPaymentSetting | None,
+) -> bool:
+    if method and method.provider == "stripe":
+        return refresh_stripe_payment_method_metadata(db, method, setting)
+    if method and method.provider == "cardpointe" and not normalize_card_last4(method.last4):
+        method.last4 = last4_from_card_token(method.card_token)
+        db.add(method)
+        db.flush()
+    return payment_method_is_chargeable(method)
+
+
 def platform_default_stripe_payment_method(customer_id: str) -> dict[str, Any] | None:
     if not settings.STRIPE_SECRET_KEY or not customer_id:
         return None
@@ -197,6 +274,10 @@ def import_platform_payment_method_for_owner(
     payment_method_id = card.get("provider_payment_method_id") if card else None
     if not payment_method_id:
         return None
+    last4 = normalize_card_last4(card.get("last4"))
+    exp_month, exp_year = normalize_expiry(card.get("exp_month"), card.get("exp_year"))
+    if not last4 or not card.get("brand") or not exp_month or not exp_year:
+        return None
 
     existing = (
         db.query(MemberOwnerPaymentMethod)
@@ -211,6 +292,10 @@ def import_platform_payment_method_for_owner(
         .first()
     )
     if existing:
+        existing.last4 = normalize_card_last4(existing.last4) or last4
+        existing.brand = existing.brand or card.get("brand")
+        existing.exp_month = existing.exp_month or exp_month
+        existing.exp_year = existing.exp_year or exp_year
         set_default_payment_method(db, existing)
         return existing
 
@@ -222,10 +307,10 @@ def import_platform_payment_method_for_owner(
         owner_payment_setting_id=setting.id,
         provider_customer_id=card.get("provider_customer_id") or user.stripe_customer_id,
         provider_payment_method_id=payment_method_id,
-        last4=card.get("last4"),
+        last4=last4,
         brand=card.get("brand"),
-        exp_month=card.get("exp_month"),
-        exp_year=card.get("exp_year"),
+        exp_month=exp_month,
+        exp_year=exp_year,
         billing_name=card.get("billing_name"),
         billing_zip=card.get("billing_zip"),
         status="active",
@@ -261,13 +346,14 @@ def require_payment_method_for_request(
     )
     if payment_method_public_id:
         query = query.filter(MemberOwnerPaymentMethod.public_id == payment_method_public_id)
-    method = query.order_by(
+    methods = query.order_by(
         MemberOwnerPaymentMethod.is_default_for_owner.desc(),
         MemberOwnerPaymentMethod.created_at.desc(),
-    ).first()
-    if not method:
-        raise HTTPException(status_code=400, detail="Payment method is required before requesting this booking")
-    return setting, method, datetime.now(timezone.utc)
+    ).all()
+    for method in methods:
+        if ensure_payment_method_chargeable(db, method, setting):
+            return setting, method, datetime.now(timezone.utc)
+    raise HTTPException(status_code=400, detail="Payment method is required before requesting this booking")
 
 
 def count_open_requests_for_setting(db: Session, setting_id: int) -> int:
