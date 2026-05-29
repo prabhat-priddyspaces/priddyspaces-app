@@ -108,9 +108,7 @@ export function LocationList() {
           },
         };
       });
-      setApprovalMessage(
-        `Approval request sent to ${result.recipients_notified} super admin${result.recipients_notified === 1 ? "" : "s"}.`
-      );
+      setApprovalMessage("Approval request sent to Admins.");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to request approval");
     } finally {
