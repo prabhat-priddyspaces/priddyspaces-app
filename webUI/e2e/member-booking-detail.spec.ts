@@ -213,6 +213,7 @@ test("member can update a failed instant booking card and retry", async ({ page 
   await expect(page.getByText("The card was declined by the issuer.")).toBeVisible();
   await page.getByRole("button", { name: "Update card and retry" }).click();
   await expect(page.getByText("Add booking card")).toBeVisible();
+  await expect(page.getByTitle("CardPointe tokenizer")).toBeVisible();
 
   await page.evaluate(() => {
     window.dispatchEvent(
@@ -221,8 +222,11 @@ test("member can update a failed instant booking card and retry", async ({ page 
       }),
     );
   });
+  await expect(page.getByText("Card ending in 4242 · Expires 12/2030")).toBeVisible();
   await page.getByRole("checkbox").click();
-  await page.getByRole("button", { name: "Save payment method" }).click();
+  const saveButton = page.getByRole("button", { name: "Save payment method" });
+  await expect(saveButton).toBeEnabled();
+  await saveButton.click();
 
   await expect.poll(() => attachCalled).toBe(true);
   await expect.poll(() => retryCalled).toBe(true);

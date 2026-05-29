@@ -219,7 +219,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
   await expect(page.getByText("Location: Downtown Hub")).toBeVisible();
   await expect(page.getByText("Avery Host · Owner")).toBeVisible();
   await expect(page.getByText(/Approved at/)).toBeVisible();
-  await expect(page.getByText("Payment: pay_req_1")).toBeVisible();
+  await expect(page.getByText("Booking payment recorded")).toBeVisible();
   await expect(page.getByText("Invoice: inv_req_1")).toBeVisible();
 });
 
