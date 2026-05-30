@@ -324,6 +324,96 @@ def _create_invoice(db: Session, *, req: BookingRequest, booking: Booking, payme
     db.add(invoice)
 
 
+def finalize_successful_booking_request_payment(
+    db: Session,
+    *,
+    req: BookingRequest,
+    payment: Payment,
+    provider_payment_id: str | None = None,
+    provider_reference_id: str | None = None,
+    raw_response: dict | None = None,
+    payment_snapshot: dict | None = None,
+) -> tuple[BookingRequest, Booking, Payment]:
+    space = db.query(Space).filter(Space.id == req.space_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+
+    payment.status = PaymentStatus.SUCCEEDED
+    payment.failure_reason = None
+    payment.provider_payment_id = provider_payment_id or payment.provider_payment_id
+    payment.provider_reference_id = provider_reference_id or payment.provider_reference_id
+    if raw_response is not None:
+        payment.raw_response = raw_response
+    if payment.provider == "stripe" and provider_payment_id:
+        payment.stripe_payment_intent_id = provider_payment_id
+    if payment_snapshot is not None:
+        payment.pricing_snapshot = payment_snapshot
+        payment.refund_policy_snapshot = payment_snapshot.get("refund_policy")
+    _apply_commission(db, payment)
+
+    if req.booking_id:
+        booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=409, detail="Booking hold no longer exists")
+        booking.status = BookingStatus.CONFIRMED
+        booking.stripe_payment_intent_id = payment.stripe_payment_intent_id
+        db.add(booking)
+    else:
+        booking = Booking(
+            user_id=req.user_id,
+            space_id=req.space_id,
+            tenant_id=req.tenant_id,
+            start_datetime=req.start_datetime,
+            end_datetime=req.end_datetime,
+            inventory_start_datetime=req.start_datetime - timedelta(minutes=space.buffer_before_minutes or 0),
+            inventory_end_datetime=req.end_datetime + timedelta(minutes=space.buffer_after_minutes or 0),
+            booking_request_id=req.id,
+            booking_series_id=req.booking_series_id,
+            status=BookingStatus.CONFIRMED,
+            stripe_payment_intent_id=payment.stripe_payment_intent_id,
+        )
+        db.add(booking)
+        db.flush()
+        req.booking_id = booking.id
+
+    if req.booking_series_id:
+        db.query(Booking).filter(
+            Booking.booking_series_id == req.booking_series_id,
+            Booking.status == BookingStatus.PENDING,
+        ).update(
+            {
+                Booking.status: BookingStatus.CONFIRMED,
+                Booking.stripe_payment_intent_id: payment.stripe_payment_intent_id,
+            },
+            synchronize_session=False,
+        )
+
+    payment.booking_id = booking.id
+    req.status = BookingRequestStatus.APPROVED
+    req.payment_status = "succeeded"
+    req.payment_hold_expires_at = None
+    req.payment_failed_at = None
+    req.approved_at = req.approved_at or datetime.now(timezone.utc)
+    if payment_snapshot is not None:
+        req.pricing_snapshot = json.dumps(payment_snapshot)
+        req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
+    if payment_snapshot is None and not req.pricing_snapshot and payment.pricing_snapshot:
+        req.pricing_snapshot = json.dumps(payment.pricing_snapshot)
+    if payment_snapshot is None and not req.refund_policy_snapshot and payment.refund_policy_snapshot:
+        req.refund_policy_snapshot = json.dumps(payment.refund_policy_snapshot)
+    _create_invoice(db, req=req, booking=booking, payment=payment)
+    db.add(payment)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    db.refresh(booking)
+    db.refresh(payment)
+    finalize_redemption_for_payment(db, req, booking, payment)
+    db.commit()
+    record_earned_for_payment(db, payment, booking=booking, booking_request=req)
+    return req, booking, payment
+
+
 def _sanitized_failure_reason(reason: str | None) -> str:
     return normalize_payment_failure_reason(reason)
 
@@ -487,67 +577,15 @@ def charge_booking_request(
     req.payment_attempt_count = attempt
     req.operator_notes = operator_notes
     if result and result.status == "succeeded":
-        payment.status = PaymentStatus.SUCCEEDED
-        payment.provider_payment_id = result.provider_payment_id
-        payment.provider_reference_id = result.provider_reference_id
-        payment.raw_response = result.raw_response
-        if setting.provider == "stripe":
-            payment.stripe_payment_intent_id = result.provider_payment_id
-        _apply_commission(db, payment)
-
-        if req.booking_id:
-            booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-            if not booking:
-                raise HTTPException(status_code=409, detail="Booking hold no longer exists")
-            booking.status = BookingStatus.CONFIRMED
-            booking.stripe_payment_intent_id = payment.stripe_payment_intent_id
-            db.add(booking)
-        else:
-            booking = Booking(
-                user_id=req.user_id,
-                space_id=req.space_id,
-                tenant_id=req.tenant_id,
-                start_datetime=req.start_datetime,
-                end_datetime=req.end_datetime,
-                inventory_start_datetime=req.start_datetime - timedelta(minutes=space.buffer_before_minutes or 0),
-                inventory_end_datetime=req.end_datetime + timedelta(minutes=space.buffer_after_minutes or 0),
-                booking_request_id=req.id,
-                booking_series_id=req.booking_series_id,
-                status=BookingStatus.CONFIRMED,
-                stripe_payment_intent_id=payment.stripe_payment_intent_id,
-            )
-            db.add(booking)
-            db.flush()
-            req.booking_id = booking.id
-        if req.booking_series_id:
-            db.query(Booking).filter(
-                Booking.booking_series_id == req.booking_series_id,
-                Booking.status == BookingStatus.PENDING,
-            ).update(
-                {
-                    Booking.status: BookingStatus.CONFIRMED,
-                    Booking.stripe_payment_intent_id: payment.stripe_payment_intent_id,
-                },
-                synchronize_session=False,
-            )
-        payment.booking_id = booking.id
-        req.status = BookingRequestStatus.APPROVED
-        req.payment_status = "succeeded"
-        req.payment_hold_expires_at = None
-        req.approved_at = datetime.now(timezone.utc)
-        req.pricing_snapshot = json.dumps(payment_snapshot)
-        req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
-        _create_invoice(db, req=req, booking=booking, payment=payment)
-        db.add(payment)
-        db.add(req)
-        db.commit()
-        db.refresh(req)
-        db.refresh(booking)
-        db.refresh(payment)
-        finalize_redemption_for_payment(db, req, booking, payment)
-        db.commit()
-        record_earned_for_payment(db, payment, booking=booking, booking_request=req)
-        return req, booking, payment
+        return finalize_successful_booking_request_payment(
+            db,
+            req=req,
+            payment=payment,
+            provider_payment_id=result.provider_payment_id,
+            provider_reference_id=result.provider_reference_id,
+            raw_response=result.raw_response,
+            payment_snapshot=payment_snapshot,
+        )
 
     failure_reason = _sanitized_failure_reason(result.failure_reason if result else failure_reason)
     payment.status = PaymentStatus.FAILED

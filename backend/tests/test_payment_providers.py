@@ -22,6 +22,7 @@ from app.services.payment_providers import (
     PaymentProviderFactory,
     StripePaymentProvider,
     _cardpointe_failure_reason,
+    stripe_object_to_dict,
 )
 
 
@@ -109,6 +110,89 @@ def test_stripe_save_requires_confirmed_card_metadata(monkeypatch):
 
     with pytest.raises(PaymentProviderError, match="Card details are incomplete"):
         provider.save_payment_method({"setup_intent_id": "seti_1"})
+
+
+def test_stripe_object_to_dict_prefers_to_dict_without_iterating():
+    class ToDictOnlyStripeObject:
+        def to_dict(self):
+            return {"id": "pi_1", "status": "succeeded"}
+
+        def __iter__(self):
+            raise AssertionError("dict(stripe_object) should not be used")
+
+    assert stripe_object_to_dict(ToDictOnlyStripeObject()) == {"id": "pi_1", "status": "succeeded"}
+
+
+def test_stripe_charge_succeeds_with_to_dict_only_intent(monkeypatch):
+    provider = StripePaymentProvider(_stripe_setting())
+    method = MemberOwnerPaymentMethod(
+        user_id=1,
+        organization_id=1,
+        tenant_id=1,
+        provider="stripe",
+        owner_payment_setting_id=1,
+        provider_customer_id="cus_1",
+        provider_payment_method_id="pm_1",
+        status="active",
+    )
+
+    class ToDictOnlyIntent:
+        def to_dict(self):
+            return {"id": "pi_to_dict", "status": "succeeded", "amount": 1000}
+
+        def __iter__(self):
+            raise AssertionError("dict(stripe_object) should not be used")
+
+    monkeypatch.setattr(
+        "app.services.payment_providers.stripe.PaymentIntent.create",
+        lambda **kwargs: ToDictOnlyIntent(),
+    )
+
+    result = provider.charge_saved_method(
+        payment_method=method,
+        amount_cents=1000,
+        currency="usd",
+        idempotency_key="booking_1_attempt_1",
+    )
+
+    assert result.status == "succeeded"
+    assert result.provider_payment_id == "pi_to_dict"
+    assert result.raw_response == {"id": "pi_to_dict", "status": "succeeded", "amount": 1000}
+
+
+def test_stripe_status_and_refund_use_safe_serializer(monkeypatch):
+    provider = StripePaymentProvider(_stripe_setting())
+
+    class ToDictOnlyIntent:
+        def to_dict(self):
+            return {"id": "pi_status", "status": "succeeded"}
+
+        def __iter__(self):
+            raise AssertionError("dict(stripe_object) should not be used")
+
+    class ToDictOnlyRefund:
+        def to_dict(self):
+            return {"id": "re_1", "status": "succeeded"}
+
+        def __iter__(self):
+            raise AssertionError("dict(stripe_object) should not be used")
+
+    monkeypatch.setattr(
+        "app.services.payment_providers.stripe.PaymentIntent.retrieve",
+        lambda *args, **kwargs: ToDictOnlyIntent(),
+    )
+    monkeypatch.setattr(
+        "app.services.payment_providers.stripe.Refund.create",
+        lambda **kwargs: ToDictOnlyRefund(),
+    )
+
+    status = provider.get_payment_status("pi_status")
+    refund = provider.void_or_refund(provider_payment_id="pi_status", provider_reference_id=None)
+
+    assert status.status == "succeeded"
+    assert status.provider_payment_id == "pi_status"
+    assert refund.status == "refunded"
+    assert refund.provider_reference_id == "re_1"
 
 
 def test_cardpointe_charge_approved_response():
