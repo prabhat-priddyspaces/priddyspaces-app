@@ -11,6 +11,9 @@ from app.models.booking_request import BookingRequest
 from app.models.enums import BookingRequestStatus, BookingStatus
 from app.models.subscription import Subscription
 
+_BLOCKING_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due"}
+_EXCLUSIVE_BOOKING_MODES = {"private_office_lease", "suite_lease"}
+
 
 def _resolve_tz(name: str | None) -> ZoneInfo:
     if not name:
@@ -28,6 +31,8 @@ def get_space_availability(
     location_timezone: str | None,
     start_date: date,
     end_date: date,
+    availability_start_time: time | None = None,
+    availability_end_time: time | None = None,
 ) -> list[dict]:
     """Per-day busy intervals (HH:MM, location-local) and full-day blocks for a space."""
     if end_date < start_date:
@@ -66,9 +71,13 @@ def get_space_availability(
         db.query(Subscription.start_date, Subscription.end_date)
         .filter(
             Subscription.space_id == space_id,
-            Subscription.status.in_(["active", "past_due"]),
+            Subscription.status.in_(_BLOCKING_SUBSCRIPTION_STATUSES),
             Subscription.start_date <= end_date,
             or_(Subscription.end_date.is_(None), Subscription.end_date >= start_date),
+            or_(
+                Subscription.booking_mode.is_(None),
+                Subscription.booking_mode.in_(_EXCLUSIVE_BOOKING_MODES),
+            ),
         )
         .all()
     )
@@ -107,14 +116,47 @@ def get_space_availability(
                 )
             cur_day += timedelta(days=1)
 
+    open_start = availability_start_time or time(9, 0)
+    open_end = availability_end_time or time(18, 0)
+
+    def _minutes(value: str) -> int:
+        if value == "24:00":
+            return 24 * 60
+        hour, minute = value.split(":", 1)
+        return int(hour) * 60 + int(minute)
+
+    def _covers_open_window(intervals: list[tuple[str, str]]) -> bool:
+        open_start_minutes = open_start.hour * 60 + open_start.minute
+        open_end_minutes = open_end.hour * 60 + open_end.minute
+        if open_end_minutes <= open_start_minutes:
+            return False
+        clipped = sorted(
+            (
+                max(open_start_minutes, _minutes(start_label)),
+                min(open_end_minutes, _minutes(end_label)),
+            )
+            for start_label, end_label in intervals
+        )
+        cursor = open_start_minutes
+        for start_minutes, end_minutes in clipped:
+            if end_minutes <= start_minutes:
+                continue
+            if start_minutes > cursor:
+                return False
+            cursor = max(cursor, end_minutes)
+            if cursor >= open_end_minutes:
+                return True
+        return False
+
     days: list[dict] = []
     cur = start_date
     while cur <= end_date:
         intervals = sorted(busy_by_day.get(cur, []))
+        fully_blocked = cur in blocked_days or _covers_open_window(intervals)
         days.append(
             {
                 "date": cur.isoformat(),
-                "fully_blocked": cur in blocked_days,
+                "fully_blocked": fully_blocked,
                 "busy_intervals": [
                     {"start": s, "end": e} for s, e in intervals
                 ],

@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import datetime, time, timezone
 
 from fastapi.testclient import TestClient
 
@@ -14,7 +14,9 @@ from app.models.enums import (
     SpaceVisibility,
     UserAppRole,
     UserRole,
+    BookingStatus,
 )
+from app.models.booking import Booking
 from app.models.cancellation_policy import CancellationPolicy
 from app.models.user import User
 from app.models.location_amenity import LocationAmenity
@@ -718,6 +720,49 @@ def test_public_marketplace_space_detail_returns_listing_content(db_session, cli
     assert body["support_contacts"] == [
         {"name": "Denis Khakovsky", "title": "Owner"},
         {"name": "Brian Mina", "title": "Admin"},
+    ]
+
+
+def test_public_space_availability_marks_day_fully_blocked_by_bookings(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_room = seeded["meeting_room"]
+    db_session.add_all(
+        [
+            Booking(
+                user_id=1,
+                space_id=meeting_room.id,
+                tenant_id=meeting_room.tenant_id,
+                start_datetime=datetime(2026, 4, 16, 13, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 4, 16, 16, 0, tzinfo=timezone.utc),
+                inventory_start_datetime=datetime(2026, 4, 16, 13, 0, tzinfo=timezone.utc),
+                inventory_end_datetime=datetime(2026, 4, 16, 16, 0, tzinfo=timezone.utc),
+                status=BookingStatus.CONFIRMED,
+            ),
+            Booking(
+                user_id=1,
+                space_id=meeting_room.id,
+                tenant_id=meeting_room.tenant_id,
+                start_datetime=datetime(2026, 4, 16, 16, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 4, 16, 22, 0, tzinfo=timezone.utc),
+                inventory_start_datetime=datetime(2026, 4, 16, 16, 0, tzinfo=timezone.utc),
+                inventory_end_datetime=datetime(2026, 4, 16, 22, 0, tzinfo=timezone.utc),
+                status=BookingStatus.CONFIRMED,
+            ),
+        ]
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get(
+        f"/api/marketplace/spaces/{meeting_room.public_id}/availability?from=2026-04-16&to=2026-04-16"
+    )
+
+    assert response.status_code == 200
+    day = response.json()["days"][0]
+    assert day["fully_blocked"] is True
+    assert day["busy_intervals"] == [
+        {"start": "09:00", "end": "12:00"},
+        {"start": "12:00", "end": "18:00"},
     ]
 
 

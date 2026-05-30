@@ -1,7 +1,7 @@
 import json
 import logging
 import secrets
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -69,7 +69,7 @@ from app.services.booking_email_delivery import (
     delivery_details_for_request,
     delivery_summary_for_request,
 )
-from app.services.availability import booking_overlaps, booking_request_overlaps, subscription_overlaps
+from app.services.availability import subscription_overlaps
 from app.services.booking_inventory import (
     create_pending_booking_hold,
     expand_occurrences,
@@ -507,6 +507,21 @@ def _approve_membership_request(
             status_code=400, detail="Member payment method is no longer valid"
         )
 
+    desired_start = req.desired_start_date
+    months = plan.commitment_months or 1
+    commitment_end = add_months(desired_start, months) if plan.commitment_months else None
+    if _is_exclusive_lease_mode(plan.booking_mode):
+        space = db.query(Space).filter(Space.id == req.space_id).first()
+        if not space:
+            raise HTTPException(status_code=400, detail="Space no longer exists")
+        _ensure_lease_window_available(
+            db,
+            space=space,
+            start=desired_start,
+            end=commitment_end,
+            ignore_booking_request_id=req.id,
+        )
+
     try:
         result = create_stripe_subscription(
             setting=setting,
@@ -520,10 +535,6 @@ def _approve_membership_request(
         )
     except MembershipBillingError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    desired_start = req.desired_start_date
-    months = plan.commitment_months or 1
-    commitment_end = add_months(desired_start, months) if plan.commitment_months else None
 
     sub = Subscription(
         user_id=req.user_id,
@@ -640,6 +651,13 @@ def _create_membership_purchase_request(
     desired_start = payload.desired_start_date
     months = plan.commitment_months or 1
     commitment_end = add_months(desired_start, months)
+    if _is_exclusive_lease_mode(plan.booking_mode):
+        _ensure_lease_window_available(
+            db,
+            space=space,
+            start=desired_start,
+            end=commitment_end,
+        )
 
     start_dt = datetime.combine(desired_start, time.min, tzinfo=timezone.utc)
     end_dt = datetime.combine(commitment_end, time.min, tzinfo=timezone.utc)
@@ -979,6 +997,77 @@ def _activate_booking_series_if_needed(db: Session, req: BookingRequest) -> None
         db.commit()
 
 
+def _validate_locked_occurrences_available(
+    db: Session,
+    *,
+    space: Space,
+    location: Location,
+    occurrences,
+    ignore_booking_ids: set[int] | None = None,
+    ignore_booking_request_id: int | None = None,
+) -> None:
+    db.query(Space).filter(Space.id == space.id).with_for_update().first()
+    validate_occurrences_available(
+        db,
+        space=space,
+        location=location,
+        occurrences=occurrences,
+        ignore_booking_ids=ignore_booking_ids,
+        ignore_booking_request_id=ignore_booking_request_id,
+    )
+
+
+def _is_exclusive_lease_mode(booking_mode: str | None) -> bool:
+    return booking_mode in {"private_office_lease", "suite_lease"}
+
+
+def _lease_request_overlaps(
+    db: Session,
+    *,
+    space_id: int,
+    start: date,
+    end: date | None,
+    ignore_booking_request_id: int | None = None,
+) -> bool:
+    end_date = end or date.max
+    start_dt = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc)
+    query = db.query(BookingRequest).filter(
+        BookingRequest.space_id == space_id,
+        BookingRequest.request_kind == BookingRequestKind.LEASE_PURCHASE.value,
+        BookingRequest.status.in_(
+            [
+                BookingRequestStatus.REQUESTED,
+                BookingRequestStatus.PAYMENT_FAILED,
+            ]
+        ),
+        BookingRequest.start_datetime < end_dt,
+        BookingRequest.end_datetime > start_dt,
+    )
+    if ignore_booking_request_id:
+        query = query.filter(BookingRequest.id != ignore_booking_request_id)
+    return query.first() is not None
+
+
+def _ensure_lease_window_available(
+    db: Session,
+    *,
+    space: Space,
+    start: date,
+    end: date | None,
+    ignore_booking_request_id: int | None = None,
+) -> None:
+    db.query(Space).filter(Space.id == space.id).with_for_update().first()
+    if subscription_overlaps(db, space.id, start, end) or _lease_request_overlaps(
+        db,
+        space_id=space.id,
+        start=start,
+        end=end,
+        ignore_booking_request_id=ignore_booking_request_id,
+    ):
+        raise HTTPException(status_code=409, detail="Space already leased for that period")
+
+
 @router.post("/guest/booking-requests", response_model=GuestBookingRequestOut)
 def create_guest_booking_request(
     payload: GuestBookingRequestCreate,
@@ -1004,14 +1093,18 @@ def create_guest_booking_request(
     if end_dt <= start_dt:
         raise HTTPException(status_code=400, detail="End time must be after start time")
 
-    if subscription_overlaps(db, space.id, start_dt.date(), end_dt.date()):
-        raise HTTPException(status_code=409, detail="Space already subscribed for that date")
-
-    if booking_overlaps(db, space.id, start_dt, end_dt):
-        raise HTTPException(status_code=409, detail="Booking overlaps an existing booking")
-
-    if booking_request_overlaps(db, space.id, start_dt, end_dt):
-        raise HTTPException(status_code=409, detail="A booking request already exists for that time")
+    occurrences = expand_occurrences(
+        start_datetime=start_dt,
+        end_datetime=end_dt,
+        location=location,
+        space=space,
+    )
+    _validate_locked_occurrences_available(
+        db,
+        space=space,
+        location=location,
+        occurrences=occurrences,
+    )
 
     is_day_pass = payload.full_day or payload.booking_mode == "day_pass"
     chosen_kind = (
@@ -1024,8 +1117,8 @@ def create_guest_booking_request(
         tenant_id=space.tenant_id,
         user_id=None,
         space_id=space.id,
-        start_datetime=start_dt,
-        end_datetime=end_dt,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
         status=BookingRequestStatus.REQUESTED,
         request_kind=chosen_kind,
         is_guest_checkout=True,
@@ -1132,10 +1225,12 @@ def create_booking_request(
         recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
     )
 
-    # Lock the space row while validating and creating durable holds. This keeps
-    # app-level checks deterministic; PostgreSQL also enforces active overlap.
-    db.query(Space).filter(Space.id == space.id).with_for_update().first()
-    validate_occurrences_available(db, space=space, location=location, occurrences=occurrences)
+    _validate_locked_occurrences_available(
+        db,
+        space=space,
+        location=location,
+        occurrences=occurrences,
+    )
 
     lock = active_lock_by_public_id(db, payload.redemption_lock_public_id, user, space) if payload.redemption_lock_public_id else None
     points_cover_total = False
@@ -1467,7 +1562,7 @@ def approve_booking_request(
                 location=location,
                 space=space,
             )
-            validate_occurrences_available(
+            _validate_locked_occurrences_available(
                 db,
                 space=space,
                 location=location,
@@ -1489,26 +1584,22 @@ def approve_booking_request(
         after_status = req.status
     else:
         before_status = req.status
-        req.status = BookingRequestStatus.APPROVED
-        req.operator_notes = payload.operator_notes
-        req.approved_at = datetime.now(timezone.utc)
-        db.add(req)
-        db.commit()
-        db.refresh(req)
-
         occurrences = expand_occurrences(
             start_datetime=req.start_datetime,
             end_datetime=req.end_datetime,
             location=location,
             space=space,
         )
-        validate_occurrences_available(
+        _validate_locked_occurrences_available(
             db,
             space=space,
             location=location,
             occurrences=occurrences,
             ignore_booking_request_id=req.id,
         )
+        req.status = BookingRequestStatus.APPROVED
+        req.operator_notes = payload.operator_notes
+        req.approved_at = datetime.now(timezone.utc)
         booking = Booking(
             user_id=req.user_id,
             space_id=req.space_id,
@@ -1521,11 +1612,11 @@ def approve_booking_request(
             status=BookingStatus.PENDING
         )
         db.add(booking)
-        db.commit()
-        db.refresh(booking)
+        db.flush()
         req.booking_id = booking.id
         db.add(req)
         db.commit()
+        db.refresh(booking)
         db.refresh(req)
         after_status = req.status
     if req.status == BookingRequestStatus.APPROVED:
@@ -1662,7 +1753,12 @@ def retry_booking_request_payment(
             location=location,
             space=space,
         )
-        validate_occurrences_available(db, space=space, location=location, occurrences=occurrences)
+        _validate_locked_occurrences_available(
+            db,
+            space=space,
+            location=location,
+            occurrences=occurrences,
+        )
         booking_hold = create_pending_booking_hold(
             db,
             user_id=req.user_id,

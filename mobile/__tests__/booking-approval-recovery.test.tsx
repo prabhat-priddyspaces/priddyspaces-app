@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import { OwnerSettingsScreen } from "../src/screens/owner/OwnerSettingsScreen";
 import { BookingDetailScreen } from "../src/screens/BookingDetailScreen";
+import { SpaceDetailScreen } from "../src/screens/member/SpaceDetailScreen";
 import { apiFetch } from "../src/lib/api";
 
 const mockNavigate = jest.fn();
@@ -133,5 +134,56 @@ describe("booking approval and recovery mobile flows", () => {
         "token",
       );
     });
+  });
+
+  it("filters member booking dates and times from availability", async () => {
+    mockRouteParams = { spaceId: "space_1" };
+    const today = new Date().toISOString().slice(0, 10);
+    (apiFetch as jest.Mock).mockImplementation((path: string) => {
+      if (path === "/api/spaces/space_1") {
+        return Promise.resolve({
+          public_id: "space_1",
+          organization_name: "North Loop",
+          booking_approval_mode: "auto",
+          space_type: "conference_room",
+          capacity: 6,
+          price_daily: 200,
+          availability_status: "available",
+          availability_start_time: "09:00",
+          availability_end_time: "18:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+        });
+      }
+      if (path === "/api/spaces/space_1/media") return Promise.resolve([]);
+      if (path.startsWith("/api/subscription-plans/public")) return Promise.resolve([]);
+      if (path.startsWith("/api/marketplace/spaces/space_1/availability")) {
+        return Promise.resolve({
+          space_public_id: "space_1",
+          timezone: "UTC",
+          granularity_minutes: 30,
+          availability_start_time: "09:00",
+          availability_end_time: "18:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          hourly_price: "50.00",
+          daily_price: "200.00",
+          days: [
+            {
+              date: today,
+              fully_blocked: false,
+              busy_intervals: [{ start: "09:00", end: "10:00" }],
+            },
+          ],
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    const screen = render(<SpaceDetailScreen />);
+
+    expect(await screen.findByText("Reserve & Pay")).toBeTruthy();
+    expect(await screen.findByText("10:00")).toBeTruthy();
+    expect(screen.queryByText("09:00")).toBeNull();
   });
 });

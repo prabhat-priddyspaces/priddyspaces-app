@@ -344,6 +344,8 @@ def get_marketplace_space_availability(
         location_timezone=location.timezone,
         start_date=start_date,
         end_date=end_date,
+        availability_start_time=space.availability_start_time,
+        availability_end_time=space.availability_end_time,
     )
 
     now = datetime.now(timezone.utc)

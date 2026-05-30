@@ -666,6 +666,39 @@ def test_guest_booking_request_rejects_rewards_redemption(db_session, client_fac
     assert resp.json()["detail"] == "Rewards redemption requires a member account"
 
 
+def test_guest_booking_request_rejects_buffered_booking_conflict(db_session, client_factory):
+    _owner, space = _seed_owner_space(db_session)
+    booking = Booking(
+        user_id=1,
+        space_id=space.id,
+        tenant_id=space.tenant_id,
+        start_datetime=datetime(2026, 5, 15, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 5, 15, 11, 0, tzinfo=timezone.utc),
+        inventory_start_datetime=datetime(2026, 5, 15, 10, 0, tzinfo=timezone.utc),
+        inventory_end_datetime=datetime(2026, 5, 15, 11, 15, tzinfo=timezone.utc),
+        status=BookingStatus.CONFIRMED,
+    )
+    db_session.add(booking)
+    db_session.commit()
+
+    client = client_factory({})
+    resp = client.post(
+        "/api/guest/booking-requests",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 5, 15, 11, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 5, 15, 12, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+            "guest_full_name": "Test User",
+            "guest_email": "testi@mailinator.com",
+        },
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Booking overlaps existing booking"
+
+
 def test_booking_request_approve_creates_booking(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     owner, space = _seed_owner_space(db_session)

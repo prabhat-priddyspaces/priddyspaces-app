@@ -58,6 +58,7 @@ import type { LoyaltyRedemptionLock, LoyaltyRedemptionPreview } from "@/lib/loya
 import { formatCents, formatPoints } from "@/lib/loyalty";
 
 const AVAILABILITY_RANGE_DAYS = 60;
+const AVAILABILITY_STALE_MS = 3 * 60 * 1000;
 
 interface SubscriptionPlan {
   public_id: string;
@@ -75,6 +76,7 @@ interface PublicSpaceDetailViewProps {
   initialEndTime?: string;
   initialPlanPublicId?: string;
   initialMoveInDate?: string;
+  selfHrefBase?: string;
 }
 
 interface PaymentMethodResolve {
@@ -124,11 +126,13 @@ export function PublicSpaceDetailView({
   initialEndTime = "",
   initialPlanPublicId,
   initialMoveInDate,
+  selfHrefBase = "/spaces",
 }: PublicSpaceDetailViewProps) {
   const router = useRouter();
   const isAuthenticated = Boolean(getAccessToken());
   const [detail, setDetail] = useState<MarketplaceSpaceDetailResponse | null>(null);
   const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
+  const [availabilityFetchedAt, setAvailabilityFetchedAt] = useState<number | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -152,29 +156,39 @@ export function PublicSpaceDetailView({
   const [ownerPoints, setOwnerPoints] = useState("");
   const [loyaltyLoading, setLoyaltyLoading] = useState(false);
 
+  const fetchAndStoreAvailability = useCallback(async () => {
+    const fromIso = todayIso();
+    const toIso = addDaysIso(fromIso, AVAILABILITY_RANGE_DAYS);
+    const response = await apiFetch<SpaceAvailabilityResponse>(
+      `/api/marketplace/spaces/${encodeURIComponent(spaceId)}/availability?from=${fromIso}&to=${toIso}`,
+      { method: "GET" },
+    );
+    setAvailability(response);
+    setAvailabilityFetchedAt(Date.now());
+    return response;
+  }, [spaceId]);
+
   useEffect(() => {
     if (!spaceId) {
       return;
     }
     setLoading(true);
     setError("");
-    const fromIso = todayIso();
-    const toIso = addDaysIso(fromIso, AVAILABILITY_RANGE_DAYS);
     Promise.all([
       apiFetch<MarketplaceSpaceDetailResponse>(`/api/marketplace/spaces/${spaceId}`, { method: "GET" }),
       apiFetch<SubscriptionPlan[]>(
         `/api/subscription-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
         { method: "GET" },
       ).catch(() => []),
-      apiFetch<SpaceAvailabilityResponse>(
-        `/api/marketplace/spaces/${encodeURIComponent(spaceId)}/availability?from=${fromIso}&to=${toIso}`,
-        { method: "GET" },
-      ).catch(() => null),
+      fetchAndStoreAvailability().catch(() => null),
     ])
       .then(([detailResponse, planResponse, availabilityResponse]) => {
         setDetail(detailResponse);
         setPlans(planResponse);
-        setAvailability(availabilityResponse);
+        if (!availabilityResponse) {
+          setAvailability(null);
+          setAvailabilityFetchedAt(null);
+        }
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to load listing");
@@ -183,7 +197,7 @@ export function PublicSpaceDetailView({
         setAvailability(null);
       })
       .finally(() => setLoading(false));
-  }, [spaceId]);
+  }, [fetchAndStoreAvailability, spaceId]);
 
   const granularity =
     availability?.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
@@ -215,8 +229,8 @@ export function PublicSpaceDetailView({
     [selectedDay, openWindow],
   );
   const startSlotOptions = useMemo(
-    () => buildSlotOptions(selectedDayIntervals, granularity),
-    [selectedDayIntervals, granularity],
+    () => buildSlotOptions(selectedDayIntervals, granularity, openWindow.start),
+    [selectedDayIntervals, granularity, openWindow.start],
   );
   const endSlotOptions = useMemo(
     () => buildEndSlotOptions(selectedDayIntervals, startTime, granularity),
@@ -233,7 +247,7 @@ export function PublicSpaceDetailView({
 
     if (todayDay && isDayBookable(todayDay, openWindow, granularity)) {
       const intervals = getOpenIntervalsForDay(todayDay, openWindow);
-      const slot = findFirstSlotOnOrAfter(intervals, granularity, nowTimeInZone(tz));
+      const slot = findFirstSlotOnOrAfter(intervals, granularity, nowTimeInZone(tz), openWindow.start);
       if (slot) {
         pickedDate = todayLocal;
         pickedStart = slot.start;
@@ -250,7 +264,7 @@ export function PublicSpaceDetailView({
       if (nextDay) {
         pickedDate = nextDay.date;
         const intervals = getOpenIntervalsForDay(nextDay, openWindow);
-        const slot = findFirstSlotOnOrAfter(intervals, granularity, openWindow.start);
+        const slot = findFirstSlotOnOrAfter(intervals, granularity, openWindow.start, openWindow.start);
         pickedStart = slot?.start ?? intervals[0]?.start ?? null;
       }
     }
@@ -414,7 +428,7 @@ export function PublicSpaceDetailView({
     if (extra?.planPublicId) params.set("plan", extra.planPublicId);
     if (extra?.moveInDate) params.set("move_in", extra.moveInDate);
     const qs = params.toString();
-    return qs ? `/spaces/${spaceId}?${qs}` : `/spaces/${spaceId}`;
+    return qs ? `${selfHrefBase}/${spaceId}?${qs}` : `${selfHrefBase}/${spaceId}`;
   }
 
   const currentReservationPayload = useCallback((): ReservationPayload | null => {
@@ -457,6 +471,55 @@ export function PublicSpaceDetailView({
     recurrenceFrequency,
     startTime,
   ]);
+
+  function selectedWindowAvailableIn(response: SpaceAvailabilityResponse): boolean {
+    if (!date) return false;
+    const freshDay = response.days.find((day) => day.date === date);
+    if (!freshDay) return false;
+    const freshGranularity = response.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
+    const freshOpen = getDayOpenWindow({
+      availability_start_time:
+        response.availability_start_time ??
+        detail?.space.availability_start_time ??
+        null,
+      availability_end_time:
+        response.availability_end_time ??
+        detail?.space.availability_end_time ??
+        null,
+    });
+    const openStart = timeToMinutes(freshOpen.start);
+    const openEnd = timeToMinutes(freshOpen.end);
+    if (openEnd <= openStart) return false;
+    if (allDay) {
+      if (freshDay.fully_blocked) return false;
+      return !(freshDay.busy_intervals ?? []).some((busy) => {
+        const busyStart = Math.max(timeToMinutes(busy.start), openStart);
+        const busyEnd = Math.min(timeToMinutes(busy.end), openEnd);
+        return busyEnd > busyStart;
+      });
+    }
+    if (!startTime || !endTime) return false;
+    const intervals = getOpenIntervalsForDay(freshDay, freshOpen);
+    const freshStartOptions = buildSlotOptions(intervals, freshGranularity, freshOpen.start);
+    const freshEndOptions = buildEndSlotOptions(intervals, startTime, freshGranularity);
+    return freshStartOptions.includes(startTime) && freshEndOptions.includes(endTime);
+  }
+
+  async function ensureAvailabilityCurrent(): Promise<boolean> {
+    const stale =
+      availabilityFetchedAt == null ||
+      Date.now() - availabilityFetchedAt > AVAILABILITY_STALE_MS;
+    const current = stale ? await fetchAndStoreAvailability() : availability;
+    if (!current || selectedWindowAvailableIn(current)) {
+      return true;
+    }
+    setAllDay(false);
+    setStartTime("");
+    setEndTime("");
+    setAutoFilled(true);
+    setError("That time is no longer available. Choose another date or time.");
+    return false;
+  }
 
   useEffect(() => {
     const token = getAccessToken() ?? undefined;
@@ -576,6 +639,14 @@ export function PublicSpaceDetailView({
     const payload = currentReservationPayload();
     if (!payload) {
       setError("Choose a start and end time before reserving.");
+      return;
+    }
+
+    try {
+      const stillAvailable = await ensureAvailabilityCurrent();
+      if (!stillAvailable) return;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not refresh availability. Try again.");
       return;
     }
 
@@ -930,6 +1001,7 @@ export function PublicSpaceDetailView({
                       const slot = findFirstSlotOnOrAfter(
                         intervals,
                         granularity,
+                        openWindow.start,
                         openWindow.start,
                       );
                       if (slot) {

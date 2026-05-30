@@ -136,12 +136,16 @@ export function isDayBookable(
 export function buildSlotOptions(
   intervals: OpenInterval[],
   granularityMinutes: number,
+  alignFromTime?: string,
 ): string[] {
   const slots: string[] = [];
+  const alignmentBase = timeToMinutes(alignFromTime ?? intervals[0]?.start ?? DEFAULT_OPEN_TIME);
   for (const interval of intervals) {
     const start = timeToMinutes(interval.start);
     const end = timeToMinutes(interval.end);
-    for (let t = start; t + granularityMinutes <= end; t += granularityMinutes) {
+    const remainder = ((start - alignmentBase) % granularityMinutes + granularityMinutes) % granularityMinutes;
+    const alignedStart = remainder === 0 ? start : start + (granularityMinutes - remainder);
+    for (let t = alignedStart; t + granularityMinutes <= end; t += granularityMinutes) {
       slots.push(minutesToTime(t));
     }
   }
@@ -184,16 +188,19 @@ export function findFirstSlotOnOrAfter(
   intervals: OpenInterval[],
   granularityMinutes: number,
   fromTime: string,
+  alignFromTime?: string,
 ): { start: string; end: string } | null {
   const fromMinutes = timeToMinutes(fromTime);
+  const alignmentBase = timeToMinutes(alignFromTime ?? intervals[0]?.start ?? DEFAULT_OPEN_TIME);
   for (const interval of intervals) {
     const start = timeToMinutes(interval.start);
     const end = timeToMinutes(interval.end);
     const candidateStart = Math.max(start, fromMinutes);
+    const remainder = ((candidateStart - alignmentBase) % granularityMinutes + granularityMinutes) % granularityMinutes;
     const aligned =
-      candidateStart % granularityMinutes === 0
+      remainder === 0
         ? candidateStart
-        : candidateStart + (granularityMinutes - (candidateStart % granularityMinutes));
+        : candidateStart + (granularityMinutes - remainder);
     if (aligned + granularityMinutes <= end) {
       return {
         start: minutesToTime(aligned),

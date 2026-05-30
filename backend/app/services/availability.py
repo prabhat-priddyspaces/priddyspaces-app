@@ -44,6 +44,7 @@ def booking_overlaps_date(db: Session, space_id: int, start: date, end: date | N
 
 
 _EXCLUSIVE_BOOKING_MODES = {"private_office_lease", "suite_lease"}
+_BLOCKING_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due"}
 
 
 def subscription_overlaps(db: Session, space_id: int, start: date, end: date | None) -> bool:
@@ -61,7 +62,7 @@ def subscription_overlaps(db: Session, space_id: int, start: date, end: date | N
         db.query(Subscription)
         .filter(
             Subscription.space_id == space_id,
-            Subscription.status.in_(["active", "past_due"]),
+            Subscription.status.in_(_BLOCKING_SUBSCRIPTION_STATUSES),
             Subscription.start_date <= end_date,
             or_(Subscription.end_date.is_(None), Subscription.end_date >= start),
             or_(
