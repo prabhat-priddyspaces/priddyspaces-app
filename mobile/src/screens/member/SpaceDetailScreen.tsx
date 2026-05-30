@@ -5,9 +5,13 @@ import { useStripe } from "@stripe/stripe-react-native";
 
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
+import { BookingPaymentMethodSetup } from "../../components/BookingPaymentMethodSetup";
 
 type Space = {
   public_id: string;
+  organization_name?: string | null;
+  booking_approval_mode?: string | null;
+  payment_failure_hold_minutes?: number | null;
   space_type: string;
   capacity: number;
   price_hourly?: number | null;
@@ -42,9 +46,19 @@ type PaymentMethodResolve = {
 };
 
 type BookingRequestResult = {
+  public_id: string;
   status: string;
   payment_status?: string | null;
   booking_public_id?: string | null;
+  payment_hold_expires_at?: string | null;
+};
+
+type ReservationPayload = {
+  space_public_id: string;
+  start_datetime: string;
+  end_datetime: string;
+  booking_mode: "hourly" | "day_pass";
+  full_day: boolean;
 };
 
 function toDateIso(date: Date) {
@@ -80,12 +94,6 @@ function buildTimeOptions(space: Space | null) {
   return options;
 }
 
-function instantEligible(space: Space) {
-  if (space.space_type === "conference_room") return true;
-  if (space.space_type === "shared_desk") return true;
-  return false;
-}
-
 export function SpaceDetailScreen() {
   const { token } = useAuth();
   const route = useRoute<any>();
@@ -101,6 +109,8 @@ export function SpaceDetailScreen() {
   const [fullDay, setFullDay] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
+  const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
   const stripe = useStripe();
 
   useEffect(() => {
@@ -132,7 +142,33 @@ export function SpaceDetailScreen() {
   const hero = images.find((img) => img.is_primary) || images[0];
   const dateOptions = nextDateOptions();
   const timeOptions = buildTimeOptions(space);
-  const actionLabel = space && instantEligible(space) ? "Reserve & Pay" : "Request to book";
+  const actionLabel = space?.booking_approval_mode === "auto" ? "Reserve & Pay" : "Request to book";
+
+  async function submitBooking(payload: ReservationPayload, paymentMethodPublicId: string | null) {
+    if (!token) return;
+    const result = await apiFetch<BookingRequestResult>(
+      "/api/booking-requests",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          member_owner_payment_method_public_id: paymentMethodPublicId,
+          payment_authorization_consent: true
+        })
+      },
+      token
+    );
+    if (result.status === "approved" && result.payment_status === "succeeded") {
+      setMessage("Payment successful. Your booking is confirmed.");
+    } else if (result.status === "payment_failed") {
+      const deadline = result.payment_hold_expires_at ? new Date(result.payment_hold_expires_at).toLocaleTimeString() : "the recovery window";
+      setMessage(`Payment failed. This booking is on hold until ${deadline}. Update your card from booking details.`);
+    } else if (result.status === "cancelled") {
+      setMessage("Payment failed and the booking was cancelled. Start a new request.");
+    } else {
+      setMessage("Request submitted for owner review.");
+    }
+  }
 
   async function handleRequest() {
     if (!token || !space) return;
@@ -155,32 +191,20 @@ export function SpaceDetailScreen() {
       if (!resolved.is_configured) {
         throw new Error(resolved.message || "This owner has not configured payments.");
       }
+      const payload: ReservationPayload = {
+        space_public_id: space.public_id,
+        start_datetime: start.toISOString(),
+        end_datetime: end.toISOString(),
+        booking_mode: fullDay ? "day_pass" : "hourly",
+        full_day: fullDay
+      };
       if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
-        throw new Error("Add a saved payment method on web before booking this space.");
+        setPendingReservation(payload);
+        setPaymentSetupOpen(true);
+        setMessage("Add a booking card to continue.");
+        return;
       }
-      const result = await apiFetch<BookingRequestResult>(
-        "/api/booking-requests",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            space_public_id: space.public_id,
-            start_datetime: start.toISOString(),
-            end_datetime: end.toISOString(),
-            booking_mode: fullDay ? "day_pass" : "hourly",
-            full_day: fullDay,
-            member_owner_payment_method_public_id: resolved.payment_method_public_id,
-            payment_authorization_consent: true
-          })
-        },
-        token
-      );
-      if (result.status === "approved" && result.payment_status === "succeeded") {
-        setMessage("Payment successful. Your booking is confirmed.");
-      } else if (result.status === "payment_failed") {
-        setMessage("Payment failed. Use requests to retry with another method.");
-      } else {
-        setMessage("Request submitted for owner review.");
-      }
+      await submitBooking(payload, resolved.payment_method_public_id);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -314,6 +338,21 @@ export function SpaceDetailScreen() {
               {submitting ? "Submitting..." : actionLabel}
             </Text>
           </TouchableOpacity>
+          {paymentSetupOpen && pendingReservation && token ? (
+            <BookingPaymentMethodSetup
+              token={token}
+              spacePublicId={pendingReservation.space_public_id}
+              organizationName={space.organization_name}
+              onSaved={(paymentMethodPublicId) => {
+                setPaymentSetupOpen(false);
+                setPendingReservation(null);
+                setSubmitting(true);
+                submitBooking(pendingReservation, paymentMethodPublicId)
+                  .catch((err) => setMessage(err instanceof Error ? err.message : "Request failed"))
+                  .finally(() => setSubmitting(false));
+              }}
+            />
+          ) : null}
           {plans.length > 0 ? (
             <View style={styles.planSection}>
               <Text style={styles.planTitle}>Membership plans</Text>

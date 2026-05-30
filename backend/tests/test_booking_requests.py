@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from app.core.config import settings
@@ -263,6 +263,30 @@ def test_booking_request_create_and_list(db_session, client_factory):
     assert owner_request["member_email"] == "member@example.com"
     assert owner_request["space_public_id"] == space.public_id
     assert owner_request["location_name"] == "Main"
+
+
+def test_owner_can_update_organization_booking_settings(db_session, client_factory):
+    owner, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    current = owner_client.get(f"/api/orgs/{org.public_id}/booking-settings")
+    assert current.status_code == 200
+    assert current.json()["booking_approval_mode"] == "manual"
+    assert current.json()["payment_failure_hold_minutes"] == 30
+
+    updated = owner_client.patch(
+        f"/api/orgs/{org.public_id}/booking-settings",
+        json={"booking_approval_mode": "auto", "payment_failure_hold_minutes": 15},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["booking_approval_mode"] == "auto"
+    assert updated.json()["payment_failure_hold_minutes"] == 15
 
 
 def test_owner_notification_recipients_require_opt_in_and_location_access(db_session):
@@ -844,6 +868,10 @@ def test_booking_request_rejection_sends_update_without_calendar_attachment(
 def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     owner, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
+    org.booking_approval_mode = "auto"
+    db_session.add(org)
+    db_session.commit()
     member = User(
         email="cust4@example.com",
         auth_subject="sub-member-4",
@@ -894,6 +922,10 @@ def test_instant_booking_flag_auto_approves(db_session, client_factory, monkeypa
 def test_explicit_instant_booking_confirms_and_blocks_overlap(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     owner, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
+    org.booking_approval_mode = "auto"
+    db_session.add(org)
+    db_session.commit()
     member = User(
         email="instant@example.com",
         auth_subject="sub-instant",
@@ -921,7 +953,6 @@ def test_explicit_instant_booking_confirms_and_blocks_overlap(db_session, client
     assert body["payment_status"] == "succeeded"
     assert body["booking_id"] is not None
 
-    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
     owner_client = client_factory({
         "sub": "sub-owner",
         "email": owner.email,
@@ -938,6 +969,10 @@ def test_explicit_instant_booking_confirms_and_blocks_overlap(db_session, client
 def test_recurring_instant_booking_creates_confirmed_series(db_session, client_factory, monkeypatch):
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     _owner, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
+    org.booking_approval_mode = "auto"
+    db_session.add(org)
+    db_session.commit()
     member = User(
         email="recurring@example.com",
         auth_subject="sub-recurring",
@@ -1039,7 +1074,51 @@ def test_payment_failure_marks_request_payment_failed(db_session, client_factory
     body = approve.json()
     assert body["status"] == BookingRequestStatus.PAYMENT_FAILED.value
     assert body["payment_status"] == "failed"
-    assert body["booking_id"] is None
+    assert body["booking_id"] is not None
+    assert body["payment_failed_at"] is not None
+    assert body["payment_hold_expires_at"] is not None
+    booking = db_session.query(Booking).filter(Booking.id == body["booking_id"]).first()
+    assert booking.status == BookingStatus.PENDING
+
+
+def test_payment_failure_cancel_immediately_cancels_hold(db_session, client_factory, monkeypatch):
+    class FailingProvider:
+        def charge_saved_method(self, **kwargs):
+            return ChargeResult(status="failed", failure_reason="0", raw_response={"resptext": "0"})
+
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FailingProvider())
+    owner, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
+    org.booking_approval_mode = "auto"
+    org.payment_failure_hold_minutes = 0
+    db_session.add(org)
+    db_session.commit()
+    member = User(
+        email="cancel-immediate@example.com",
+        auth_subject="sub-cancel-immediate",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, 16))
+
+    assert create.status_code == 200
+    body = create.json()
+    assert body["status"] == BookingRequestStatus.CANCELLED.value
+    assert body["payment_status"] == "failed"
+    assert body["payment_hold_expires_at"] is not None
+    booking = db_session.query(Booking).filter(Booking.id == body["booking_id"]).first()
+    assert booking.status == BookingStatus.CANCELED
 
 
 def test_member_can_update_card_and_retry_own_failed_instant_booking(db_session, client_factory, monkeypatch):
@@ -1145,6 +1224,68 @@ def test_member_cannot_retry_non_instant_failed_request(db_session, client_facto
 
     assert retry.status_code == 400
     assert "Only instant booking" in retry.json()["detail"]
+
+
+def test_retry_after_payment_hold_expiry_is_rejected_and_cancels_hold(db_session, client_factory, monkeypatch):
+    class RecordingProvider:
+        def charge_saved_method(self, **kwargs):
+            raise AssertionError("expired holds must not charge")
+
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: RecordingProvider())
+    _owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="expired-retry@example.com",
+        auth_subject="sub-expired-retry",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    booking = Booking(
+        user_id=member.id,
+        space_id=space.id,
+        tenant_id=space.tenant_id,
+        start_datetime=datetime(2026, 3, 22, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc),
+        inventory_start_datetime=datetime(2026, 3, 22, 10, 0, tzinfo=timezone.utc),
+        inventory_end_datetime=datetime(2026, 3, 22, 12, 0, tzinfo=timezone.utc),
+        status=BookingStatus.PENDING,
+    )
+    db_session.add(booking)
+    db_session.flush()
+    req = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=member.id,
+        space_id=space.id,
+        booking_id=booking.id,
+        start_datetime=booking.start_datetime,
+        end_datetime=booking.end_datetime,
+        status=BookingRequestStatus.PAYMENT_FAILED,
+        payment_status="failed",
+        instant_booking=True,
+        owner_payment_setting_id=method.owner_payment_setting_id,
+        payment_provider="stripe",
+        member_owner_payment_method_id=method.id,
+        payment_attempt_count=1,
+        payment_hold_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        payment_failed_at=datetime.now(timezone.utc) - timedelta(minutes=31),
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+    member_client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    retry = member_client.post(f"/api/booking-requests/{req.public_id}/retry-payment", json={})
+
+    assert retry.status_code == 400
+    assert "Payment recovery window expired" in retry.json()["detail"]
+    db_session.refresh(req)
+    db_session.refresh(booking)
+    assert req.status == BookingRequestStatus.CANCELLED
+    assert booking.status == BookingStatus.CANCELED
 
 
 def test_owner_retry_non_instant_failed_request_uses_member_updated_card(db_session, client_factory, monkeypatch):

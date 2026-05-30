@@ -38,9 +38,11 @@ cd backend
 python -m app.worker --once
 ```
 
-The worker covers marketing ticks, assistant reminders and space alerts, and
-CardPointe settlement polling. In AWS it runs as its own ECS service with the
-command `python -m app.worker`.
+The worker covers marketing ticks, assistant reminders and space alerts,
+CardPointe settlement polling, and expired booking payment holds. In AWS it
+runs as its own ECS service with the command `python -m app.worker`. Set
+`WORKER_ENABLE_BOOKING_HOLD_EXPIRY=false` only if expired booking holds should
+be handled by another scheduler.
 
 ### Web UI (local dev)
 

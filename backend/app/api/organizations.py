@@ -7,6 +7,8 @@ from app.models.enums import OrganizationReviewStatus, UserRole
 from app.models.organization import Organization
 from app.schemas.organization import (
     OrganizationApprovalRequestOut,
+    OrganizationBookingSettingsOut,
+    OrganizationBookingSettingsUpdate,
     OrganizationCreate,
     OrganizationOut,
     OrganizationUpdate,
@@ -138,6 +140,67 @@ def update_org(
             "branding": org.branding,
             "review_status": org.review_status.value,
             "review_notes": org.review_notes,
+        },
+        acting_as_user_id=acting_as_user_id,
+        context=context,
+    )
+    return org
+
+
+@router.get("/orgs/{public_id}/booking-settings", response_model=OrganizationBookingSettingsOut)
+def get_org_booking_settings(
+    public_id: str,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    org = db.query(Organization).filter(Organization.public_id == public_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    user = get_or_create_user(db, token)
+    member = get_org_member(db, org.id, user.id)
+    require_owner_admin_staff(member)
+    return org
+
+
+@router.patch("/orgs/{public_id}/booking-settings", response_model=OrganizationBookingSettingsOut)
+def update_org_booking_settings(
+    public_id: str,
+    payload: OrganizationBookingSettingsUpdate,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    org = db.query(Organization).filter(Organization.public_id == public_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    user = get_or_create_user(db, token)
+    member = get_org_member(db, org.id, user.id)
+    require_owner_admin_staff(member)
+
+    before = {
+        "booking_approval_mode": org.booking_approval_mode,
+        "payment_failure_hold_minutes": org.payment_failure_hold_minutes,
+    }
+    if payload.booking_approval_mode is not None:
+        org.booking_approval_mode = payload.booking_approval_mode
+    if payload.payment_failure_hold_minutes is not None:
+        org.payment_failure_hold_minutes = payload.payment_failure_hold_minutes
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+
+    actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
+    write_audit_log(
+        db=db,
+        actor_id=actor_id,
+        action="organization_booking_settings_updated",
+        entity_type="organization",
+        entity_public_id=org.public_id,
+        before_state=before,
+        after_state={
+            "booking_approval_mode": org.booking_approval_mode,
+            "payment_failure_hold_minutes": org.payment_failure_hold_minutes,
         },
         acting_as_user_id=acting_as_user_id,
         context=context,

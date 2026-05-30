@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const signOutMock = vi.fn(() => Promise.resolve());
+const signOutMock = vi.fn(async (_options?: unknown) => undefined);
 const routerReplaceMock = vi.fn();
 
 vi.mock("@/lib/e2e-bypass", () => ({ IS_E2E_BYPASS: false }));

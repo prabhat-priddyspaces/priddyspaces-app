@@ -21,6 +21,7 @@ from app.db.session import SessionLocal
 from app.models.marketing import OutboundMessage
 from app.models.user import User
 from app.services.cardpointe_settlement_poller import update_pending_cardpointe_settlements
+from app.services.booking_payments import expire_payment_holds
 from app.services.marketing import tick_marketing
 
 logger = logging.getLogger("worker")
@@ -33,6 +34,7 @@ class WorkerConfig:
     enable_marketing: bool
     enable_assistant_jobs: bool
     enable_cardpointe_settlements: bool
+    enable_booking_hold_expiry: bool
     cardpointe_max_age_days: int
 
     @classmethod
@@ -43,6 +45,7 @@ class WorkerConfig:
             enable_marketing=settings.WORKER_ENABLE_MARKETING,
             enable_assistant_jobs=settings.WORKER_ENABLE_ASSISTANT_JOBS,
             enable_cardpointe_settlements=settings.WORKER_ENABLE_CARDPOINTE_SETTLEMENTS,
+            enable_booking_hold_expiry=settings.WORKER_ENABLE_BOOKING_HOLD_EXPIRY,
             cardpointe_max_age_days=settings.WORKER_CARDPOINTE_MAX_AGE_DAYS,
         )
 
@@ -250,6 +253,17 @@ def run_once(
         else:
             result["jobs"]["cardpointe_settlements"] = job_result
 
+    if config.enable_booking_hold_expiry:
+        job_result, error = _run_db_job(
+            "booking_hold_expiry",
+            session_factory,
+            lambda db: expire_payment_holds(db, limit=config.batch_limit),
+        )
+        if error:
+            result["errors"]["booking_hold_expiry"] = error
+        else:
+            result["jobs"]["booking_hold_expiry"] = job_result
+
     result["finished_at"] = _now_iso()
     return result
 
@@ -262,6 +276,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--disable-marketing", action="store_true")
     parser.add_argument("--disable-assistant-jobs", action="store_true")
     parser.add_argument("--disable-cardpointe-settlements", action="store_true")
+    parser.add_argument("--disable-booking-hold-expiry", action="store_true")
     return parser
 
 
@@ -275,6 +290,9 @@ def main() -> None:
         enable_assistant_jobs=settings.WORKER_ENABLE_ASSISTANT_JOBS and not args.disable_assistant_jobs,
         enable_cardpointe_settlements=(
             settings.WORKER_ENABLE_CARDPOINTE_SETTLEMENTS and not args.disable_cardpointe_settlements
+        ),
+        enable_booking_hold_expiry=(
+            settings.WORKER_ENABLE_BOOKING_HOLD_EXPIRY and not args.disable_booking_hold_expiry
         ),
         cardpointe_max_age_days=settings.WORKER_CARDPOINTE_MAX_AGE_DAYS,
     )

@@ -10,6 +10,9 @@ type BookingRequest = {
   start_datetime: string;
   end_datetime: string;
   status: string;
+  payment_hold_expires_at?: string | null;
+  booking_approval_mode?: string | null;
+  failure_reason?: string | null;
 };
 
 export function OwnerBookingsScreen() {
@@ -22,8 +25,8 @@ export function OwnerBookingsScreen() {
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    apiFetch<BookingRequest[]>("/api/booking-requests?status=requested", { method: "GET" }, token)
-      .then(setBookings)
+    apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token)
+      .then((rows) => setBookings(rows.filter((row) => row.status === "requested" || row.status === "payment_failed")))
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load bookings"))
       .finally(() => setLoading(false));
   }, [token]);
@@ -45,8 +48,18 @@ export function OwnerBookingsScreen() {
               onPress={() => navigation.navigate("BookingDetail", { bookingId: booking.public_id })}
             >
               <Text style={styles.cardTitle}>{booking.status}</Text>
+              {booking.booking_approval_mode ? (
+                <Text style={styles.cardMuted}>{booking.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval"}</Text>
+              ) : null}
               <Text style={styles.cardSubtitle}>{booking.start_datetime}</Text>
               <Text style={styles.cardMuted}>{booking.end_datetime}</Text>
+              {booking.status === "payment_failed" ? (
+                <Text style={styles.cardWarning}>
+                  {booking.payment_hold_expires_at
+                    ? `Waiting for member payment update until ${new Date(booking.payment_hold_expires_at).toLocaleString()}`
+                    : "Waiting for member payment update"}
+                </Text>
+              ) : null}
             </TouchableOpacity>
           ))
         )}
@@ -99,6 +112,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: "#6B7280"
+  },
+  cardWarning: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#991B1B"
   },
   empty: {
     fontSize: 12,

@@ -44,6 +44,10 @@ interface BookingRequest {
   rejected_at: string | null;
   cancelled_at: string | null;
   cancellation_deadline_at: string | null;
+  payment_hold_expires_at: string | null;
+  payment_failed_at: string | null;
+  booking_approval_mode: string;
+  payment_failure_hold_minutes: number | null;
   failure_reason: string | null;
 }
 
@@ -116,6 +120,24 @@ function paymentFailureReason(reason: string | null) {
     return "The payment processor declined the charge. Update the card or contact the card issuer for details.";
   }
   return text;
+}
+
+function holdDeadlineLine(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function holdExpired(request: BookingRequest) {
+  if (request.status === "cancelled" && request.payment_status === "failed") return true;
+  if (!request.payment_hold_expires_at) return false;
+  return Date.now() > new Date(request.payment_hold_expires_at).getTime();
 }
 
 function retryOwnerName(request: BookingRequest) {
@@ -298,15 +320,29 @@ export default function MemberRequestsPage() {
                     ) : null}
                   </div>
                 </div>
+                {b.status === "cancelled" && b.payment_status === "failed" ? (
+                  <div className="mt-3 rounded-md border border-border bg-surface2 p-3 text-sm text-textSecondary">
+                    This hold expired. Start a new booking.
+                  </div>
+                ) : null}
                 {b.status === "payment_failed" ? (
                   <div className="mt-3 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
                     <div>{paymentFailureReason(b.failure_reason)}</div>
-                    <div className="mt-1 text-textSecondary">
-                      {b.instant_booking
-                        ? "Update your card to retry this booking."
-                        : `Update your card, then ${retryOwnerName(b)} can retry the charge.`}
-                    </div>
-                    {b.space_public_id ? (
+                    {holdExpired(b) ? (
+                      <div className="mt-1 text-textSecondary">
+                        This hold expired. Start a new booking.
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-textSecondary">
+                        {holdDeadlineLine(b.payment_hold_expires_at)
+                          ? `This booking is held until ${holdDeadlineLine(b.payment_hold_expires_at)}. `
+                          : ""}
+                        {b.instant_booking
+                          ? "Update your card to retry this booking."
+                          : `Update your card, then ${retryOwnerName(b)} can retry the charge.`}
+                      </div>
+                    )}
+                    {b.space_public_id && !holdExpired(b) ? (
                       <Button
                         size="sm"
                         className="mt-3"

@@ -1,7 +1,12 @@
 from app import worker
 from app.assistant.jobs import match_space_alerts
 from app.models.assistant import SpaceAlert
-from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility, UserAppRole
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.orm import sessionmaker
+
+from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
+from app.models.enums import AvailabilityStatus, BookingRequestStatus, BookingStatus, SpaceType, SpaceVisibility, UserAppRole
 from app.models.location import Location
 from app.models.marketing import OutboundMessage
 from app.models.organization import Organization
@@ -38,6 +43,7 @@ def test_run_once_isolates_job_failure_and_closes_session(monkeypatch):
         enable_marketing=True,
         enable_assistant_jobs=False,
         enable_cardpointe_settlements=False,
+        enable_booking_hold_expiry=False,
         cardpointe_max_age_days=7,
     )
 
@@ -46,6 +52,88 @@ def test_run_once_isolates_job_failure_and_closes_session(monkeypatch):
     assert "boom:25" in result["errors"]["marketing"]
     assert sessions[0].rolled_back is True
     assert sessions[0].closed is True
+
+
+def test_run_once_expires_failed_payment_holds(db_session, monkeypatch):
+    user = User(
+        email="hold-member@example.com",
+        auth_subject="sub-hold-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    org = Organization(name="Hold Org", owner_id=user.id)
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+    location = Location(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Hold Location",
+        address="1 Main",
+        timezone="UTC",
+    )
+    db_session.add(location)
+    db_session.commit()
+    db_session.refresh(location)
+    space = Space(
+        location_id=location.id,
+        tenant_id=org.id,
+        space_type=SpaceType.CONFERENCE_ROOM,
+        capacity=4,
+        availability_status=AvailabilityStatus.AVAILABLE,
+        visibility=SpaceVisibility.PUBLIC,
+    )
+    db_session.add(space)
+    db_session.commit()
+    db_session.refresh(space)
+    booking = Booking(
+        user_id=user.id,
+        space_id=space.id,
+        tenant_id=org.id,
+        start_datetime=datetime(2026, 5, 1, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 5, 1, 11, 0, tzinfo=timezone.utc),
+        inventory_start_datetime=datetime(2026, 5, 1, 10, 0, tzinfo=timezone.utc),
+        inventory_end_datetime=datetime(2026, 5, 1, 11, 0, tzinfo=timezone.utc),
+        status=BookingStatus.PENDING,
+    )
+    db_session.add(booking)
+    db_session.flush()
+    req = BookingRequest(
+        tenant_id=org.id,
+        user_id=user.id,
+        space_id=space.id,
+        booking_id=booking.id,
+        start_datetime=booking.start_datetime,
+        end_datetime=booking.end_datetime,
+        status=BookingRequestStatus.PAYMENT_FAILED,
+        payment_status="failed",
+        payment_hold_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        payment_failed_at=datetime.now(timezone.utc) - timedelta(minutes=31),
+    )
+    db_session.add(req)
+    db_session.commit()
+
+    config = worker.WorkerConfig(
+        interval_seconds=60,
+        batch_limit=25,
+        enable_marketing=False,
+        enable_assistant_jobs=False,
+        enable_cardpointe_settlements=False,
+        enable_booking_hold_expiry=True,
+        cardpointe_max_age_days=7,
+    )
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+    result = worker.run_once(config=config, session_factory=session_factory)
+
+    assert result["jobs"]["booking_hold_expiry"]["expired_payment_holds"] == 1
+    db_session.expire_all()
+    updated_req = db_session.get(BookingRequest, req.id)
+    updated_booking = db_session.get(Booking, booking.id)
+    assert updated_req.status == BookingRequestStatus.CANCELLED
+    assert updated_booking.status == BookingStatus.CANCELED
 
 
 def test_run_assistant_jobs_sends_booking_reminder_once(db_session, monkeypatch):

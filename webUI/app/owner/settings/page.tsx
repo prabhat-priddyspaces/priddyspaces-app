@@ -17,6 +17,8 @@ interface Organization {
   branding: string | null;
   review_status: string;
   review_notes: string | null;
+  booking_approval_mode: "manual" | "auto";
+  payment_failure_hold_minutes: number;
 }
 
 interface LocationOption {
@@ -46,6 +48,13 @@ interface PromoCode {
 interface TaxConfig {
   public_id: string;
   rate_percent: number;
+}
+
+interface BookingSettings {
+  public_id: string;
+  name: string;
+  booking_approval_mode: "manual" | "auto";
+  payment_failure_hold_minutes: number;
 }
 
 interface FeatureFlag {
@@ -94,6 +103,7 @@ export default function OwnerSettingsPage() {
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [taxConfig, setTaxConfig] = useState<TaxConfig | null>(null);
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -107,6 +117,10 @@ export default function OwnerSettingsPage() {
     discount_value: "",
   });
   const [taxRate, setTaxRate] = useState("");
+  const [bookingSettingsForm, setBookingSettingsForm] = useState({
+    booking_approval_mode: "manual" as "manual" | "auto",
+    payment_failure_hold_minutes: "30",
+  });
   const [flagForm, setFlagForm] = useState({
     flag_key: "instant_booking_enabled",
     flag_value: false,
@@ -252,6 +266,25 @@ export default function OwnerSettingsPage() {
     }
   }
 
+  async function loadBookingSettings() {
+    if (!orgId) {
+      setBookingSettings(null);
+      setBookingSettingsForm({ booking_approval_mode: "manual", payment_failure_hold_minutes: "30" });
+      return;
+    }
+    const token = getAccessToken() ?? undefined;
+    const settings = await apiFetch<BookingSettings>(
+      `/api/orgs/${orgId}/booking-settings`,
+      { method: "GET" },
+      token
+    );
+    setBookingSettings(settings);
+    setBookingSettingsForm({
+      booking_approval_mode: settings.booking_approval_mode,
+      payment_failure_hold_minutes: String(settings.payment_failure_hold_minutes),
+    });
+  }
+
   async function loadFeatureFlags() {
     if (!flagForm.scope_public_id) {
       setFeatureFlags([]);
@@ -354,6 +387,7 @@ export default function OwnerSettingsPage() {
   useEffect(() => {
     loadPromoCodes().catch(() => null);
     loadTaxConfig().catch(() => null);
+    loadBookingSettings().catch(() => null);
     loadPolicies().catch(() => null);
     loadPlans().catch(() => null);
     loadConnectStatus().catch(() => null);
@@ -415,6 +449,28 @@ export default function OwnerSettingsPage() {
     );
     setMessage("Tax config saved");
     await loadTaxConfig();
+  }
+
+  async function saveBookingSettings() {
+    if (!orgId) return;
+    const token = getAccessToken() ?? undefined;
+    const saved = await apiFetch<BookingSettings>(
+      `/api/orgs/${orgId}/booking-settings`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          booking_approval_mode: bookingSettingsForm.booking_approval_mode,
+          payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes),
+        }),
+      },
+      token
+    );
+    setBookingSettings(saved);
+    setBookingSettingsForm({
+      booking_approval_mode: saved.booking_approval_mode,
+      payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes),
+    });
+    setMessage("Booking approval settings saved");
   }
 
   async function createFeatureFlag() {
@@ -696,6 +752,63 @@ export default function OwnerSettingsPage() {
           </div>
           <div className="text-xs text-textMuted">
             Current: {taxConfig ? `${taxConfig.rate_percent}%` : "Not set"}
+          </div>
+        </Card>
+
+        <Card className="grid gap-4 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">Booking approval</div>
+              <div className="text-xs text-textMuted">
+                Current: {bookingSettings?.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval"} •{" "}
+                {bookingSettings?.payment_failure_hold_minutes === 0
+                  ? "Cancel failed payments immediately"
+                  : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min payment recovery hold`}
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="booking-approval-mode">Approval mode</Label>
+              <select
+                id="booking-approval-mode"
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                value={bookingSettingsForm.booking_approval_mode}
+                onChange={(e) =>
+                  setBookingSettingsForm((current) => ({
+                    ...current,
+                    booking_approval_mode: e.target.value as "manual" | "auto",
+                  }))
+                }
+              >
+                <option value="manual">Manual approval</option>
+                <option value="auto">Auto approve</option>
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="payment-hold-minutes">Payment failure recovery</Label>
+              <select
+                id="payment-hold-minutes"
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                value={bookingSettingsForm.payment_failure_hold_minutes}
+                onChange={(e) =>
+                  setBookingSettingsForm((current) => ({
+                    ...current,
+                    payment_failure_hold_minutes: e.target.value,
+                  }))
+                }
+              >
+                <option value="0">Cancel immediately</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="60">60 min</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <Button type="button" onClick={saveBookingSettings} disabled={!orgId}>
+                Save booking approval
+              </Button>
+            </div>
           </div>
         </Card>
 

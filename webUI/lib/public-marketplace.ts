@@ -20,6 +20,8 @@ export interface PublicMarketplaceConfig {
 
 export interface MarketplaceLocationSummary {
   location_public_id: string;
+  booking_approval_mode?: "manual" | "auto" | string;
+  payment_failure_hold_minutes?: number | null;
   name: string;
   address: string;
   city: string | null;
@@ -56,6 +58,8 @@ export interface MarketplaceLocationSearchResponse {
 
 export interface MarketplaceLocationSpace {
   public_id: string;
+  booking_approval_mode?: "manual" | "auto" | string;
+  payment_failure_hold_minutes?: number | null;
   name: string;
   space_type: string;
   capacity: number;
@@ -107,6 +111,8 @@ export interface MarketplaceSpaceDetailSpace {
 export interface MarketplaceSpaceDetailLocation {
   location_public_id: string;
   organization_name: string | null;
+  booking_approval_mode?: "manual" | "auto" | string;
+  payment_failure_hold_minutes?: number | null;
   name: string;
   address: string;
   city: string | null;
