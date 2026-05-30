@@ -24,6 +24,7 @@ import {
   formatLocationAddress,
   formatSpaceTypeLabel,
   leaseBookingModeForSpaceType,
+  markLeaseEstimate,
   MembershipPlanPublic,
   MarketplaceSpaceDetailResponse,
   SpaceAvailabilityResponse,
@@ -125,9 +126,15 @@ function getPriceRows(space: MarketplaceSpaceDetailResponse["space"]) {
     return rows;
   }
   if (firstPlan?.price_cents != null) {
-    rows.push({ label: "Lease", value: formatCents(firstPlan.price_cents) + "/month" });
+    rows.push({
+      label: "Lease",
+      value: markLeaseEstimate(formatCents(firstPlan.price_cents) + "/month"),
+    });
   } else if (space.membership_price != null) {
-    rows.push({ label: "Lease", value: formatUsd(space.membership_price, "/month") });
+    rows.push({
+      label: "Lease",
+      value: markLeaseEstimate(formatUsd(space.membership_price, "/month")),
+    });
   }
   return rows;
 }

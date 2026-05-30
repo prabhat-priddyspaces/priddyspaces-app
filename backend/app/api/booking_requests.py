@@ -549,7 +549,11 @@ def _approve_membership_request(
         user_id=req.user_id,
         space_id=req.space_id,
         tenant_id=req.tenant_id,
-        status=SubscriptionStatusEnum.PENDING_PAYMENT.value,
+        status=(
+            SubscriptionStatusEnum.ACTIVE.value
+            if result.status in {"active", "trialing"}
+            else SubscriptionStatusEnum.PENDING_PAYMENT.value
+        ),
         start_date=desired_start,
         end_date=commitment_end,
         stripe_subscription_id=result.subscription_id,

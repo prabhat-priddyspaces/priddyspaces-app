@@ -13,6 +13,7 @@ import {
   findBaselinePlan,
   formatLeasePrice,
   LeaseBookingMode,
+  markLeaseEstimate,
   MembershipPlanPublic,
   termLabel,
   type SpaceAvailabilityResponse,
@@ -233,7 +234,10 @@ export function LeaseBookingWidget({
   }
 
   if (plans.length === 0) {
-    const fallback = spaceMonthlyPrice != null ? formatUsd(spaceMonthlyPrice, "/mo") : "Contact for pricing";
+    const fallback =
+      spaceMonthlyPrice != null
+        ? markLeaseEstimate(formatUsd(spaceMonthlyPrice, "/mo"))
+        : "Contact for pricing";
     return (
       <div className="rounded-2xl border border-line p-5">
         <div className="text-center text-3xl font-semibold text-text">{fallback}</div>
@@ -321,7 +325,9 @@ export function LeaseBookingWidget({
             </div>
             <div className="text-right">
               <div className="text-2xl font-semibold text-text">
-                {formatLeasePrice(selectedPlan.price_cents, selectedPlan.billing_cycle)}
+                {markLeaseEstimate(
+                  formatLeasePrice(selectedPlan.price_cents, selectedPlan.billing_cycle),
+                )}
               </div>
               {savingsPercent != null && baselinePlan ? (
                 <div className="mt-1 text-sm text-text-4 line-through">

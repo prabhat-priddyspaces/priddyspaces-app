@@ -388,6 +388,10 @@ export function formatLeasePrice(cents: number, billingCycle: string = "monthly"
   return `$${formatted}${suffix}`;
 }
 
+export function markLeaseEstimate(value: string) {
+  return value ? `${value}*` : value;
+}
+
 export function termLabel(commitmentMonths: number | null) {
   if (commitmentMonths == null || commitmentMonths <= 1) return "Month-to-month";
   return `${commitmentMonths}-month Term`;
@@ -427,7 +431,10 @@ export function getLocationPriceChips(
     }
   } else if (config.routeKey === "private-offices") {
     if (location.starting_monthly_price != null) {
-      chips.push({ label: "Private Office", value: formatUsd(location.starting_monthly_price, "/mo") });
+      chips.push({
+        label: "Private Office",
+        value: markLeaseEstimate(formatUsd(location.starting_monthly_price, "/mo")),
+      });
     }
   } else {
     if (location.starting_hourly_price != null) {
@@ -451,9 +458,9 @@ export function getSpacePriceChips(
     if (space.membership_price != null) chips.push(`Membership $${space.membership_price}/mo`);
   } else if (config.routeKey === "private-offices") {
     if (space.membership_price != null) {
-      chips.push(`Lease ${formatUsd(space.membership_price, "/mo")}`);
+      chips.push(`Lease ${markLeaseEstimate(formatUsd(space.membership_price, "/mo"))}`);
     } else if (space.price_monthly != null) {
-      chips.push(`Private Office ${formatUsd(space.price_monthly, "/mo")}`);
+      chips.push(`Private Office ${markLeaseEstimate(formatUsd(space.price_monthly, "/mo"))}`);
     }
   } else {
     // Meeting rooms: lead with hourly (the new default), keep daily as the alt rate.
