@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -10,6 +10,9 @@ type Member = {
   user_email: string;
   role: string;
   can_override_pricing: boolean;
+  receives_new_booking_email?: boolean;
+  receives_booking_start_push: boolean;
+  receives_booking_end_push: boolean;
 };
 
 export function OwnerTeamScreen() {
@@ -21,7 +24,9 @@ export function OwnerTeamScreen() {
   const [form, setForm] = useState({
     user_public_id: "",
     role: "staff",
-    can_override_pricing: "false"
+    can_override_pricing: "false",
+    receives_booking_start_push: true,
+    receives_booking_end_push: true,
   });
 
   useEffect(() => {
@@ -49,13 +54,41 @@ export function OwnerTeamScreen() {
         body: JSON.stringify({
           user_public_id: form.user_public_id,
           role: form.role,
-          can_override_pricing: form.can_override_pricing === "true"
+          can_override_pricing: form.can_override_pricing === "true",
+          receives_booking_start_push: form.receives_booking_start_push,
+          receives_booking_end_push: form.receives_booking_end_push,
         })
       },
       token
     );
     setMessage("Member added");
-    setForm({ user_public_id: "", role: "staff", can_override_pricing: "false" });
+    setForm({
+      user_public_id: "",
+      role: "staff",
+      can_override_pricing: "false",
+      receives_booking_start_push: true,
+      receives_booking_end_push: true,
+    });
+  }
+
+  async function toggleMemberPreference(member: Member, field: "receives_booking_start_push" | "receives_booking_end_push") {
+    if (!token || !orgId) return;
+    const nextValue = !member[field];
+    setMembers((current) =>
+      current.map((item) => (item.public_id === member.public_id ? { ...item, [field]: nextValue } : item))
+    );
+    try {
+      await apiFetch<Member>(
+        `/api/orgs/${orgId}/members/${member.public_id}`,
+        { method: "PATCH", body: JSON.stringify({ [field]: nextValue }) },
+        token
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to update notifications");
+      apiFetch<Member[]>(`/api/orgs/${orgId}/members`, { method: "GET" }, token)
+        .then(setMembers)
+        .catch(() => null);
+    }
   }
 
   return (
@@ -96,6 +129,21 @@ export function OwnerTeamScreen() {
           </TouchableOpacity>
         ))}
       </View>
+      <Text style={styles.sectionTitle}>Booking reminders</Text>
+      <View style={styles.toggleRow}>
+        <Text style={styles.cardMuted}>Start reminder push</Text>
+        <Switch
+          value={form.receives_booking_start_push}
+          onValueChange={(value) => setForm({ ...form, receives_booking_start_push: value })}
+        />
+      </View>
+      <View style={styles.toggleRow}>
+        <Text style={styles.cardMuted}>Meeting-room end reminder push</Text>
+        <Switch
+          value={form.receives_booking_end_push}
+          onValueChange={(value) => setForm({ ...form, receives_booking_end_push: value })}
+        />
+      </View>
       <TouchableOpacity style={styles.primaryButton} onPress={addMember}>
         <Text style={styles.primaryButtonText}>Add member</Text>
       </TouchableOpacity>
@@ -111,6 +159,22 @@ export function OwnerTeamScreen() {
               <Text style={styles.cardMuted}>
                 Pricing override: {member.can_override_pricing ? "Yes" : "No"}
               </Text>
+              <View style={styles.toggleRow}>
+                <Text style={styles.cardMuted}>Start reminder push</Text>
+                <Switch
+                  testID={`team-start-push-${member.public_id}`}
+                  value={member.receives_booking_start_push}
+                  onValueChange={() => toggleMemberPreference(member, "receives_booking_start_push")}
+                />
+              </View>
+              <View style={styles.toggleRow}>
+                <Text style={styles.cardMuted}>Meeting-room end reminder push</Text>
+                <Switch
+                  testID={`team-end-push-${member.public_id}`}
+                  value={member.receives_booking_end_push}
+                  onValueChange={() => toggleMemberPreference(member, "receives_booking_end_push")}
+                />
+              </View>
             </View>
           ))
         )}
@@ -207,6 +271,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: "#6B7280"
+  },
+  toggleRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
   },
   empty: {
     fontSize: 12,

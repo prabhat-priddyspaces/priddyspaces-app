@@ -23,6 +23,7 @@ from app.models.user import User
 from app.services.cardpointe_settlement_poller import update_pending_cardpointe_settlements
 from app.services.booking_payments import expire_payment_holds
 from app.services.marketing import tick_marketing
+from app.services.push_notifications import run_booking_reminder_push_job
 
 logger = logging.getLogger("worker")
 
@@ -33,6 +34,7 @@ class WorkerConfig:
     batch_limit: int
     enable_marketing: bool
     enable_assistant_jobs: bool
+    enable_booking_reminder_push: bool
     enable_cardpointe_settlements: bool
     enable_booking_hold_expiry: bool
     cardpointe_max_age_days: int
@@ -44,6 +46,7 @@ class WorkerConfig:
             batch_limit=settings.WORKER_BATCH_LIMIT,
             enable_marketing=settings.WORKER_ENABLE_MARKETING,
             enable_assistant_jobs=settings.WORKER_ENABLE_ASSISTANT_JOBS,
+            enable_booking_reminder_push=settings.WORKER_ENABLE_BOOKING_REMINDER_PUSH,
             enable_cardpointe_settlements=settings.WORKER_ENABLE_CARDPOINTE_SETTLEMENTS,
             enable_booking_hold_expiry=settings.WORKER_ENABLE_BOOKING_HOLD_EXPIRY,
             cardpointe_max_age_days=settings.WORKER_CARDPOINTE_MAX_AGE_DAYS,
@@ -238,6 +241,17 @@ def run_once(
         else:
             result["jobs"]["assistant"] = job_result
 
+    if config.enable_booking_reminder_push:
+        job_result, error = _run_db_job(
+            "booking_reminder_push",
+            session_factory,
+            lambda db: run_booking_reminder_push_job(db, limit=config.batch_limit),
+        )
+        if error:
+            result["errors"]["booking_reminder_push"] = error
+        else:
+            result["jobs"]["booking_reminder_push"] = job_result
+
     if config.enable_cardpointe_settlements:
         job_result, error = _run_db_job(
             "cardpointe_settlements",
@@ -275,6 +289,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--disable-marketing", action="store_true")
     parser.add_argument("--disable-assistant-jobs", action="store_true")
+    parser.add_argument("--disable-booking-reminder-push", action="store_true")
     parser.add_argument("--disable-cardpointe-settlements", action="store_true")
     parser.add_argument("--disable-booking-hold-expiry", action="store_true")
     return parser
@@ -288,6 +303,9 @@ def main() -> None:
         batch_limit=args.limit,
         enable_marketing=settings.WORKER_ENABLE_MARKETING and not args.disable_marketing,
         enable_assistant_jobs=settings.WORKER_ENABLE_ASSISTANT_JOBS and not args.disable_assistant_jobs,
+        enable_booking_reminder_push=(
+            settings.WORKER_ENABLE_BOOKING_REMINDER_PUSH and not args.disable_booking_reminder_push
+        ),
         enable_cardpointe_settlements=(
             settings.WORKER_ENABLE_CARDPOINTE_SETTLEMENTS and not args.disable_cardpointe_settlements
         ),

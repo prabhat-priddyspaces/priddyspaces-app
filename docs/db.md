@@ -32,6 +32,9 @@
 - Space access passes are generated only for confirmed bookings and are invalidated by cancellation, rejection, refund, void, expiry, or checkout.
 - QR codes must contain only an opaque access token/fallback URL; token lookup uses a hash and server-side validation.
 - Attendance stores one check-in event and one check-out event per booking, including scanner user, member, booking, location, space, and timestamp.
+- Push subscriptions are stored per user/device with a hashed endpoint/token and encrypted provider payload.
+- In-app user notifications are deduped by user, booking, reminder type, and audience.
+- Member reminder preferences default booking start/end push to enabled; owner-team start/end push toggles live on `organization_members`.
 
 ## Suggested Fields (examples)
 ### Location

@@ -125,3 +125,23 @@ sequenceDiagram
 - Owner admins and staff see assigned locations only.
 - Platform admins/superadmins/support can scan and view attendance across all locations.
 - Member directory is read-only and limited to people with active memberships or recent confirmed bookings at the same locations as the requesting member.
+
+## 8) Booking reminder notification flow
+```mermaid
+sequenceDiagram
+  participant W as Worker
+  participant API as Backend API
+  participant N as Notifications
+  participant U as User device/browser
+  W->>API: Find confirmed bookings due within 10 minutes
+  API->>API: Skip cancelled, invalid payment, opted-out, or duplicate reminders
+  API->>N: Create in-app notification
+  N->>U: Send web push or Expo push when subscription exists
+  U-->>API: User opens notification or marks read
+```
+
+Rules:
+- Booking-start reminders default on for members and owner-side team members.
+- Booking-end reminders default on, but only send for `conference_room` meeting-room bookings.
+- Owner/admin/staff reminders follow existing organization and location access scope.
+- In-app notifications are created even when browser/mobile push permission is missing.

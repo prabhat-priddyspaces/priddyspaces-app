@@ -116,9 +116,16 @@ class Settings(BaseSettings):
     WORKER_BATCH_LIMIT: int = 100
     WORKER_ENABLE_MARKETING: bool = True
     WORKER_ENABLE_ASSISTANT_JOBS: bool = True
+    WORKER_ENABLE_BOOKING_REMINDER_PUSH: bool = True
     WORKER_ENABLE_CARDPOINTE_SETTLEMENTS: bool = True
     WORKER_ENABLE_BOOKING_HOLD_EXPIRY: bool = True
     WORKER_CARDPOINTE_MAX_AGE_DAYS: int = 7
+
+    # Push notifications.
+    WEB_PUSH_VAPID_PUBLIC_KEY: str = ""
+    WEB_PUSH_VAPID_PRIVATE_KEY: str = ""
+    WEB_PUSH_VAPID_SUBJECT: str = "mailto:no-reply@priddyspaces.com"
+    EXPO_PUSH_ACCESS_TOKEN: str = ""
 
     @property
     def is_production_like(self) -> bool:

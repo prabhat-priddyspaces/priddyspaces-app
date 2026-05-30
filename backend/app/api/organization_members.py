@@ -27,6 +27,10 @@ def _default_receives_new_booking_email(role: UserRole) -> bool:
     return role in {UserRole.OWNER, UserRole.ADMIN}
 
 
+def _default_receives_booking_push(role: UserRole) -> bool:
+    return role in {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
+
+
 def _resolve_member_user(db: Session, payload: OrganizationMemberCreate) -> User:
     if payload.user_public_id:
         user = db.query(User).filter(User.public_id == payload.user_public_id).first()
@@ -118,6 +122,10 @@ def add_member(
         member.can_override_pricing = payload.can_override_pricing
         if payload.receives_new_booking_email is not None:
             member.receives_new_booking_email = payload.receives_new_booking_email
+        if payload.receives_booking_start_push is not None:
+            member.receives_booking_start_push = payload.receives_booking_start_push
+        if payload.receives_booking_end_push is not None:
+            member.receives_booking_end_push = payload.receives_booking_end_push
     else:
         member = OrganizationMember(
             organization_id=org.id,
@@ -129,6 +137,16 @@ def add_member(
                 payload.receives_new_booking_email
                 if payload.receives_new_booking_email is not None
                 else _default_receives_new_booking_email(payload.role)
+            ),
+            receives_booking_start_push=(
+                payload.receives_booking_start_push
+                if payload.receives_booking_start_push is not None
+                else _default_receives_booking_push(payload.role)
+            ),
+            receives_booking_end_push=(
+                payload.receives_booking_end_push
+                if payload.receives_booking_end_push is not None
+                else _default_receives_booking_push(payload.role)
             ),
         )
         db.add(member)
@@ -158,6 +176,8 @@ def add_member(
         role=member.role,
         can_override_pricing=member.can_override_pricing,
         receives_new_booking_email=member.receives_new_booking_email,
+        receives_booking_start_push=member.receives_booking_start_push,
+        receives_booking_end_push=member.receives_booking_end_push,
         location_public_ids=location_public_ids,
     )
 
@@ -202,6 +222,8 @@ def list_members(
                 role=member.role,
                 can_override_pricing=member.can_override_pricing,
                 receives_new_booking_email=member.receives_new_booking_email,
+                receives_booking_start_push=member.receives_booking_start_push,
+                receives_booking_end_push=member.receives_booking_end_push,
                 location_public_ids=[public_id for public_id, in assigned_locations],
             )
         )
@@ -239,6 +261,10 @@ def update_member(
     member, user = row
     if payload.receives_new_booking_email is not None:
         member.receives_new_booking_email = payload.receives_new_booking_email
+    if payload.receives_booking_start_push is not None:
+        member.receives_booking_start_push = payload.receives_booking_start_push
+    if payload.receives_booking_end_push is not None:
+        member.receives_booking_end_push = payload.receives_booking_end_push
 
     db.add(member)
     db.commit()
@@ -261,5 +287,7 @@ def update_member(
         role=member.role,
         can_override_pricing=member.can_override_pricing,
         receives_new_booking_email=member.receives_new_booking_email,
+        receives_booking_start_push=member.receives_booking_start_push,
+        receives_booking_end_push=member.receives_booking_end_push,
         location_public_ids=[public_id for public_id, in assigned_locations],
     )

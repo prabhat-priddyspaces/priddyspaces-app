@@ -16,6 +16,7 @@ const ownerItems: MenuItem[] = [
   { label: "Locations", screen: "Locations", target: "tab" },
   { label: "Bookings", screen: "Bookings", target: "tab" },
   { label: "Team", screen: "OwnerTeam", target: "stack" },
+  { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Settings", screen: "OwnerSettings", target: "stack" },
   { label: "Payments", screen: "Payments", target: "stack" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
@@ -28,6 +29,7 @@ const memberItems: MenuItem[] = [
   { label: "Access Passes", screen: "AccessPasses", target: "tab" },
   { label: "My Space QR", screen: "MySpaceQr", target: "tab" },
   { label: "Directory", screen: "Directory", target: "tab" },
+  { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" }
 ];
@@ -35,6 +37,7 @@ const memberItems: MenuItem[] = [
 const adminItems: MenuItem[] = [
   { label: "Scanner", screen: "Scanner", target: "tab" },
   { label: "Attendance", screen: "Attendance", target: "tab" },
+  { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" },
 ];
 

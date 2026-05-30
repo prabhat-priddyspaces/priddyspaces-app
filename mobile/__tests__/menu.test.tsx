@@ -24,6 +24,7 @@ describe("MenuScreen", () => {
     expect(getByText("Dashboard")).toBeTruthy();
     expect(getByText("Scanner")).toBeTruthy();
     expect(getByText("Attendance")).toBeTruthy();
+    expect(getByText("Notifications")).toBeTruthy();
   });
 
   it("renders member access pass menu items", () => {
@@ -32,6 +33,7 @@ describe("MenuScreen", () => {
     expect(getByText("Access Passes")).toBeTruthy();
     expect(getByText("My Space QR")).toBeTruthy();
     expect(getByText("Directory")).toBeTruthy();
+    expect(getByText("Notifications")).toBeTruthy();
   });
 
   it("renders admin scanner and attendance menu items", () => {
@@ -39,6 +41,7 @@ describe("MenuScreen", () => {
     const { getByText, queryByText } = render(<MenuScreen />);
     expect(getByText("Scanner")).toBeTruthy();
     expect(getByText("Attendance")).toBeTruthy();
+    expect(getByText("Notifications")).toBeTruthy();
     expect(queryByText("Locations")).toBeNull();
   });
 });

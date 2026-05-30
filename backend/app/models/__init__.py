@@ -31,6 +31,7 @@ from app.models.payment_event import PaymentEvent
 from app.models.payment_refund import PaymentRefund
 from app.models.platform_setting import PlatformSetting
 from app.models.platform_team_member import PlatformTeamMember
+from app.models.push_subscription import PushSubscription
 from app.models.space import Space
 from app.models.space_access_pass import SpaceAccessPass
 from app.models.space_attendance_record import SpaceAttendanceRecord
@@ -70,6 +71,7 @@ from app.models.marketing import (
     WorkflowVersion,
 )
 from app.models.meeting_room_hour_ledger import MeetingRoomHourLedger
+from app.models.user_notification import UserNotification, UserNotificationPreference
 from app.models.user import User
 
 __all__ = [
@@ -104,6 +106,7 @@ __all__ = [
     "PaymentRefund",
     "PlatformSetting",
     "PlatformTeamMember",
+    "PushSubscription",
     "Space",
     "SpaceAccessPass",
     "SpaceAttendanceRecord",
@@ -139,5 +142,7 @@ __all__ = [
     "WorkflowRunEvent",
     "WorkflowVersion",
     "MeetingRoomHourLedger",
+    "UserNotification",
+    "UserNotificationPreference",
     "User"
 ]
