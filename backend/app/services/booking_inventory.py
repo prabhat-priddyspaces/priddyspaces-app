@@ -163,6 +163,9 @@ def validate_occurrences_available(
     occurrences: list[InventoryOccurrence],
     ignore_booking_ids: set[int] | None = None,
     ignore_booking_request_id: int | None = None,
+    booking_mode: str | None = None,
+    full_day: bool = False,
+    seats_requested: int = 1,
 ) -> None:
     if space.availability_status != AvailabilityStatus.AVAILABLE:
         raise HTTPException(status_code=409, detail="Space is not available")
@@ -204,6 +207,41 @@ def validate_occurrences_available(
         )
         if sub_exists:
             raise HTTPException(status_code=409, detail="Space already subscribed for that date")
+
+        is_shared_day_pass = (
+            space.space_type == SpaceType.SHARED_DESK
+            and (full_day or booking_mode == "day_pass")
+        )
+        if is_shared_day_pass:
+            requested_seats = max(1, seats_requested or 1)
+            capacity = max(1, space.capacity or 1)
+            booking_seats_query = (
+                db.query(func.coalesce(BookingRequest.seats_requested, 1))
+                .select_from(Booking)
+                .outerjoin(BookingRequest, BookingRequest.id == Booking.booking_request_id)
+                .filter(
+                    Booking.space_id == space.id,
+                    Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
+                    func.coalesce(Booking.inventory_start_datetime, Booking.start_datetime) < occurrence.inventory_end_datetime,
+                    func.coalesce(Booking.inventory_end_datetime, Booking.end_datetime) > occurrence.inventory_start_datetime,
+                )
+            )
+            if ignore_booking_ids:
+                booking_seats_query = booking_seats_query.filter(~Booking.id.in_(ignore_booking_ids))
+            booked_seats = sum(max(1, int(row[0] or 1)) for row in booking_seats_query.all())
+            request_seats_query = db.query(BookingRequest.seats_requested).filter(
+                BookingRequest.space_id == space.id,
+                BookingRequest.status == BookingRequestStatus.REQUESTED,
+                BookingRequest.request_kind == "daily_booking",
+                BookingRequest.start_datetime < occurrence.end_datetime,
+                BookingRequest.end_datetime > occurrence.start_datetime,
+            )
+            if ignore_booking_request_id:
+                request_seats_query = request_seats_query.filter(BookingRequest.id != ignore_booking_request_id)
+            requested_pending_seats = sum(max(1, int(row[0] or 1)) for row in request_seats_query.all())
+            if booked_seats + requested_pending_seats + requested_seats > capacity:
+                raise HTTPException(status_code=409, detail="Not enough shared desk seats are available for that date")
+            continue
 
         booking_query = db.query(Booking).filter(
             Booking.space_id == space.id,

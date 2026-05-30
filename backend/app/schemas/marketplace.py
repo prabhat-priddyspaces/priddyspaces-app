@@ -96,6 +96,22 @@ class MarketplaceVolumeDiscountTierOut(BaseModel):
     discount_percent: int
 
 
+class MarketplaceBookingProductOut(BaseModel):
+    product_type: str
+    booking_mode: str
+    label: str
+    price: MoneyAmount | None = None
+    price_cents: int | None = None
+    membership_plan_public_id: str | None = None
+    billing_cycle: str | None = None
+    commitment_months: int | None = None
+    seats_per_plan: int | None = None
+    space_capacity: int | None = None
+    available_seats: int | None = None
+    included_meeting_room_hours_per_month: int | None = None
+    overage_hourly_rate_cents: int | None = None
+
+
 class MarketplaceSpaceDetailSpaceOut(BaseModel):
     public_id: str
     name: str
@@ -112,6 +128,7 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
     membership_price: int | None = None
     amenities: list[str]
     volume_discounts: list[MarketplaceVolumeDiscountTierOut] = []
+    booking_products: list[MarketplaceBookingProductOut] = Field(default_factory=list)
 
 
 class MarketplaceSpaceDetailLocationOut(BaseModel):

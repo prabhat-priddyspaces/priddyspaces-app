@@ -18,7 +18,7 @@ from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.models.user import User
 
 
-def _seed(db) -> tuple[User, Space]:
+def _seed(db, *, space_type=SpaceType.CONFERENCE_ROOM) -> tuple[User, Space]:
     owner = User(
         email="vd-owner@example.com",
         auth_subject="sub-vd-owner",
@@ -56,7 +56,7 @@ def _seed(db) -> tuple[User, Space]:
         location_id=location.id,
         tenant_id=org.id,
         name="Room A",
-        space_type=SpaceType.CONFERENCE_ROOM,
+        space_type=space_type,
         capacity=4,
         availability_status=AvailabilityStatus.AVAILABLE,
         price_hourly=30,
@@ -197,7 +197,7 @@ def test_volume_discount_applied_in_booking_estimate(db_session, client_factory)
 
 
 def test_full_day_booking_ignores_volume_discount(db_session, client_factory):
-    owner, space = _seed(db_session)
+    owner, space = _seed(db_session, space_type=SpaceType.SHARED_DESK)
     owner_client = client_factory(_token(owner))
     owner_client.put(
         f"/api/spaces/{space.public_id}/volume-discounts",

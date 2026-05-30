@@ -137,7 +137,7 @@ def _grant_points(db, org: Organization, customer: User, points: int):
 def test_redemption_discount_earn_and_refund_reversal(db_session, client_factory, monkeypatch):
     provider = LoyaltyProvider()
     monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: provider)
-    owner, customer, org, space, method = _seed(db_session)
+    owner, customer, org, space, method = _seed(db_session, space_type=SpaceType.SHARED_DESK)
     _grant_points(db_session, org, customer, 1000)
 
     owner_client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})

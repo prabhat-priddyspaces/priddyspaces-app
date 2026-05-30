@@ -346,6 +346,8 @@ def get_marketplace_space_availability(
         end_date=end_date,
         availability_start_time=space.availability_start_time,
         availability_end_time=space.availability_end_time,
+        space_type=space.space_type.value if hasattr(space.space_type, "value") else str(space.space_type),
+        space_capacity=space.capacity,
     )
 
     now = datetime.now(timezone.utc)

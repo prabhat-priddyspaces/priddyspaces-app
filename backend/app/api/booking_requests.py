@@ -43,6 +43,9 @@ from app.schemas.booking_request import (
     BookingEmailDeliveryOut,
     BookingEmailResendRequest,
     BookingPaymentSummary,
+    BookingPricePreviewCreate,
+    BookingPricePreviewLineItem,
+    BookingPricePreviewOut,
     BookingRequestCreate,
     BookingRequestDecision,
     BookingRequestOut,
@@ -77,6 +80,7 @@ from app.services.booking_inventory import (
     validate_occurrences_available,
 )
 from app.services.booking_modes import RECURRING_BOOKING_MODES
+from app.services.booking_products import validate_direct_booking_product
 from app.services.booking_payments import cancellation_deadline_for_request, charge_booking_request, refund_booking_payment
 from app.services.booking_payments import cancel_payment_hold_for_request
 from app.services.meeting_room_balance import (
@@ -331,7 +335,12 @@ def _to_out(
             granularity_minutes=granularity_minutes,
             tax_rate_percent=tax_rate,
         )
-        estimated = cents_to_money(estimate.total_cents) if estimate else None
+        estimate_quantity = (
+            max(1, req.seats_requested or 1)
+            if full_day_flag and _space_type_value(space) == SpaceType.SHARED_DESK.value
+            else 1
+        )
+        estimated = cents_to_money(estimate.total_cents * estimate_quantity) if estimate else None
     payment_method_public_id = None
     payment_method = None
     booking_series_public_id = None
@@ -457,10 +466,10 @@ def _to_out(
         price_monthly=price_monthly,
         price_hourly=price_hourly,
         estimated_amount=estimated,
-        base_amount_cents=estimate.base_cents if estimate else None,
+        base_amount_cents=estimate.base_cents * estimate_quantity if estimate else None,
         discount_percent=estimate.discount_percent if estimate else 0,
-        discount_amount_cents=estimate.discount_cents if estimate else 0,
-        tax_amount_cents=estimate.tax_cents if estimate else 0,
+        discount_amount_cents=estimate.discount_cents * estimate_quantity if estimate else 0,
+        tax_amount_cents=estimate.tax_cents * estimate_quantity if estimate else 0,
         rate_basis=estimate.rate_basis if estimate else None,
         units=estimate.units if estimate else None,
         payment_attempt_count=req.payment_attempt_count,
@@ -1005,6 +1014,9 @@ def _validate_locked_occurrences_available(
     occurrences,
     ignore_booking_ids: set[int] | None = None,
     ignore_booking_request_id: int | None = None,
+    booking_mode: str | None = None,
+    full_day: bool = False,
+    seats_requested: int = 1,
 ) -> None:
     db.query(Space).filter(Space.id == space.id).with_for_update().first()
     validate_occurrences_available(
@@ -1014,6 +1026,9 @@ def _validate_locked_occurrences_available(
         occurrences=occurrences,
         ignore_booking_ids=ignore_booking_ids,
         ignore_booking_request_id=ignore_booking_request_id,
+        booking_mode=booking_mode,
+        full_day=full_day,
+        seats_requested=seats_requested,
     )
 
 
@@ -1093,6 +1108,13 @@ def create_guest_booking_request(
     if end_dt <= start_dt:
         raise HTTPException(status_code=400, detail="End time must be after start time")
 
+    validate_direct_booking_product(
+        space,
+        booking_mode=payload.booking_mode,
+        full_day=payload.full_day,
+        seats_requested=1,
+    )
+
     occurrences = expand_occurrences(
         start_datetime=start_dt,
         end_datetime=end_dt,
@@ -1104,6 +1126,9 @@ def create_guest_booking_request(
         space=space,
         location=location,
         occurrences=occurrences,
+        booking_mode=payload.booking_mode,
+        full_day=payload.full_day,
+        seats_requested=1,
     )
 
     is_day_pass = payload.full_day or payload.booking_mode == "day_pass"
@@ -1176,6 +1201,98 @@ def create_guest_booking_request(
     )
 
 
+@router.post("/booking-requests/preview", response_model=BookingPricePreviewOut)
+def preview_booking_request_price(
+    payload: BookingPricePreviewCreate,
+    db: Session = Depends(get_db),
+):
+    if payload.membership_plan_public_id:
+        plan = (
+            db.query(MembershipPlan)
+            .filter(
+                MembershipPlan.public_id == payload.membership_plan_public_id,
+                MembershipPlan.is_active.is_(True),
+            )
+            .first()
+        )
+        if not plan:
+            raise HTTPException(status_code=404, detail="Membership plan not found")
+        return BookingPricePreviewOut(
+            base_amount_cents=plan.price_cents,
+            total_amount_cents=plan.price_cents,
+            rate_basis=plan.booking_mode,
+            quantity=1,
+            line_items=[
+                BookingPricePreviewLineItem(
+                    label=plan.name,
+                    amount_cents=plan.price_cents,
+                )
+            ],
+        )
+
+    space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
+    if not space:
+        raise HTTPException(status_code=404, detail="Space not found")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    start_dt = _as_utc(payload.start_datetime)
+    end_dt = _as_utc(payload.end_datetime)
+    if end_dt <= start_dt:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+
+    is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
+    validate_direct_booking_product(
+        space,
+        booking_mode=payload.booking_mode,
+        full_day=payload.full_day,
+        seats_requested=payload.seats_requested,
+    )
+
+    tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
+    rule = _get_active_pricing_rule(db, space.id)
+    estimate = estimate_booking_price(
+        start_dt,
+        end_dt,
+        price_hourly=space.price_hourly,
+        price_daily=space.price_daily,
+        price_monthly=space.price_monthly,
+        rate_type=rule.rate_type if rule else None,
+        rate_amount=rule.rate_amount if rule else None,
+        booking_mode="day_pass" if is_day_pass else "hourly",
+        full_day=is_day_pass,
+        volume_discounts=_active_volume_discounts(db, space.id),
+        granularity_minutes=_granularity_to_minutes(location.booking_granularity) if location.booking_granularity else 60,
+        tax_rate_percent=tax.rate_percent if tax else None,
+    )
+    if estimate is None:
+        raise HTTPException(status_code=400, detail="Unable to calculate booking amount")
+
+    quantity = (
+        max(1, payload.seats_requested or 1)
+        if is_day_pass and _space_type_value(space) == SpaceType.SHARED_DESK.value
+        else 1
+    )
+    multiplier = quantity
+    label = "Day Pass" if is_day_pass else "Hourly reservation"
+    return BookingPricePreviewOut(
+        base_amount_cents=estimate.base_cents * multiplier,
+        discount_amount_cents=estimate.discount_cents * multiplier,
+        tax_amount_cents=estimate.tax_cents * multiplier,
+        total_amount_cents=estimate.total_cents * multiplier,
+        rate_basis=estimate.rate_basis,
+        units=estimate.units,
+        quantity=quantity,
+        line_items=[
+            BookingPricePreviewLineItem(
+                label=label,
+                amount_cents=estimate.base_cents * multiplier,
+            )
+        ],
+    )
+
+
 @router.post("/booking-requests", response_model=BookingRequestOut)
 def create_booking_request(
     payload: BookingRequestCreate,
@@ -1208,6 +1325,12 @@ def create_booking_request(
     consent_at = None
     organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
     is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
+    validate_direct_booking_product(
+        space,
+        booking_mode=payload.booking_mode,
+        full_day=payload.full_day,
+        seats_requested=payload.seats_requested,
+    )
     instant = _booking_approval_mode_for_org(organization) == "auto"
     chosen_kind = (
         BookingRequestKind.DAILY_BOOKING.value
@@ -1230,6 +1353,9 @@ def create_booking_request(
         space=space,
         location=location,
         occurrences=occurrences,
+        booking_mode="day_pass" if is_day_pass else "hourly",
+        full_day=is_day_pass,
+        seats_requested=payload.seats_requested,
     )
 
     lock = active_lock_by_public_id(db, payload.redemption_lock_public_id, user, space) if payload.redemption_lock_public_id else None
@@ -1258,6 +1384,8 @@ def create_booking_request(
             estimated_total_cents = int(est.total_cents) if est else 0
         except Exception:
             estimated_total_cents = 0
+        if is_day_pass and _space_type_value(space) == SpaceType.SHARED_DESK.value:
+            estimated_total_cents *= max(1, payload.seats_requested or 1)
         estimated_total_cents *= max(1, len(occurrences))
         points_cover_total = estimated_total_cents > 0 and (lock.discount_cents or 0) >= estimated_total_cents
 
@@ -1292,6 +1420,7 @@ def create_booking_request(
         recurrence_count=payload.recurrence.count if payload.recurrence else None,
         recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
         occurrence_count=len(occurrences),
+        seats_requested=max(1, payload.seats_requested or 1),
     )
     req.cancellation_deadline_at = cancellation_deadline_for_request(db, req, space)
     db.add(req)
@@ -1568,6 +1697,9 @@ def approve_booking_request(
                 location=location,
                 occurrences=occurrences,
                 ignore_booking_request_id=req.id,
+                booking_mode="day_pass" if req.request_kind == BookingRequestKind.DAILY_BOOKING.value else "hourly",
+                full_day=req.request_kind == BookingRequestKind.DAILY_BOOKING.value,
+                seats_requested=req.seats_requested or 1,
             )
             booking_hold = create_pending_booking_hold(
                 db,
@@ -1596,6 +1728,9 @@ def approve_booking_request(
             location=location,
             occurrences=occurrences,
             ignore_booking_request_id=req.id,
+            booking_mode="day_pass" if req.request_kind == BookingRequestKind.DAILY_BOOKING.value else "hourly",
+            full_day=req.request_kind == BookingRequestKind.DAILY_BOOKING.value,
+            seats_requested=req.seats_requested or 1,
         )
         req.status = BookingRequestStatus.APPROVED
         req.operator_notes = payload.operator_notes
@@ -1758,6 +1893,9 @@ def retry_booking_request_payment(
             space=space,
             location=location,
             occurrences=occurrences,
+            booking_mode="day_pass" if req.request_kind == BookingRequestKind.DAILY_BOOKING.value else "hourly",
+            full_day=req.request_kind == BookingRequestKind.DAILY_BOOKING.value,
+            seats_requested=req.seats_requested or 1,
         )
         booking_hold = create_pending_booking_hold(
             db,

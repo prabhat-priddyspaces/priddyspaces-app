@@ -93,6 +93,47 @@ class BookingRequestCreate(BaseModel):
         return self
 
 
+class BookingPricePreviewCreate(BaseModel):
+    space_public_id: str | None = None
+    start_datetime: datetime | None = None
+    end_datetime: datetime | None = None
+    booking_mode: str | None = None
+    full_day: bool = False
+    seats_requested: int = Field(default=1, ge=1)
+
+    membership_plan_public_id: str | None = None
+    desired_start_date: date | None = None
+
+    @model_validator(mode="after")
+    def _validate_preview_target(self):
+        if self.booking_mode is not None and self.booking_mode not in {"hourly", "day_pass"}:
+            raise ValueError("booking_mode must be hourly or day_pass")
+        direct = bool(self.space_public_id and self.start_datetime and self.end_datetime)
+        plan = bool(self.membership_plan_public_id and self.desired_start_date)
+        if direct and plan:
+            raise ValueError("Preview either a direct booking or a membership/lease, not both")
+        if not direct and not plan:
+            raise ValueError("Provide direct booking fields or membership fields")
+        return self
+
+
+class BookingPricePreviewLineItem(BaseModel):
+    label: str
+    amount_cents: int
+
+
+class BookingPricePreviewOut(BaseModel):
+    currency: str = "usd"
+    base_amount_cents: int
+    discount_amount_cents: int = 0
+    tax_amount_cents: int = 0
+    total_amount_cents: int
+    rate_basis: str | None = None
+    units: float | None = None
+    quantity: int = 1
+    line_items: list[BookingPricePreviewLineItem] = Field(default_factory=list)
+
+
 class BookingPaymentSummary(BaseModel):
     status: str | None = None
     amount: int | None = None

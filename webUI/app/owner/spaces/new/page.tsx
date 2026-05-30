@@ -33,6 +33,47 @@ function pointsPayload(value: string) {
   return null;
 }
 
+function typeConfig(spaceType: string) {
+  if (spaceType === "conference_room") {
+    return {
+      capacityLabel: "Room capacity",
+      capacityHelp: "Number of people the room can seat.",
+      showHourly: true,
+      showDaily: false,
+      showAvailability: true,
+      showBuffers: true,
+    };
+  }
+  if (spaceType === "shared_desk") {
+    return {
+      capacityLabel: "Desks available per day",
+      capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
+      showHourly: false,
+      showDaily: true,
+      showAvailability: true,
+      showBuffers: false,
+    };
+  }
+  if (spaceType === "virtual_office") {
+    return {
+      capacityLabel: "",
+      capacityHelp: "",
+      showHourly: false,
+      showDaily: false,
+      showAvailability: false,
+      showBuffers: false,
+    };
+  }
+  return {
+    capacityLabel: spaceType === "suite" ? "Suite seats" : "Office seats",
+    capacityHelp: "Number of people included in this office or suite.",
+    showHourly: false,
+    showDaily: false,
+    showAvailability: false,
+    showBuffers: false,
+  };
+}
+
 export default function NewSpacePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,6 +99,7 @@ export default function NewSpacePage() {
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const config = typeConfig(form.space_type);
 
   useEffect(() => {
     async function loadLocations() {
@@ -92,7 +134,7 @@ export default function NewSpacePage() {
         setMessage("Choose a location before creating a room.");
         return;
       }
-      const capacity = Number(form.capacity || 1);
+      const capacity = form.space_type === "virtual_office" ? 1 : Number(form.capacity || 1);
       if (Number.isNaN(capacity) || capacity < 1) {
         setMessage("Capacity must be at least 1.");
         return;
@@ -108,13 +150,13 @@ export default function NewSpacePage() {
             name: form.name || undefined,
             space_type: form.space_type,
             capacity,
-            price_monthly: moneyPayload(form.price_monthly),
-            price_daily: moneyPayload(form.price_daily),
-            price_hourly: moneyPayload(form.price_hourly),
-            availability_start_time: form.availability_start_time || null,
-            availability_end_time: form.availability_end_time || null,
-            buffer_before_minutes: Number(form.buffer_before_minutes || 0),
-            buffer_after_minutes: Number(form.buffer_after_minutes || 0),
+            price_monthly: null,
+            price_daily: config.showDaily ? moneyPayload(form.price_daily) : null,
+            price_hourly: config.showHourly ? moneyPayload(form.price_hourly) : null,
+            availability_start_time: config.showAvailability ? form.availability_start_time || null : null,
+            availability_end_time: config.showAvailability ? form.availability_end_time || null : null,
+            buffer_before_minutes: config.showBuffers ? Number(form.buffer_before_minutes || 0) : 0,
+            buffer_after_minutes: config.showBuffers ? Number(form.buffer_after_minutes || 0) : 0,
             visibility: form.visibility,
             priddy_points_enabled: pointsPayload(form.priddy_points_enabled),
             owner_points_enabled: pointsPayload(form.owner_points_enabled),
@@ -141,8 +183,8 @@ export default function NewSpacePage() {
     <AppShell>
       <div className="grid gap-6">
         <div>
-          <h2 className="text-2xl font-semibold">Create a Room</h2>
-          <p className="text-textSecondary">Add a new room or desk inventory item for a location.</p>
+          <h2 className="text-2xl font-semibold">Create a Space</h2>
+          <p className="text-textSecondary">Add product-specific inventory for a location.</p>
         </div>
         <Card>
           <div className="grid gap-5">
@@ -194,17 +236,21 @@ export default function NewSpacePage() {
                 <option value="private_office">Private Office</option>
                 <option value="shared_desk">Shared Desk</option>
                 <option value="virtual_office">Virtual Office</option>
+                <option value="suite">Suite</option>
               </select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="capacity">Capacity</Label>
-              <Input
-                id="capacity"
-                value={form.capacity}
-                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-                placeholder="4"
-              />
-            </div>
+            {form.space_type !== "virtual_office" ? (
+              <div className="grid gap-2">
+                <Label htmlFor="capacity">{config.capacityLabel}</Label>
+                <Input
+                  id="capacity"
+                  value={form.capacity}
+                  onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+                  placeholder="4"
+                />
+                <div className="text-xs text-textMuted">{config.capacityHelp}</div>
+              </div>
+            ) : null}
             <div className="grid gap-2">
               <Label htmlFor="visibility">Visibility</Label>
               <select
@@ -236,7 +282,9 @@ export default function NewSpacePage() {
                 onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
               />
             </div>
-            <div className="grid gap-2 md:grid-cols-3">
+            {config.showHourly || config.showDaily ? (
+            <div className="grid gap-2 md:grid-cols-2">
+              {config.showHourly ? (
               <div className="space-y-2">
                 <Label htmlFor="hourly">Hourly price (USD)</Label>
                 <Input
@@ -250,11 +298,13 @@ export default function NewSpacePage() {
                   placeholder="30"
                 />
                 <div className="text-xs text-textMuted">
-                  Required for meeting rooms billed by the hour. Enter a dollar amount, such as 19.99.
+                  Required for conference room bookings. Enter a dollar amount, such as 19.99.
                 </div>
               </div>
+              ) : null}
+              {config.showDaily ? (
               <div className="space-y-2">
-                <Label htmlFor="daily">Daily price (USD)</Label>
+                <Label htmlFor="daily">Day pass price (USD)</Label>
                 <Input
                   id="daily"
                   type="number"
@@ -266,23 +316,13 @@ export default function NewSpacePage() {
                   placeholder="200"
                 />
                 <div className="text-xs text-textMuted">
-                  Used when a member picks "Full day". Hourly bookings are auto-capped to this amount.
+                  Charged per shared-desk day pass seat.
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="monthly">Monthly price (USD)</Label>
-                <Input
-                  id="monthly"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={form.price_monthly}
-                  onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
-                  placeholder="1200"
-                />
-              </div>
+              ) : null}
             </div>
+            ) : null}
+            {config.showAvailability ? (
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="availability_start">Availability start</Label>
@@ -303,6 +343,8 @@ export default function NewSpacePage() {
                 />
               </div>
             </div>
+            ) : null}
+            {config.showBuffers ? (
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="buffer_before">Buffer before (minutes)</Label>
@@ -327,6 +369,7 @@ export default function NewSpacePage() {
                 />
               </div>
             </div>
+            ) : null}
             <div className="flex flex-wrap gap-3">
               <Button type="button" onClick={() => handleSave("media")} disabled={saving}>
                 {saving ? "Saving..." : "Save And Add Photos"}
@@ -337,7 +380,7 @@ export default function NewSpacePage() {
                 onClick={() => handleSave("inventory")}
                 disabled={saving}
               >
-                Save Room
+                  Save Space
               </Button>
               <Link href={form.location_public_id ? `/owner/locations/spaces?locationId=${form.location_public_id}` : "/owner/locations"}>
                 <Button type="button" variant="ghost">

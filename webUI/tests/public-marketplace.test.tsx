@@ -234,7 +234,7 @@ describe("public marketplace flows", () => {
           support_contacts: [],
         });
       }
-      if (url.startsWith("/api/subscription-plans/public")) {
+      if (url.startsWith("/api/membership-plans/public")) {
         return Promise.resolve([]);
       }
       return Promise.resolve([]);
@@ -310,7 +310,7 @@ describe("public marketplace flows", () => {
           support_contacts: [],
         });
       }
-      if (url.startsWith("/api/subscription-plans/public")) {
+      if (url.startsWith("/api/membership-plans/public")) {
         return Promise.resolve([]);
       }
       return Promise.resolve([]);

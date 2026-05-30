@@ -333,7 +333,7 @@ test("public marketplace redirects to /spaces and supports route-driven location
       return;
     }
 
-    if (key === "GET /api/subscription-plans/public") {
+    if (key === "GET /api/membership-plans/public") {
       await json(route, []);
       return;
     }

@@ -123,7 +123,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
       return;
     }
 
-    if (key === "GET /api/subscription-plans/public") {
+    if (key === "GET /api/membership-plans/public") {
       await json(route, []);
       return;
     }
@@ -346,7 +346,7 @@ test("member can redeem Priddy Points for a full day pass without a card", async
       return;
     }
 
-    if (key === "GET /api/subscription-plans/public") {
+    if (key === "GET /api/membership-plans/public") {
       await json(route, []);
       return;
     }
@@ -447,7 +447,7 @@ test("member can redeem Priddy Points for a full day pass without a card", async
   await page.goto("/spaces/space_points_1");
 
   await expect(page.getByRole("heading", { name: "Open Desk Day Pass" })).toBeVisible();
-  await page.getByRole("button", { name: "Full day" }).click();
+  await expect(page.getByLabel("Seats")).toHaveValue("1");
   await expect(page.getByText("Priddy Points: 1,000 available, up to 1,000")).toBeVisible();
   await expect(page.getByText("Rewards savings")).toBeVisible();
   await expect(page.getByText("$10").last()).toBeVisible();
