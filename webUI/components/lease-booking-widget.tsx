@@ -31,6 +31,7 @@ export interface LeaseBookingWidgetProps {
   spacePublicId: string;
   spaceType: "private_office" | "suite";
   spaceCapacity: number;
+  organizationName?: string | null;
   bookingMode: LeaseBookingMode;
   spaceMonthlyPrice: MoneyValue | null;
   buildLoginNextHref: (params: { planPublicId: string | null; moveInDate: string }) => string;
@@ -42,6 +43,7 @@ export function LeaseBookingWidget({
   spacePublicId,
   spaceType,
   spaceCapacity,
+  organizationName,
   bookingMode,
   spaceMonthlyPrice,
   buildLoginNextHref,
@@ -57,6 +59,7 @@ export function LeaseBookingWidget({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const chargeOwnerName = organizationName?.trim() || "this owner";
 
   useEffect(() => {
     setLoading(true);
@@ -158,7 +161,7 @@ export function LeaseBookingWidget({
         token,
       );
       if (!resolved.is_configured) {
-        throw new Error(resolved.message || "This owner has not configured payments.");
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
       }
       if (!resolved.has_payment_method) {
         setPaymentMethodOpen(true);
@@ -294,6 +297,7 @@ export function LeaseBookingWidget({
       <PaymentMethodModal
         open={paymentMethodOpen}
         spacePublicId={spacePublicId}
+        organizationName={organizationName}
         onClose={() => setPaymentMethodOpen(false)}
         onSaved={(paymentMethodPublicId) => {
           setPaymentMethodOpen(false);

@@ -28,6 +28,7 @@ from datetime import datetime, time, timezone
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.membership_plan import MembershipPlan
 from app.models.organization_member import OrganizationMember
+from app.models.organization import Organization
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.space import Space
@@ -84,7 +85,8 @@ from app.services.membership_subscriptions import (
     MembershipBillingError,
     create_subscription as create_stripe_subscription,
 )
-from app.services.owner_payments import require_payment_method_for_request
+from app.services.owner_payments import ensure_payment_method_chargeable, require_payment_method_for_request
+from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.pricing import (
     EstimateResult,
     VolumeDiscount,
@@ -244,8 +246,10 @@ def _to_out(
     price_monthly = space.price_monthly if space else None
     price_hourly = space.price_hourly if space else None
     location = None
+    organization = None
     if db and space:
         location = db.query(Location).filter(Location.id == space.location_id).first()
+        organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
     estimated = None
     estimate: EstimateResult | None = None
     member = None
@@ -256,8 +260,6 @@ def _to_out(
     )
     membership_plan_public_id = None
     membership_plan_name = None
-    if db and space:
-        location = db.query(Location).filter(Location.id == space.location_id).first()
     if db and req.user_id:
         member = db.query(User).filter(User.id == req.user_id).first()
     if db and is_membership and req.membership_plan_id:
@@ -304,6 +306,7 @@ def _to_out(
         )
         estimated = cents_to_money(estimate.total_cents) if estimate else None
     payment_method_public_id = None
+    payment_method = None
     booking_series_public_id = None
     if db and req.booking_series_id:
         series = db.query(BookingSeries).filter(BookingSeries.id == req.booking_series_id).first()
@@ -331,10 +334,10 @@ def _to_out(
                 amount_cents=last_payment.amount_cents,
                 currency=last_payment.currency,
                 attempt_number=last_payment.attempt_number,
-                failure_reason=last_payment.failure_reason,
+                failure_reason=normalize_payment_failure_reason(last_payment.failure_reason) if last_payment.failure_reason else None,
                 attempted_at=last_payment.created_at,
             )
-            failure_reason = last_payment.failure_reason
+            failure_reason = normalize_payment_failure_reason(last_payment.failure_reason) if last_payment.failure_reason else None
     payment_breakdown = None
     refund_policy_snapshot = None
     if req.pricing_snapshot:
@@ -368,6 +371,7 @@ def _to_out(
         space_public_id=space.public_id if space else None,
         space_name=space.name if space else None,
         space_type=_space_type_value(space),
+        organization_name=organization.name if organization else None,
         location_public_id=location.public_id if location else None,
         location_name=location.name if location else None,
         location_address=location.address if location else None,
@@ -396,6 +400,10 @@ def _to_out(
         payment_status=req.payment_status,
         payment_provider=req.payment_provider,
         member_owner_payment_method_public_id=payment_method_public_id,
+        payment_method_brand=payment_method.brand if payment_method else None,
+        payment_method_last4=payment_method.last4 if payment_method else None,
+        payment_method_exp_month=payment_method.exp_month if payment_method else None,
+        payment_method_exp_year=payment_method.exp_year if payment_method else None,
         redemption_lock_public_id=redemption_lock_public_id,
         loyalty_points_used=loyalty_points_used,
         loyalty_discount_cents=loyalty_discount_cents,
@@ -1361,6 +1369,13 @@ def update_booking_request_payment_method(
     )
     if not method:
         raise HTTPException(status_code=400, detail="Payment method is not valid for this request")
+    setting = (
+        db.query(OwnerPaymentSetting)
+        .filter(OwnerPaymentSetting.id == req.owner_payment_setting_id)
+        .first()
+    )
+    if not ensure_payment_method_chargeable(db, method, setting):
+        raise HTTPException(status_code=400, detail="Payment method is incomplete; add the card again")
 
     req.member_owner_payment_method_id = method.id
     req.payment_provider = method.provider

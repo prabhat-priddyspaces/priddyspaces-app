@@ -93,6 +93,7 @@ def _apply_working_hours_update(location: Location, payload: LocationUpdate) -> 
 def _serialize_location(
     location: Location,
     organization_public_id: str,
+    organization_name: str | None = None,
     amenities: list[dict[str, int | str | None]] | None = None,
 ) -> LocationOut:
     working_hours_enabled, working_hours = effective_public_working_hours(
@@ -104,6 +105,7 @@ def _serialize_location(
     return LocationOut(
         public_id=location.public_id,
         organization_public_id=organization_public_id,
+        organization_name=organization_name,
         name=location.name,
         address=location.address,
         city=location.city,
@@ -177,7 +179,7 @@ def create_location(
     db.commit()
     db.refresh(location)
     amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
-    return _serialize_location(location, org.public_id, amenities)
+    return _serialize_location(location, org.public_id, org.name, amenities)
 
 
 @router.get("/locations/{public_id}", response_model=LocationOut)
@@ -205,7 +207,7 @@ def get_location(
         )
     org_public_id = org.public_id if org else ""
     amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
-    return _serialize_location(location, org_public_id, amenities)
+    return _serialize_location(location, org_public_id, org.name if org else None, amenities)
 
 
 @router.patch("/locations/{public_id}", response_model=LocationOut)
@@ -273,7 +275,7 @@ def update_location(
     org = db.query(Organization).filter(Organization.id == location.organization_id).first()
     org_public_id = org.public_id if org else ""
     amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
-    return _serialize_location(location, org_public_id, amenities)
+    return _serialize_location(location, org_public_id, org.name if org else None, amenities)
 
 
 @router.get("/locations", response_model=list[LocationOut])
@@ -311,7 +313,7 @@ def list_locations(
     if not locations:
         return []
     organization_map = {
-        org.id: org.public_id
+        org.id: (org.public_id, org.name)
         for org in db.query(Organization).filter(
             Organization.id.in_({location.organization_id for location in locations})
         ).all()
@@ -320,7 +322,8 @@ def list_locations(
     return [
         _serialize_location(
             location,
-            organization_map.get(location.organization_id, ""),
+            organization_map.get(location.organization_id, ("", None))[0],
+            organization_map.get(location.organization_id, ("", None))[1],
             amenity_map.get(location.id, []),
         )
         for location in locations

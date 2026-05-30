@@ -28,6 +28,7 @@ interface BookingRequest {
   space_public_id: string | null;
   space_name: string | null;
   space_type: string | null;
+  organization_name: string | null;
   location_public_id: string | null;
   location_name: string | null;
   location_address: string | null;
@@ -45,6 +46,10 @@ interface BookingRequest {
   status: string;
   payment_status: string | null;
   payment_provider: string | null;
+  payment_method_brand: string | null;
+  payment_method_last4: string | null;
+  payment_method_exp_month: number | null;
+  payment_method_exp_year: number | null;
   instant_booking: boolean;
   cancellation_deadline_at: string | null;
   cancelled_at: string | null;
@@ -114,6 +119,28 @@ function decisionLine(booking: BookingRequest) {
     return `Cancelled at ${formatDateTime(booking.cancelled_at)}`;
   }
   return null;
+}
+
+function cardLine(booking: BookingRequest) {
+  if (!booking.payment_method_last4) return null;
+  const brand = formatSpaceType(booking.payment_method_brand || "card");
+  const expiry =
+    booking.payment_method_exp_month != null && booking.payment_method_exp_year != null
+      ? ` · Expires ${String(booking.payment_method_exp_month).padStart(2, "0")}/${booking.payment_method_exp_year}`
+      : "";
+  return `${brand} ending in ${booking.payment_method_last4}${expiry}`;
+}
+
+function paymentFailureReason(reason: string | null) {
+  const text = (reason || "").trim();
+  if (!text || ["0", "failed", "payment failed"].includes(text.toLowerCase())) {
+    return "The payment processor declined the charge. Update the card or contact the card issuer for details.";
+  }
+  return text;
+}
+
+function retryOwnerName(booking: BookingRequest) {
+  return booking.organization_name?.trim() || "the owner";
 }
 
 export default function BookingDetailClient({ bookingId }: { bookingId: string }) {
@@ -376,6 +403,9 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                   <div className="mt-3 text-sm text-textSecondary">
                     Status: <span className="capitalize">{formatStatus(booking.last_payment.status || "—")}</span>
                   </div>
+                  {cardLine(booking) ? (
+                    <div className="mt-2 text-sm text-textSecondary">{cardLine(booking)}</div>
+                  ) : null}
                   {booking.last_payment.amount != null ? (
                     <div className="mt-2 text-sm text-textSecondary">
                       Amount: ${booking.last_payment.amount}
@@ -395,7 +425,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
               ) : relatedPayment ? (
                 <>
                   <div className="mt-3 text-sm text-textSecondary">
-                    Payment: {relatedPayment.public_id}
+                    Booking payment recorded
                   </div>
                   <div className="mt-2 text-sm text-textSecondary">
                     Status: <span className="capitalize">{formatStatus(relatedPayment.status)}</span>
@@ -410,17 +440,11 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
               {booking.status === "payment_failed" ? (
                 <div className="mt-4 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
                   <div className="font-medium">Payment failed</div>
-                  {booking.failure_reason ? (
-                    <div className="mt-1">{booking.failure_reason}</div>
-                  ) : (
-                    <div className="mt-1">
-                      Your card could not be charged.
-                    </div>
-                  )}
+                  <div className="mt-1">{paymentFailureReason(booking.failure_reason)}</div>
                   <div className="mt-1 text-textSecondary">
                     {booking.instant_booking
                       ? "Update your card to retry this booking."
-                      : "Update your card, then the owner can retry the charge."}
+                      : `Update your card, then ${retryOwnerName(booking)} can retry the charge.`}
                   </div>
                   {booking.space_public_id ? (
                     <div className="mt-3">
@@ -480,6 +504,8 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
       <PaymentMethodModal
         open={paymentMethodOpen && Boolean(booking?.space_public_id)}
         spacePublicId={booking?.space_public_id || ""}
+        organizationName={booking?.organization_name || null}
+        initialMode="add"
         onClose={() => setPaymentMethodOpen(false)}
         onSaved={handlePaymentMethodSaved}
       />

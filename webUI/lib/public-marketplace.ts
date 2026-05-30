@@ -106,6 +106,7 @@ export interface MarketplaceSpaceDetailSpace {
 
 export interface MarketplaceSpaceDetailLocation {
   location_public_id: string;
+  organization_name: string | null;
   name: string;
   address: string;
   city: string | null;

@@ -15,6 +15,7 @@ import { formatUsd, type MoneyValue } from "@/lib/money";
 
 interface Location {
   public_id: string;
+  organization_name: string | null;
   name: string;
   address: string;
   city: string | null;
@@ -60,6 +61,8 @@ export default function MemberLocationsPage() {
   const [authorizationConsent, setAuthorizationConsent] = useState(false);
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
+  const organizationName = location?.organization_name?.trim() || null;
+  const chargeOwnerName = organizationName || "this owner";
 
   useEffect(() => {
     if (!locationId) {
@@ -133,7 +136,7 @@ export default function MemberLocationsPage() {
         token
       );
       if (!resolved.is_configured) {
-        throw new Error(resolved.message || "This owner has not configured payments.");
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
       }
       if (!resolved.has_payment_method) {
         setPendingReservation(payload);
@@ -244,7 +247,7 @@ export default function MemberLocationsPage() {
                             onChange={(event) => setAuthorizationConsent(event.target.checked)}
                             className="mt-1"
                           />
-                          <span>I authorize this owner to charge my card upon approval.</span>
+                          <span>I authorize {chargeOwnerName} to charge my card upon approval.</span>
                         </label>
                         <div className="flex gap-2">
                           <Button
@@ -294,6 +297,7 @@ export default function MemberLocationsPage() {
         <PaymentMethodModal
           open={paymentMethodOpen}
           spacePublicId={pendingReservation.space_public_id}
+          organizationName={organizationName}
           onClose={() => setPaymentMethodOpen(false)}
           onSaved={(paymentMethodPublicId) => {
             setPaymentMethodOpen(false);

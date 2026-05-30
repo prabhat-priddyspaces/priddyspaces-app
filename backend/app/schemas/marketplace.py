@@ -114,6 +114,7 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
 
 class MarketplaceSpaceDetailLocationOut(BaseModel):
     location_public_id: str
+    organization_name: str | None = None
     name: str
     address: str
     city: str | None = None

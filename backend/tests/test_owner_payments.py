@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 from app.core.config import settings
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
@@ -129,7 +130,11 @@ def test_owner_payment_settings_and_member_method_scope(db_session, client_facto
 
     setup = member_client.post("/api/payment-methods/setup-session", json={"space_public_id": space.public_id})
     assert setup.status_code == 200
-    assert setup.json()["tokenizer_url"] == "https://tokenizer.test"
+    tokenizer_url = setup.json()["tokenizer_url"]
+    assert tokenizer_url.startswith("https://tokenizer.test")
+    tokenizer_params = parse_qs(urlsplit(tokenizer_url).query)
+    assert tokenizer_params["useexpiry"] == ["true"]
+    assert tokenizer_params["enhancedresponse"] == ["true"]
 
     method = member_client.post(
         "/api/payment-methods",
@@ -150,6 +155,46 @@ def test_owner_payment_settings_and_member_method_scope(db_session, client_facto
     resolved = member_client.get(f"/api/payment-methods/resolve?space_public_id={space.public_id}")
     assert resolved.json()["has_payment_method"] is True
     assert resolved.json()["payment_method_public_id"] == method.json()["public_id"]
+
+
+def test_cardpointe_rejects_invalid_card_metadata(db_session, client_factory):
+    owner, org, space = _owner_space(db_session)
+    member = _user(db_session, "bad-cardpointe@example.com", "sub-bad-cardpointe", UserAppRole.MEMBER)
+    setting = OwnerPaymentSetting(
+        organization_id=org.id,
+        tenant_id=org.id,
+        provider="cardpointe",
+        is_enabled=True,
+        cardpointe_merchant_id="merchant_123",
+        cardpointe_username_encrypted="api-user",
+        cardpointe_password_encrypted="api-pass",
+        cardpointe_site="https://cardpointe.test",
+        cardpointe_tokenizer_url="https://tokenizer.test",
+    )
+    org.payment_provider = "cardpointe"
+    db_session.add(setting)
+    db_session.add(org)
+    db_session.commit()
+
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    response = member_client.post(
+        "/api/payment-methods",
+        json={
+            "space_public_id": space.public_id,
+            "owner_payment_setting_public_id": setting.public_id,
+            "card_token": "token_abc_4242",
+            "last4": "asdasfd",
+            "brand": "visa",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Card details are incomplete" in response.json()["detail"]
+    assert db_session.query(MemberOwnerPaymentMethod).count() == 0
 
 
 def test_same_account_stripe_portal_card_imports_for_owner_scope(db_session, client_factory, monkeypatch):
@@ -187,6 +232,47 @@ def test_same_account_stripe_portal_card_imports_for_owner_scope(db_session, cli
     assert method.provider_payment_method_id == "pm_portal_default"
     assert method.provider_customer_id == "cus_platform"
     assert method.last4 == "1111"
+
+
+def test_stripe_payment_method_list_backfills_missing_metadata(db_session, client_factory, monkeypatch):
+    _owner, org, space = _owner_space(db_session)
+    setting = _stripe_setting(db_session, org, secret="sk_owner")
+    member = _user(db_session, "backfill-card@example.com", "sub-backfill-card", UserAppRole.MEMBER)
+    method = MemberOwnerPaymentMethod(
+        user_id=member.id,
+        organization_id=org.id,
+        tenant_id=org.id,
+        provider="stripe",
+        owner_payment_setting_id=setting.id,
+        provider_customer_id=None,
+        provider_payment_method_id="pm_backfill",
+        status="active",
+        is_default_for_owner=True,
+    )
+    db_session.add(method)
+    db_session.commit()
+
+    def fake_payment_method_retrieve(*args, **kwargs):
+        assert args[0] == "pm_backfill"
+        return {
+            "id": "pm_backfill",
+            "customer": "cus_owner",
+            "card": {"last4": "4242", "brand": "visa", "exp_month": 12, "exp_year": 2030},
+            "billing_details": {"name": "Backfill User", "address": {"postal_code": "10001"}},
+        }
+
+    monkeypatch.setattr("app.services.owner_payments.stripe.PaymentMethod.retrieve", fake_payment_method_retrieve)
+    client = client_factory({"sub": member.auth_subject, "email": member.email, "email_verified": True})
+
+    response = client.get(f"/api/payment-methods?space_public_id={space.public_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["last4"] == "4242"
+    assert body[0]["exp_month"] == 12
+    db_session.refresh(method)
+    assert method.provider_customer_id == "cus_owner"
+    assert method.last4 == "4242"
 
 
 def test_mismatched_stripe_account_does_not_import_platform_card(db_session, client_factory, monkeypatch):

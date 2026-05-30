@@ -45,6 +45,7 @@ function useStripePromise(publishableKey: string | null) {
 function StripeSetupForm({
   spacePublicId,
   session,
+  organizationName,
   billingName,
   billingZip,
   consent,
@@ -55,6 +56,7 @@ function StripeSetupForm({
 }: {
   spacePublicId: string;
   session: SetupSession;
+  organizationName?: string | null;
   billingName: string;
   billingZip: string;
   consent: boolean;
@@ -129,7 +131,7 @@ function StripeSetupForm({
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-1"
         />
-        <span>I authorize this owner to charge this card for approved or instant bookings.</span>
+        <span>{bookingCardAuthorizationText(organizationName)}</span>
       </label>
       {message ? <div className="text-sm text-error">{message}</div> : null}
       <Button onClick={save} disabled={!stripe || saving || !consent}>
@@ -142,6 +144,7 @@ function StripeSetupForm({
 function CardPointeSetupForm({
   spacePublicId,
   session,
+  organizationName,
   billingName,
   billingZip,
   consent,
@@ -152,6 +155,7 @@ function CardPointeSetupForm({
 }: {
   spacePublicId: string;
   session: SetupSession;
+  organizationName?: string | null;
   billingName: string;
   billingZip: string;
   consent: boolean;
@@ -162,23 +166,36 @@ function CardPointeSetupForm({
 }) {
   const [tokenValue, setTokenValue] = useState("");
   const [last4, setLast4] = useState("");
+  const [expiration, setExpiration] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       const data = typeof event.data === "string" ? safeJson(event.data) : event.data;
-      if (!data || typeof data !== "object") return;
-      const nextToken = data.token || data.card_token || data.account;
+      const nextToken =
+        typeof event.data === "string" && !data
+          ? event.data
+          : firstString(data?.token, data?.card_token, data?.account, data?.message);
       if (typeof nextToken === "string") setTokenValue(nextToken);
-      const nextLast4 = data.last4 || String(nextToken || "").slice(-4);
-      if (typeof nextLast4 === "string") setLast4(nextLast4);
+      const nextLast4 = normalizeLast4(firstString(data?.last4, data?.last_four, data?.lastFour)) || last4FromToken(nextToken);
+      if (nextLast4) setLast4(nextLast4);
+      const nextExpiration = normalizeExpiration(
+        firstString(data?.expiration, data?.expiry, data?.exp, data?.expiry_date, data?.expiryDate),
+      );
+      if (nextExpiration) setExpiration(nextExpiration);
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   async function save() {
+    const normalizedLast4 = normalizeLast4(last4) || last4FromToken(tokenValue);
+    const normalizedExpiration = normalizeExpiration(expiration);
+    if (!normalizedLast4 || !normalizedExpiration) {
+      setMessage("Card details are incomplete. Please re-enter the card details.");
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
@@ -191,7 +208,8 @@ function CardPointeSetupForm({
             space_public_id: spacePublicId,
             owner_payment_setting_public_id: session.owner_payment_setting_public_id,
             card_token: tokenValue,
-            last4: last4 || tokenValue.slice(-4),
+            last4: normalizedLast4,
+            expiration: normalizedExpiration,
             brand: "card",
             billing_name: billingName || null,
             billing_zip: billingZip || null,
@@ -212,6 +230,11 @@ function CardPointeSetupForm({
       {session.tokenizer_url ? (
         <iframe title="CardPointe tokenizer" src={session.tokenizer_url} className="h-48 w-full rounded-md border border-border" />
       ) : null}
+      {last4 && expiration ? (
+        <div className="text-sm text-textSecondary">
+          Card ending in {last4} · Expires {formatExpiration(expiration)}
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Input value={billingName} onChange={(e) => onBillingName(e.target.value)} placeholder="Name on card" />
         <Input value={billingZip} onChange={(e) => onBillingZip(e.target.value)} placeholder="Billing ZIP" />
@@ -223,14 +246,61 @@ function CardPointeSetupForm({
           onChange={(event) => onConsent(event.target.checked)}
           className="mt-1"
         />
-        <span>I authorize this owner to charge this card for approved or instant bookings.</span>
+        <span>{bookingCardAuthorizationText(organizationName)}</span>
       </label>
       {message ? <div className="text-sm text-error">{message}</div> : null}
-      <Button onClick={save} disabled={saving || !consent || !tokenValue}>
+      <Button onClick={save} disabled={saving || !consent || !tokenValue || !last4 || !expiration}>
         {saving ? "Saving..." : "Save payment method"}
       </Button>
     </div>
   );
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+  return null;
+}
+
+function normalizeLast4(value: string | null | undefined): string | null {
+  const text = value?.trim() || "";
+  return /^\d{4}$/.test(text) ? text : null;
+}
+
+function last4FromToken(value: string | null | undefined): string | null {
+  const digits = (value || "").replace(/\D/g, "");
+  if (digits.length < 4) return null;
+  return digits.slice(-4);
+}
+
+function normalizeExpiration(value: string | null | undefined): string | null {
+  const digits = (value || "").replace(/\D/g, "");
+  if (digits.length === 4) {
+    const month = Number(digits.slice(0, 2));
+    if (month >= 1 && month <= 12) return digits;
+  }
+  if (digits.length === 6) {
+    const month = Number(digits.slice(0, 2));
+    if (month >= 1 && month <= 12) return digits;
+  }
+  return null;
+}
+
+function formatExpiration(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 4) return `${digits.slice(0, 2)}/20${digits.slice(2)}`;
+  if (digits.length === 6) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return value;
+}
+
+function ownerChargeName(organizationName: string | null | undefined) {
+  return organizationName?.trim() || "this owner";
+}
+
+function bookingCardAuthorizationText(organizationName: string | null | undefined) {
+  return `I authorize ${ownerChargeName(organizationName)} to charge this card for approved or instant bookings.`;
 }
 
 function safeJson(value: string) {
@@ -244,11 +314,15 @@ function safeJson(value: string) {
 export function PaymentMethodModal({
   open,
   spacePublicId,
+  organizationName,
+  initialMode = "select",
   onClose,
   onSaved,
 }: {
   open: boolean;
   spacePublicId: string;
+  organizationName?: string | null;
+  initialMode?: "select" | "add";
   onClose: () => void;
   onSaved: (paymentMethodPublicId: string) => void;
 }) {
@@ -264,6 +338,17 @@ export function PaymentMethodModal({
   const [consent, setConsent] = useState(false);
   const stripePromise = useStripePromise(session?.publishable_key ?? null);
 
+  useEffect(() => {
+    if (!open) return;
+    setSession(null);
+    setSelectedMethodId(null);
+    setMessage("");
+    setBillingName("");
+    setBillingZip("");
+    setConsent(false);
+    setMode(initialMode);
+  }, [open, spacePublicId, initialMode]);
+
   // Load saved methods scoped to this space's owner.
   useEffect(() => {
     if (!open || !spacePublicId) return;
@@ -277,8 +362,10 @@ export function PaymentMethodModal({
     )
       .then((methods) => {
         setSavedMethods(methods);
-        if (methods.length === 0) {
+        if (methods.length === 0 || initialMode === "add") {
           setMode("add");
+          const def = methods.find((m) => m.is_default_for_owner) || methods[0];
+          setSelectedMethodId(def?.public_id ?? null);
         } else {
           setMode("select");
           const def = methods.find((m) => m.is_default_for_owner) || methods[0];
@@ -290,7 +377,7 @@ export function PaymentMethodModal({
         setMode("add");
       })
       .finally(() => setMethodsLoaded(true));
-  }, [open, spacePublicId]);
+  }, [open, spacePublicId, initialMode]);
 
   // Lazy-load setup session only when adding a new card.
   useEffect(() => {
@@ -335,7 +422,8 @@ export function PaymentMethodModal({
               {mode === "select" && savedMethods.length > 0 ? "Choose booking card" : "Add booking card"}
             </div>
             <p className="mt-1 text-sm text-textSecondary">
-              You won&apos;t be charged by this step. This card is authorized for booking charges with this owner.
+              You won&apos;t be charged by this step. This card is authorized for booking charges with{" "}
+              {ownerChargeName(organizationName)}.
             </p>
           </div>
           <button onClick={onClose} className="text-sm text-textMuted">
@@ -387,7 +475,7 @@ export function PaymentMethodModal({
                 onChange={(event) => setConsent(event.target.checked)}
                 className="mt-1"
               />
-              <span>I authorize this owner to charge this card for approved or instant bookings.</span>
+              <span>{bookingCardAuthorizationText(organizationName)}</span>
             </label>
             <div className="flex flex-wrap gap-2">
               <Button onClick={useExisting} disabled={!selectedMethodId || !consent || savingExisting}>
@@ -410,6 +498,7 @@ export function PaymentMethodModal({
               <StripeSetupForm
                 spacePublicId={spacePublicId}
                 session={session}
+                organizationName={organizationName}
                 billingName={billingName}
                 billingZip={billingZip}
                 consent={consent}
@@ -435,6 +524,7 @@ export function PaymentMethodModal({
             <CardPointeSetupForm
               spacePublicId={spacePublicId}
               session={session}
+              organizationName={organizationName}
               billingName={billingName}
               billingZip={billingZip}
               consent={consent}

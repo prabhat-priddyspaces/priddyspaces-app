@@ -21,6 +21,8 @@ from app.models.payment_refund import PaymentRefund
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.tax_config import TaxConfig
+from app.services.owner_payments import ensure_payment_method_chargeable
+from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
@@ -179,8 +181,7 @@ def _create_invoice(db: Session, *, req: BookingRequest, booking: Booking, payme
 
 
 def _sanitized_failure_reason(reason: str | None) -> str:
-    cleaned = str(reason or "Payment failed").replace("\n", " ").replace("\r", " ").strip()
-    return cleaned[:512]
+    return normalize_payment_failure_reason(reason)
 
 
 def charge_booking_request(
@@ -318,21 +319,25 @@ def charge_booking_request(
         return req, booking, payment
 
     failure_reason = "Payment provider did not return a result"
-    try:
-        provider = PaymentProviderFactory.get(setting)
-        result = provider.charge_saved_method(
-            payment_method=method,
-            amount_cents=amount_cents,
-            currency="usd",
-            idempotency_key=idempotency_key,
-            metadata={"booking_request_public_id": req.public_id},
-        )
-    except PaymentProviderError as exc:
+    if not ensure_payment_method_chargeable(db, method, setting):
         result = None
-        failure_reason = str(exc)
-    except Exception as exc:
-        result = None
-        failure_reason = str(exc)
+        failure_reason = "Card details are incomplete. Please add the card again."
+    else:
+        try:
+            provider = PaymentProviderFactory.get(setting)
+            result = provider.charge_saved_method(
+                payment_method=method,
+                amount_cents=amount_cents,
+                currency="usd",
+                idempotency_key=idempotency_key,
+                metadata={"booking_request_public_id": req.public_id},
+            )
+        except PaymentProviderError as exc:
+            result = None
+            failure_reason = str(exc)
+        except Exception as exc:
+            result = None
+            failure_reason = str(exc)
 
     req.payment_attempt_count = attempt
     req.operator_notes = operator_notes

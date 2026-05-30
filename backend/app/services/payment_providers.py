@@ -10,10 +10,20 @@ from app.core.crypto import decrypt_secret
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.user import User
+from app.services.payment_metadata import (
+    last4_from_card_token,
+    normalize_card_last4,
+    normalize_cardpointe_tokenizer_url,
+    normalize_expiry,
+    normalize_payment_failure_reason,
+)
 
 
 class PaymentProviderError(RuntimeError):
     pass
+
+
+INCOMPLETE_CARD_DETAILS = "Card details are incomplete. Please add the card again."
 
 
 @dataclass
@@ -79,6 +89,59 @@ class PaymentProvider(Protocol):
         ...
 
 
+def _stripe_get(value: Any, key: str, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def _stripe_card_details(method: Any) -> dict[str, Any]:
+    card = _stripe_get(method, "card", {}) or {}
+    billing_details = _stripe_get(method, "billing_details", {}) or {}
+    address = _stripe_get(billing_details, "address", {}) or {}
+    return {
+        "provider_payment_method_id": _stripe_get(method, "id"),
+        "provider_customer_id": _stripe_get(method, "customer"),
+        "last4": _stripe_get(card, "last4"),
+        "brand": _stripe_get(card, "brand"),
+        "exp_month": _stripe_get(card, "exp_month"),
+        "exp_year": _stripe_get(card, "exp_year"),
+        "billing_name": _stripe_get(billing_details, "name"),
+        "billing_zip": _stripe_get(address, "postal_code"),
+    }
+
+
+def _stripe_failure_reason_from_error(exc: stripe.error.StripeError) -> str:
+    error = getattr(exc, "json_body", None) or {}
+    error_body = error.get("error", {}) if isinstance(error, dict) else {}
+    message = (
+        getattr(exc, "user_message", None)
+        or error_body.get("message")
+        or getattr(exc, "message", None)
+        or str(exc)
+    )
+    code = error_body.get("decline_code") or error_body.get("code") or getattr(exc, "code", None)
+    if message and code and str(code).lower() not in str(message).lower():
+        message = f"{message} ({code})"
+    return normalize_payment_failure_reason(message)
+
+
+def _stripe_failure_reason_from_intent(intent: Any) -> str:
+    last_error = _stripe_get(intent, "last_payment_error")
+    message = _stripe_get(last_error, "message")
+    code = _stripe_get(last_error, "decline_code") or _stripe_get(last_error, "code")
+    if message and code and str(code).lower() not in str(message).lower():
+        message = f"{message} ({code})"
+    if message:
+        return normalize_payment_failure_reason(message)
+    status = _stripe_get(intent, "status")
+    if status == "requires_action":
+        return "This card requires additional authentication before it can be charged."
+    return normalize_payment_failure_reason(f"Stripe status {status}" if status else None)
+
+
 class StripePaymentProvider:
     provider = "stripe"
 
@@ -117,28 +180,30 @@ class StripePaymentProvider:
         setup_intent_id = payload.get("setup_intent_id")
         payment_method_id = payload.get("provider_payment_method_id")
         customer_id = payload.get("provider_customer_id")
-        card_data: dict[str, Any] = {}
 
         if setup_intent_id:
             setup_intent = stripe.SetupIntent.retrieve(setup_intent_id, api_key=self.secret_key)
-            payment_method_id = setup_intent.payment_method or payment_method_id
-            customer_id = setup_intent.customer or customer_id
-        if payment_method_id:
-            try:
-                method = stripe.PaymentMethod.retrieve(payment_method_id, api_key=self.secret_key)
-                card_data = dict(method.card or {})
-                customer_id = method.customer or customer_id
-            except Exception:
-                card_data = {}
+            payment_method_id = _stripe_get(setup_intent, "payment_method") or payment_method_id
+            customer_id = _stripe_get(setup_intent, "customer") or customer_id
+        if not payment_method_id:
+            raise PaymentProviderError(INCOMPLETE_CARD_DETAILS)
 
+        method = stripe.PaymentMethod.retrieve(payment_method_id, api_key=self.secret_key)
+        details = _stripe_card_details(method)
+        customer_id = details.get("provider_customer_id") or customer_id
+        last4 = normalize_card_last4(details.get("last4"))
+        exp_month, exp_year = normalize_expiry(details.get("exp_month"), details.get("exp_year"))
+        brand = details.get("brand")
+        if not customer_id or not last4 or not brand or not exp_month or not exp_year:
+            raise PaymentProviderError(INCOMPLETE_CARD_DETAILS)
         return SavedPaymentMethodResult(
             provider_customer_id=customer_id,
             provider_payment_method_id=payment_method_id,
             card_token=None,
-            last4=card_data.get("last4") or payload.get("last4"),
-            brand=card_data.get("brand") or payload.get("brand"),
-            exp_month=card_data.get("exp_month") or payload.get("exp_month"),
-            exp_year=card_data.get("exp_year") or payload.get("exp_year"),
+            last4=last4,
+            brand=brand,
+            exp_month=exp_month,
+            exp_year=exp_year,
         )
 
     def charge_saved_method(
@@ -165,11 +230,17 @@ class StripePaymentProvider:
                 idempotency_key=idempotency_key,
             )
         except stripe.error.StripeError as exc:
-            return ChargeResult(status="failed", failure_reason=str(exc), raw_response={"error": str(exc)})
+            failure_reason = _stripe_failure_reason_from_error(exc)
+            return ChargeResult(status="failed", failure_reason=failure_reason, raw_response={"error": str(exc)})
         raw = intent.to_dict_recursive() if hasattr(intent, "to_dict_recursive") else dict(intent)
         if intent.status == "succeeded":
             return ChargeResult(status="succeeded", provider_payment_id=intent.id, raw_response=raw)
-        return ChargeResult(status="failed", provider_payment_id=intent.id, raw_response=raw, failure_reason=f"Stripe status {intent.status}")
+        return ChargeResult(
+            status="failed",
+            provider_payment_id=intent.id,
+            raw_response=raw,
+            failure_reason=_stripe_failure_reason_from_intent(intent),
+        )
 
     def void_or_refund(self, *, provider_payment_id: str | None, provider_reference_id: str | None, amount_cents: int | None = None) -> ChargeResult:
         if not provider_payment_id:
@@ -222,10 +293,10 @@ def _cardpointe_failure_reason(data: dict[str, Any]) -> str:
     if respcode and respcode in CARDPOINTE_RESPCODE_MESSAGES:
         mapped = CARDPOINTE_RESPCODE_MESSAGES[respcode]
         resptext = data.get("resptext") or ""
-        if resptext and resptext.lower() != mapped.lower():
-            return f"{mapped} ({resptext})"
+        if resptext and resptext.lower() != mapped.lower() and str(resptext).strip() != "0":
+            return normalize_payment_failure_reason(f"{mapped} ({resptext})")
         return mapped
-    return str(data.get("resptext") or data.get("message") or "CardPointe charge failed")
+    return normalize_payment_failure_reason(data.get("resptext") or data.get("message"))
 
 
 class CardPointePaymentProvider:
@@ -262,21 +333,29 @@ class CardPointePaymentProvider:
     def create_setup_session(self, user: User, provider_customer_id: str | None = None) -> SetupSessionResult:
         return SetupSessionResult(
             provider=self.provider,
-            tokenizer_url=self.setting.cardpointe_tokenizer_url,
+            tokenizer_url=normalize_cardpointe_tokenizer_url(self.setting.cardpointe_tokenizer_url),
         )
 
     def save_payment_method(self, payload: dict[str, Any]) -> SavedPaymentMethodResult:
         token = payload.get("card_token")
         if not token:
             raise PaymentProviderError("CardPointe token is required")
+        last4 = normalize_card_last4(payload.get("last4")) or last4_from_card_token(token)
+        exp_month, exp_year = normalize_expiry(
+            payload.get("exp_month"),
+            payload.get("exp_year"),
+            expiration=payload.get("expiration") or payload.get("expiry"),
+        )
+        if not last4 or not exp_month or not exp_year:
+            raise PaymentProviderError(INCOMPLETE_CARD_DETAILS)
         return SavedPaymentMethodResult(
             provider_customer_id=None,
             provider_payment_method_id=None,
             card_token=token,
-            last4=payload.get("last4"),
+            last4=last4,
             brand=payload.get("brand") or "card",
-            exp_month=payload.get("exp_month"),
-            exp_year=payload.get("exp_year"),
+            exp_month=exp_month,
+            exp_year=exp_year,
         )
 
     def charge_saved_method(

@@ -37,6 +37,7 @@ class LocationCreate(BaseModel):
 class LocationOut(BaseModel):
     public_id: str
     organization_public_id: str
+    organization_name: str | None = None
     name: str
     address: str
     city: str | None

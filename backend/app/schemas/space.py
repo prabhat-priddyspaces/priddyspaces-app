@@ -25,6 +25,7 @@ class SpaceCreate(BaseModel):
 
 class SpaceOut(BaseModel):
     public_id: str
+    organization_name: str | None = None
     name: str
     space_type: SpaceType
     capacity: int

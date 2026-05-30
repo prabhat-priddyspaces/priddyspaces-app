@@ -20,6 +20,8 @@ interface Payment {
   status: string;
   booking_id: number | null;
   booking_public_id: string | null;
+  booking_request_id: number | null;
+  booking_request_public_id: string | null;
   booking_start_datetime: string | null;
   booking_end_datetime: string | null;
   subscription_id: number | null;
@@ -31,6 +33,11 @@ interface Payment {
   space_type: string | null;
   location_name: string | null;
   location_city: string | null;
+  organization_name: string | null;
+  payment_method_brand: string | null;
+  payment_method_last4: string | null;
+  payment_method_exp_month: number | null;
+  payment_method_exp_year: number | null;
   failure_reason: string | null;
   created_at: string | null;
 }
@@ -43,6 +50,7 @@ interface Invoice {
 interface BookingPaymentMethod {
   public_id: string;
   organization_public_id: string | null;
+  organization_name: string | null;
   provider: string;
   last4: string | null;
   brand: string | null;
@@ -106,7 +114,9 @@ function statusVariant(status: string): "success" | "warning" | "danger" | "defa
 }
 
 function paymentTitle(payment: Payment): string {
-  if (payment.booking_id != null) return `Booking payment${payment.space_name ? ` · ${payment.space_name}` : ""}`;
+  if (payment.booking_id != null || payment.booking_request_id != null) {
+    return `Booking payment${payment.space_name ? ` · ${payment.space_name}` : ""}`;
+  }
   if (payment.subscription_id != null) {
     return `Membership charge${payment.space_name ? ` · ${payment.space_name}` : ""}`;
   }
@@ -116,7 +126,7 @@ function paymentTitle(payment: Payment): string {
 function paymentWhere(payment: Payment): string {
   const location = [payment.location_name, payment.location_city].filter(Boolean).join(" · ");
   const type = titleize(payment.space_type);
-  return [location, type].filter(Boolean).join(" · ") || payment.public_id;
+  return [location, type].filter(Boolean).join(" · ") || payment.organization_name || "Booking charge";
 }
 
 function paymentWhen(payment: Payment): string {
@@ -130,6 +140,24 @@ function paymentWhen(payment: Payment): string {
   return `Charged: ${formatDateTime(payment.created_at)}`;
 }
 
+function cardLabel(brand: string | null, last4: string | null): string {
+  const name = titleize(brand) || "Card";
+  return last4 ? `${name} ending in ${last4}` : name;
+}
+
+function expiryLabel(month: number | null, year: number | null): string | null {
+  if (month == null || year == null) return null;
+  return `Expires ${String(month).padStart(2, "0")}/${year}`;
+}
+
+function failureReason(value: string | null): string {
+  const text = (value || "").trim();
+  if (!text || ["0", "failed", "payment failed"].includes(text.toLowerCase())) {
+    return "The payment processor declined the charge. Update the card or contact the card issuer for details.";
+  }
+  return text;
+}
+
 export default function MemberPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -137,6 +165,7 @@ export default function MemberPaymentsPage() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [billingBusy, setBillingBusy] = useState(false);
 
   useEffect(() => {
     const token = getAccessToken() ?? undefined;
@@ -192,6 +221,21 @@ export default function MemberPaymentsPage() {
     }
   }
 
+  async function handleManageBilling() {
+    const token = getAccessToken() ?? undefined;
+    if (!token) return;
+    setBillingBusy(true);
+    setMessage("");
+    try {
+      const session = await apiFetch<{ url: string }>("/api/payments/member-portal", { method: "POST" }, token);
+      window.location.assign(session.url);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to open membership billing");
+    } finally {
+      setBillingBusy(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background px-6 py-8">
       <div className="mx-auto max-w-5xl">
@@ -206,9 +250,9 @@ export default function MemberPaymentsPage() {
             <Link href="/member/invoices">
               <Button variant="secondary">Invoices</Button>
             </Link>
-            <Link href="/member">
-              <Button variant="secondary">Marketplace</Button>
-            </Link>
+            <Button variant="secondary" onClick={handleManageBilling} disabled={billingBusy}>
+              {billingBusy ? "Opening..." : "Membership billing"}
+            </Button>
           </div>
         </div>
 
@@ -228,12 +272,9 @@ export default function MemberPaymentsPage() {
             <div>
               <h2 className="text-base font-semibold text-textPrimary">Booking payment methods</h2>
               <p className="mt-1 text-sm text-textSecondary">
-                Cards authorized for booking charges. Membership billing cards are managed from Memberships.
+                Cards authorized for booking charges. Membership billing is managed from this page.
               </p>
             </div>
-            <Link href="/member/subscriptions">
-              <Button size="sm" variant="secondary">Membership billing</Button>
-            </Link>
           </div>
           {loading ? (
             <div className="mt-4 text-sm text-textMuted">Loading payment methods...</div>
@@ -247,18 +288,16 @@ export default function MemberPaymentsPage() {
                     <div>
                       <div className="flex items-center gap-2 text-sm font-semibold text-textPrimary">
                         <CreditCard size={16} className="text-accent" />
-                        {(method.brand || method.provider || "Card").toUpperCase()} •••• {method.last4 || "----"}
+                        {cardLabel(method.brand || method.provider, method.last4)}
                         {method.is_default_for_owner ? (
                           <Badge variant="success" dot>Default</Badge>
                         ) : null}
                       </div>
                       <div className="mt-1 text-xs text-textMuted">
-                        {method.organization_public_id || "Owner"} · {method.provider}
+                        {method.organization_name || "Booking card"}
                       </div>
                       <div className="mt-2 text-sm text-textSecondary">
-                        {method.exp_month != null && method.exp_year != null
-                          ? `Expires ${String(method.exp_month).padStart(2, "0")}/${method.exp_year}`
-                          : "Expiration unavailable"}
+                        {expiryLabel(method.exp_month, method.exp_year) || "Expiration unavailable"}
                         {method.billing_name ? ` · ${method.billing_name}` : ""}
                       </div>
                     </div>
@@ -292,9 +331,6 @@ export default function MemberPaymentsPage() {
                             {payment.status.replace(/_/g, " ")}
                           </Badge>
                         </div>
-                        <div className="mt-1 text-xs text-textMuted">
-                          {payment.public_id} · {payment.provider}
-                        </div>
                         <div className="mt-3 grid gap-1.5 text-sm text-textSecondary">
                           <div className="flex items-start gap-2">
                             <Building2 size={14} className="mt-0.5 flex-none text-textMuted" />
@@ -305,8 +341,16 @@ export default function MemberPaymentsPage() {
                             <span>{paymentWhen(payment)}</span>
                           </div>
                           {invoice ? <div>Invoice {invoice.public_id}</div> : null}
+                          {payment.payment_method_last4 ? (
+                            <div>
+                              {cardLabel(payment.payment_method_brand, payment.payment_method_last4)}
+                              {expiryLabel(payment.payment_method_exp_month, payment.payment_method_exp_year)
+                                ? ` · ${expiryLabel(payment.payment_method_exp_month, payment.payment_method_exp_year)}`
+                                : ""}
+                            </div>
+                          ) : null}
                           {payment.failure_reason ? (
-                            <div className="text-error">{payment.failure_reason}</div>
+                            <div className="text-error">{failureReason(payment.failure_reason)}</div>
                           ) : null}
                         </div>
                       </div>
@@ -333,12 +377,12 @@ export default function MemberPaymentsPage() {
                           </Link>
                         ) : null}
                         {payment.status === "failed" && payment.subscription_id != null ? (
-                          <Link href="/member/subscriptions">
-                            <Button size="sm">Fix billing</Button>
-                          </Link>
+                          <Button size="sm" onClick={handleManageBilling} disabled={billingBusy}>
+                            Fix billing
+                          </Button>
                         ) : null}
-                        {payment.status === "failed" && payment.booking_id != null ? (
-                          <Link href="/member/requests">
+                        {payment.status === "failed" && (payment.booking_id != null || payment.booking_request_id != null) ? (
+                          <Link href={payment.booking_request_public_id ? `/member/requests/${payment.booking_request_public_id}` : "/member/requests"}>
                             <Button size="sm">View requests</Button>
                           </Link>
                         ) : null}

@@ -285,6 +285,8 @@ export function PublicSpaceDetailView({
   const priceRows = useMemo(() => (detail ? getPriceRows(detail.space) : []), [detail]);
   const primaryPrice = priceRows[0]?.value ?? "Contact for pricing";
   const locationAddress = detail ? formatLocationAddress(detail.location) : "";
+  const organizationName = detail?.location.organization_name?.trim() || null;
+  const chargeOwnerName = organizationName || "this owner";
   const leaseBookingMode = detail
     ? leaseBookingModeForSpaceType(detail.space.space_type)
     : null;
@@ -593,7 +595,7 @@ export function PublicSpaceDetailView({
         token,
       );
       if (!resolved.is_configured) {
-        throw new Error(resolved.message || "This owner has not configured payments.");
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
       }
       if (!resolved.has_payment_method) {
         setPendingReservation(payload);
@@ -885,6 +887,7 @@ export function PublicSpaceDetailView({
                   spacePublicId={detail.space.public_id}
                   spaceType={detail.space.space_type as "private_office" | "suite"}
                   spaceCapacity={detail.space.capacity}
+                  organizationName={organizationName}
                   bookingMode={leaseBookingMode}
                   spaceMonthlyPrice={detail.space.price_monthly ?? null}
                   buildLoginNextHref={({ planPublicId, moveInDate }) =>
@@ -1070,7 +1073,9 @@ export function PublicSpaceDetailView({
                         onChange={(event) => setAuthorizationConsent(event.target.checked)}
                         className="mt-1"
                       />
-                      <span>I authorize this owner to charge my card now for instant bookings or upon approval for request-to-book spaces.</span>
+                      <span>
+                        I authorize {chargeOwnerName} to charge my card now for instant bookings or upon approval for request-to-book spaces.
+                      </span>
                     </label>
                   ) : null}
 
@@ -1254,6 +1259,7 @@ export function PublicSpaceDetailView({
       <PaymentMethodModal
         open={paymentMethodOpen}
         spacePublicId={detail.space.public_id}
+        organizationName={organizationName}
         onClose={() => setPaymentMethodOpen(false)}
         onSaved={(paymentMethodPublicId) => {
           setPaymentMethodOpen(false);
