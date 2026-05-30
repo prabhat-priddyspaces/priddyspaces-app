@@ -18,6 +18,7 @@ from app.models.enums import (
     BookingRequestStatus,
     LedgerEntryType,
     SpaceType,
+    SubscriptionStatusEnum,
     UserAppRole,
     UserRole,
 )
@@ -236,6 +237,7 @@ def test_membership_purchase_request_create_and_approve(
     )
     assert sub is not None
     assert sub.stripe_subscription_id == "sub_test123"
+    assert sub.status == SubscriptionStatusEnum.ACTIVE.value
     assert sub.commitment_months == 12
     assert sub.commitment_start_date == desired_start
     assert sub.commitment_end_date is not None
