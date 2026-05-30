@@ -14,6 +14,7 @@ from app.assistant.jobs import (
     build_booking_reminders,
     match_space_alerts,
     send_booking_reminder_email,
+    send_card_expiry_notices,
     send_space_alert_email,
 )
 from app.core.config import settings
@@ -174,6 +175,8 @@ def run_assistant_jobs(db: Session, *, limit: int) -> dict[str, int]:
         )
         alerts_sent += 1
 
+    card_notice_result = send_card_expiry_notices(db, limit=limit)
+
     return {
         "booking_reminders_found": len(reminders),
         "booking_reminders_sent": reminders_sent,
@@ -182,6 +185,7 @@ def run_assistant_jobs(db: Session, *, limit: int) -> dict[str, int]:
         "space_alert_matches_found": len(matches),
         "space_alert_emails_sent": alerts_sent,
         "space_alert_emails_skipped": alerts_skipped,
+        **card_notice_result,
     }
 
 

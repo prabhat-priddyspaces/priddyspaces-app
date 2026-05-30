@@ -1,5 +1,5 @@
 from app import worker
-from app.assistant.jobs import match_space_alerts
+from app.assistant.jobs import match_space_alerts, send_card_expiry_notices
 from app.models.assistant import SpaceAlert
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import sessionmaker
@@ -9,9 +9,12 @@ from app.models.booking_request import BookingRequest
 from app.models.enums import AvailabilityStatus, BookingRequestStatus, BookingStatus, SpaceType, SpaceVisibility, UserAppRole
 from app.models.location import Location
 from app.models.marketing import OutboundMessage
+from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.organization import Organization
 from app.models.space import Space
 from app.models.user import User
+from app.services import notifications
+from app.services.booking_email_delivery import BOOKING_EMAIL_CARD_EXPIRING
 
 
 def test_run_once_isolates_job_failure_and_closes_session(monkeypatch):
@@ -172,6 +175,73 @@ def test_run_assistant_jobs_sends_booking_reminder_once(db_session, monkeypatch)
     assert sent == [("reminder@example.com", "booking-public-id")]
     outbound = db_session.query(OutboundMessage).filter(OutboundMessage.source == "assistant").one()
     assert outbound.source_context["kind"] == "booking_reminder"
+
+
+def test_send_card_expiry_notices_once(db_session, monkeypatch):
+    monkeypatch.setattr(notifications.settings, "SENDGRID_API_KEY", "")
+    monkeypatch.setattr(notifications.settings, "SENDGRID_FROM_EMAIL", "")
+
+    owner = User(
+        email="card-owner@example.com",
+        auth_subject="sub-card-owner",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+    )
+    user = User(
+        email="card-member@example.com",
+        auth_subject="sub-card-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+    )
+    db_session.add_all([owner, user])
+    db_session.commit()
+    db_session.refresh(owner)
+    db_session.refresh(user)
+
+    org = Organization(name="Card Notice Org", owner_id=owner.id)
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+
+    method = MemberOwnerPaymentMethod(
+        user_id=user.id,
+        organization_id=org.id,
+        tenant_id=org.id,
+        provider="stripe",
+        owner_payment_setting_id=1,
+        provider_payment_method_id="pm_card_expiring",
+        last4="4242",
+        brand="Visa",
+        exp_month=6,
+        exp_year=2026,
+        status="active",
+    )
+    db_session.add(method)
+    db_session.commit()
+    db_session.refresh(method)
+
+    first = send_card_expiry_notices(
+        db_session,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        limit=100,
+    )
+    second = send_card_expiry_notices(
+        db_session,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        limit=100,
+    )
+
+    assert first["card_expiry_notices_sent"] == 1
+    assert second["card_expiry_notices_skipped"] == 1
+    outbound = (
+        db_session.query(OutboundMessage)
+        .filter(OutboundMessage.source == "transactional")
+        .filter(OutboundMessage.user_id == user.id)
+        .one()
+    )
+    assert outbound.source_context["notification_type"] == BOOKING_EMAIL_CARD_EXPIRING
+    assert outbound.source_context["member_owner_payment_method_public_id"] == method.public_id
+    assert "4242" in outbound.text_body
 
 
 def test_match_space_alerts_deactivates_matched_alert(db_session):
