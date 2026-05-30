@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PaymentMethodModal } from "../components/payment-method-modal";
@@ -55,13 +55,20 @@ describe("PaymentMethodModal", () => {
     const saveButton = screen.getByRole("button", { name: "Save payment method" });
     expect(saveButton).toBeDisabled();
 
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data: JSON.stringify({ message: "9411111111114242", expiry: "122030" }),
-      }),
-    );
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: JSON.stringify({
+            token: "9411111111114242",
+            last4: "4242",
+            expiry: "122030",
+          }),
+        }),
+      );
+    });
     fireEvent.click(screen.getByRole("checkbox"));
 
+    expect(await screen.findByText("Card ending in 4242 · Expires 12/2030")).toBeInTheDocument();
     await waitFor(() => expect(saveButton).not.toBeDisabled());
     fireEvent.click(saveButton);
 
