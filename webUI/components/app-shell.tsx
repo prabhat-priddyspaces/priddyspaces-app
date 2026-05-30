@@ -11,6 +11,7 @@ import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
 import { MobileSidebarDrawer } from "@/components/shell/mobile-sidebar-drawer";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { NotificationDrawer } from "@/components/notifications/notification-drawer";
 import { Topbar } from "@/components/shell/topbar";
 import { WorkspaceShell } from "@/components/shell/workspace-shell";
 
@@ -39,6 +40,8 @@ export function AppShell({
   const appSignOut = useAppSignOut();
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const profile = me
     ? {
@@ -56,6 +59,8 @@ export function AppShell({
       title={title}
       breadcrumb={breadcrumb}
       onMenuClick={() => setMobileNavOpen(true)}
+      notification={unreadNotifications > 0}
+      onNotificationClick={() => setNotificationsOpen(true)}
       actions={
         <>
           {me?.platform_role ? (
@@ -87,6 +92,11 @@ export function AppShell({
         profile={profile}
         onClose={() => setMobileNavOpen(false)}
         onProfileClick={() => router.push("/owner/account")}
+      />
+      <NotificationDrawer
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        onUnreadCountChange={setUnreadNotifications}
       />
       <WorkspaceShell
         sidebar="owner"

@@ -91,7 +91,11 @@ describe("OwnerAccountPage", () => {
       );
     });
 
-    const payload = JSON.parse(apiFetchMock.mock.calls[0][1].body);
+    const saveCall = apiFetchMock.mock.calls.find(
+      ([path, init]) => path === "/api/me" && init?.method === "PATCH"
+    );
+    expect(saveCall).toBeTruthy();
+    const payload = JSON.parse(saveCall?.[1].body);
     expect(payload).toEqual({
       first_name: "Riley",
       last_name: "User",

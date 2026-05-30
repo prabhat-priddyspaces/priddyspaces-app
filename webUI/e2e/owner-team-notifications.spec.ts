@@ -11,6 +11,8 @@ test("owner can toggle new booking emails for a team member", async ({ page }) =
     role: "admin",
     can_override_pricing: false,
     receives_new_booking_email: true,
+    receives_booking_start_push: true,
+    receives_booking_end_push: true,
     location_public_ids: ["loc_1"],
   };
   let patchPayload: { receives_new_booking_email?: boolean } | null = null;

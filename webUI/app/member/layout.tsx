@@ -8,6 +8,7 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { Button } from "@/components/ui/button";
 import { MobileBottomNav } from "@/components/shell/mobile-bottom-nav";
 import { MobileSidebarDrawer } from "@/components/shell/mobile-sidebar-drawer";
+import { NotificationDrawer } from "@/components/notifications/notification-drawer";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import { Topbar } from "@/components/shell/topbar";
 import { WorkspaceShell } from "@/components/shell/workspace-shell";
@@ -37,6 +38,8 @@ function Shell({
 }) {
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const profile = {
     name:
       [me.first_name, me.last_name].filter(Boolean).join(" ") ||
@@ -49,6 +52,8 @@ function Shell({
     <Topbar
       title="Workspace"
       onMenuClick={() => setMobileNavOpen(true)}
+      notification={unreadNotifications > 0}
+      onNotificationClick={() => setNotificationsOpen(true)}
       actions={
         <>
           <ThemeToggle />
@@ -69,6 +74,11 @@ function Shell({
         profile={profile}
         onClose={() => setMobileNavOpen(false)}
         onProfileClick={() => router.push("/member/profile")}
+      />
+      <NotificationDrawer
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        onUnreadCountChange={setUnreadNotifications}
       />
       <WorkspaceShell
         sidebar="customer"

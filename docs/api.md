@@ -61,6 +61,15 @@
 - `GET /api/attendance/locations` - location options visible to the current owner/admin/platform user.
 - `GET /api/member/directory` - member-only same-location directory based on active memberships or recent confirmed bookings.
 
+### Notifications
+- `GET /api/push/config` - returns web-push availability and VAPID public key.
+- `POST /api/push-subscriptions` - registers a web or Expo push subscription for the current user.
+- `DELETE /api/push-subscriptions/{public_id}` - deactivates the current user's subscription.
+- `GET /api/notifications` - lists the current user's in-app notifications with unread count.
+- `PATCH /api/notifications/{public_id}/read` - marks one notification as read.
+- `GET/PATCH /api/notifications/preferences` - current user's booking start/end reminder preferences.
+- `GET/POST/PATCH /api/orgs/{org_public_id}/members` includes owner-team start/end push reminder toggles.
+
 ### Pricing
 - `POST /api/pricing-rules`
 - `GET /api/pricing-rules?space_public_id=...`

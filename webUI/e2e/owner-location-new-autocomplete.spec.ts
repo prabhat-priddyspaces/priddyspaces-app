@@ -84,6 +84,11 @@ test("owner location new: address autocomplete loads and binds without warnings"
   await expect(noKeyWarning).toHaveCount(0);
 
   // And the constructor must have actually been called on our input.
+  await page.waitForFunction(
+    () =>
+      ((window as unknown as { __priddyAutocompleteCalls?: Array<{ input: string }> }).__priddyAutocompleteCalls || [])
+        .length > 0,
+  );
   const autocompleteCalls = await page.evaluate(
     () => (window as unknown as { __priddyAutocompleteCalls?: Array<{ input: string }> }).__priddyAutocompleteCalls || [],
   );

@@ -5,15 +5,24 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Toggle } from "@/components/ui/toggle";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { MeResponse } from "@/lib/me";
+import {
+  NotificationPreference,
+  getNotificationPreferences,
+  registerBrowserPush,
+  updateNotificationPreferences,
+} from "@/lib/notifications";
 
 export default function MemberProfilePage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<NotificationPreference | null>(null);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -32,6 +41,9 @@ export default function MemberProfilePage() {
         setCompanyName(data.company_name || "");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load profile"));
+    getNotificationPreferences(token)
+      .then(setPreferences)
+      .catch(() => null);
   }, []);
 
   async function save() {
@@ -60,6 +72,33 @@ export default function MemberProfilePage() {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function updatePreference(field: keyof NotificationPreference, value: boolean) {
+    const token = getAccessToken() ?? undefined;
+    if (!token || !preferences) return;
+    const next = { ...preferences, [field]: value };
+    setPreferences(next);
+    setPushMessage(null);
+    try {
+      const saved = await updateNotificationPreferences({ [field]: value }, token);
+      setPreferences(saved);
+      setPushMessage("Notification settings saved");
+    } catch (err) {
+      setPushMessage(err instanceof Error ? err.message : "Failed to save notification settings");
+      const current = await getNotificationPreferences(token);
+      setPreferences(current);
+    }
+  }
+
+  async function enableBrowserNotifications() {
+    const token = getAccessToken() ?? undefined;
+    try {
+      const result = await registerBrowserPush(token);
+      setPushMessage(result.message);
+    } catch (err) {
+      setPushMessage(err instanceof Error ? err.message : "Unable to enable browser notifications");
     }
   }
 
@@ -110,6 +149,37 @@ export default function MemberProfilePage() {
             {saving ? "Saving…" : "Save profile"}
           </Button>
           {message ? <span className="text-sm text-success">{message}</span> : null}
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="text-sm font-semibold text-textPrimary">Booking reminder notifications</div>
+        <p className="mt-1 text-sm text-textSecondary">
+          Receive push reminders 10 minutes before bookings start and before meeting-room bookings end.
+        </p>
+        <div className="mt-4 grid gap-3">
+          <label className="flex items-center justify-between gap-3 text-sm text-textPrimary">
+            <span>Before booking starts</span>
+            <Toggle
+              checked={preferences?.booking_start_push_enabled ?? true}
+              onCheckedChange={(value) => void updatePreference("booking_start_push_enabled", value)}
+              aria-label="Before booking starts"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-textPrimary">
+            <span>Before meeting-room booking ends</span>
+            <Toggle
+              checked={preferences?.booking_end_push_enabled ?? true}
+              onCheckedChange={(value) => void updatePreference("booking_end_push_enabled", value)}
+              aria-label="Before meeting-room booking ends"
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={enableBrowserNotifications}>
+            Enable browser push
+          </Button>
+          {pushMessage ? <span className="text-sm text-textSecondary">{pushMessage}</span> : null}
         </div>
       </Card>
     </div>

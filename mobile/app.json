@@ -17,7 +17,7 @@
       }
     },
     "android": {
-      "permissions": ["CAMERA"],
+      "permissions": ["CAMERA", "POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "backgroundColor": "#F9FAFB"
       }

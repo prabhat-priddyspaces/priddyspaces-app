@@ -22,6 +22,8 @@ interface Member {
   role: string;
   can_override_pricing: boolean;
   receives_new_booking_email: boolean;
+  receives_booking_start_push: boolean;
+  receives_booking_end_push: boolean;
   location_public_ids: string[];
 }
 
@@ -43,6 +45,8 @@ export default function OwnerTeamPage() {
     role: "staff",
     can_override_pricing: false,
     receives_new_booking_email: false,
+    receives_booking_start_push: true,
+    receives_booking_end_push: true,
     location_public_ids: [] as string[],
   });
 
@@ -105,6 +109,8 @@ export default function OwnerTeamPage() {
             role: form.role,
             can_override_pricing: form.can_override_pricing,
             receives_new_booking_email: form.receives_new_booking_email,
+            receives_booking_start_push: form.receives_booking_start_push,
+            receives_booking_end_push: form.receives_booking_end_push,
             location_public_ids: form.role === "owner" ? [] : form.location_public_ids,
           }),
         },
@@ -116,6 +122,8 @@ export default function OwnerTeamPage() {
         role: "staff",
         can_override_pricing: false,
         receives_new_booking_email: false,
+        receives_booking_start_push: true,
+        receives_booking_end_push: true,
         location_public_ids: [],
       });
       await loadMembers();
@@ -127,13 +135,20 @@ export default function OwnerTeamPage() {
   }
 
   async function toggleNewBookingEmail(member: Member) {
+    await toggleMemberPreference(member, "receives_new_booking_email");
+  }
+
+  async function toggleMemberPreference(
+    member: Member,
+    field: "receives_new_booking_email" | "receives_booking_start_push" | "receives_booking_end_push"
+  ) {
     if (!orgId) return;
     setMessage("");
-    const nextValue = !member.receives_new_booking_email;
+    const nextValue = !member[field];
     setMembers((current) =>
       current.map((item) =>
         item.public_id === member.public_id
-          ? { ...item, receives_new_booking_email: nextValue }
+          ? { ...item, [field]: nextValue }
           : item
       )
     );
@@ -143,7 +158,7 @@ export default function OwnerTeamPage() {
         `/api/orgs/${orgId}/members/${member.public_id}`,
         {
           method: "PATCH",
-          body: JSON.stringify({ receives_new_booking_email: nextValue }),
+          body: JSON.stringify({ [field]: nextValue }),
         },
         token
       );
@@ -219,6 +234,8 @@ export default function OwnerTeamPage() {
                   role: e.target.value,
                   receives_new_booking_email:
                     e.target.value === "owner" || e.target.value === "admin",
+                  receives_booking_start_push: true,
+                  receives_booking_end_push: true,
                   location_public_ids: e.target.value === "owner" ? [] : current.location_public_ids,
                 }))
               }
@@ -252,6 +269,34 @@ export default function OwnerTeamPage() {
             />
             <span>New booking emails</span>
           </label>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm text-textPrimary">
+              <input
+                type="checkbox"
+                checked={form.receives_booking_start_push}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    receives_booking_start_push: e.target.checked,
+                  }))
+                }
+              />
+              <span>Start reminder push</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-textPrimary">
+              <input
+                type="checkbox"
+                checked={form.receives_booking_end_push}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    receives_booking_end_push: e.target.checked,
+                  }))
+                }
+              />
+              <span>Meeting-room end reminder push</span>
+            </label>
+          </div>
           {form.role !== "owner" ? (
             <div className="grid gap-2">
               <div className="text-xs text-textMuted">Assigned locations</div>
@@ -303,6 +348,24 @@ export default function OwnerTeamPage() {
                         onChange={() => toggleNewBookingEmail(member)}
                       />
                       <span>New booking emails</span>
+                    </label>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <label className="flex items-center gap-2 text-xs text-textPrimary">
+                      <input
+                        type="checkbox"
+                        checked={member.receives_booking_start_push}
+                        onChange={() => void toggleMemberPreference(member, "receives_booking_start_push")}
+                      />
+                      <span>Start reminder push</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-textPrimary">
+                      <input
+                        type="checkbox"
+                        checked={member.receives_booking_end_push}
+                        onChange={() => void toggleMemberPreference(member, "receives_booking_end_push")}
+                      />
+                      <span>Meeting-room end reminder push</span>
                     </label>
                   </div>
                   <div className="text-xs text-textMuted">

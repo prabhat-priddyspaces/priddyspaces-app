@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -32,10 +32,13 @@ import { MySpaceQrScreen } from "../screens/access/MySpaceQrScreen";
 import { MemberDirectoryScreen } from "../screens/access/MemberDirectoryScreen";
 import { AccessScannerScreen } from "../screens/access/AccessScannerScreen";
 import { AttendanceScreen } from "../screens/access/AttendanceScreen";
+import { NotificationsScreen } from "../screens/NotificationsScreen";
+import { addNotificationTapListener, registerExpoPushToken } from "../lib/notifications";
 
 const Stack = createNativeStackNavigator();
 const MemberStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
+const navigationRef = createNavigationContainerRef<any>();
 
 function openAssistant(navigation: any) {
   let current = navigation;
@@ -197,6 +200,7 @@ function MainApp() {
       <Stack.Screen name="MySpaceQr" component={MySpaceQrScreen} options={{ title: "My Space QR" }} />
       <Stack.Screen name="AccessScanner" component={AccessScannerScreen} options={{ title: "Scanner" }} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: "Attendance" }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
       <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
       <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} />
@@ -206,7 +210,27 @@ function MainApp() {
 
 export function AppNavigator() {
   const { isLoaded, isSignedIn } = useClerkAuth();
-  const { loading } = useAuth();
+  const { loading, token } = useAuth();
+
+  useEffect(() => {
+    if (!token) return;
+    void registerExpoPushToken(token, false);
+  }, [token]);
+
+  useEffect(() => {
+    const sub = addNotificationTapListener((data) => {
+      const bookingId = typeof data.booking_public_id === "string" ? data.booking_public_id : null;
+      if (bookingId && navigationRef.isReady()) {
+        navigationRef.navigate("Main", {
+          screen: "BookingDetail",
+          params: { bookingId },
+        });
+      }
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
 
   if (!isLoaded || loading) {
     return (
@@ -217,7 +241,7 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isSignedIn ? (
           <Stack.Screen name="Main" component={MainApp} />
