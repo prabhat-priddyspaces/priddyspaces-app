@@ -117,6 +117,7 @@ class Settings(BaseSettings):
     WORKER_ENABLE_MARKETING: bool = True
     WORKER_ENABLE_ASSISTANT_JOBS: bool = True
     WORKER_ENABLE_CARDPOINTE_SETTLEMENTS: bool = True
+    WORKER_ENABLE_BOOKING_HOLD_EXPIRY: bool = True
     WORKER_CARDPOINTE_MAX_AGE_DAYS: int = 7
 
     @property

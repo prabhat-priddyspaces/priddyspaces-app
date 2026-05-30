@@ -34,11 +34,15 @@ def _serialize_space(
     space: Space,
     *,
     organization_name: str | None = None,
+    organization: Organization | None = None,
     location_amenities_text: str | None = None,
 ) -> SpaceOut:
+    org_name = organization_name or (organization.name if organization else None)
     return SpaceOut(
         public_id=space.public_id,
-        organization_name=organization_name,
+        organization_name=org_name,
+        booking_approval_mode=(organization.booking_approval_mode if organization else "manual") or "manual",
+        payment_failure_hold_minutes=organization.payment_failure_hold_minutes if organization else None,
         name=_space_display_name(space.name, space.space_type.value),
         space_type=space.space_type,
         capacity=space.capacity,
@@ -130,7 +134,7 @@ def get_space(
     if _space_publicly_visible(space, location, organization):
         return _serialize_space(
             space,
-            organization_name=organization.name if organization else None,
+            organization=organization,
             location_amenities_text=amenity_text,
         )
 
@@ -150,7 +154,7 @@ def get_space(
     )
     return _serialize_space(
         space,
-        organization_name=organization.name if organization else None,
+        organization=organization,
         location_amenities_text=amenity_text,
     )
 
@@ -233,7 +237,7 @@ def list_spaces(
         )
         location_amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
         amenity_text = ", ".join(str(item["name"]) for item in location_amenities) if location_amenities else None
-        return [_serialize_space(space, location_amenities_text=amenity_text) for space in spaces]
+        return [_serialize_space(space, organization=organization, location_amenities_text=amenity_text) for space in spaces]
     require_location_roles(
         db,
         user.id,
@@ -243,7 +247,8 @@ def list_spaces(
     spaces = db.query(Space).filter(Space.location_id == location.id).all()
     location_amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
     amenity_text = ", ".join(str(item["name"]) for item in location_amenities) if location_amenities else None
-    return [_serialize_space(space, location_amenities_text=amenity_text) for space in spaces]
+    organization = db.query(Organization).filter(Organization.id == location.organization_id).first()
+    return [_serialize_space(space, organization=organization, location_amenities_text=amenity_text) for space in spaces]
 
 
 @router.patch("/spaces/{public_id}/override-price", response_model=SpaceOut)

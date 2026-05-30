@@ -24,6 +24,8 @@ interface Location {
 
 interface Space {
   public_id: string;
+  booking_approval_mode: string;
+  payment_failure_hold_minutes: number | null;
   space_type: string;
   capacity: number;
   price_monthly: MoneyValue | null;
@@ -109,6 +111,16 @@ export default function MemberLocationsPage() {
     } finally {
       setRequesting(null);
     }
+  }
+
+  function actionLabel(space: Space) {
+    return space.booking_approval_mode === "auto" ? "Reserve & Pay" : "Request to book";
+  }
+
+  function authorizationLabel(space: Space) {
+    return space.booking_approval_mode === "auto"
+      ? `I authorize ${chargeOwnerName} to charge my card now for this booking.`
+      : `I authorize ${chargeOwnerName} to charge my card if this booking is approved.`;
   }
 
   async function handleRequest(spacePublicId: string) {
@@ -247,7 +259,7 @@ export default function MemberLocationsPage() {
                             onChange={(event) => setAuthorizationConsent(event.target.checked)}
                             className="mt-1"
                           />
-                          <span>I authorize {chargeOwnerName} to charge my card upon approval.</span>
+                          <span>{authorizationLabel(space)}</span>
                         </label>
                         <div className="flex gap-2">
                           <Button
@@ -255,7 +267,7 @@ export default function MemberLocationsPage() {
                             onClick={() => handleRequest(space.public_id)}
                             disabled={!!requesting}
                           >
-                            {requesting === space.public_id ? "Sending..." : "Send request"}
+                            {requesting === space.public_id ? "Sending..." : actionLabel(space)}
                           </Button>
                           <Button
                             size="sm"
@@ -277,7 +289,7 @@ export default function MemberLocationsPage() {
                           size="sm"
                           onClick={() => setSelectedSpace(space.public_id)}
                         >
-                          Request this space
+                          {actionLabel(space)}
                         </Button>
                         <Link href={`/member/spaces/${space.public_id}`}>
                           <Button size="sm" variant="secondary">

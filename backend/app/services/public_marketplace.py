@@ -440,6 +440,7 @@ def _build_location_payload(
     *,
     location: Location,
     location_amenities: list[str],
+    organization: Organization | None = None,
     distance_miles: float | None = None,
 ) -> dict[str, object]:
     working_hours_enabled, working_hours = effective_public_working_hours(
@@ -451,6 +452,8 @@ def _build_location_payload(
 
     return {
         "location_public_id": location.public_id,
+        "booking_approval_mode": (organization.booking_approval_mode if organization else "manual") or "manual",
+        "payment_failure_hold_minutes": organization.payment_failure_hold_minutes if organization else None,
         "name": location.name,
         "address": location.address,
         "city": location.city,
@@ -517,6 +520,10 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
     space_ids = [space.id for space, _, _ in rows]
     tenant_ids = list({space.tenant_id for space, _, _ in rows})
     location_ids = list({location.id for _, location, _ in rows})
+    orgs_by_id = {
+        organization.id: organization
+        for organization in db.query(Organization).filter(Organization.id.in_(tenant_ids)).all()
+    } if tenant_ids else {}
     location_amenity_map = get_location_amenities_map(db, location_ids)
     hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
     subscription_prices = _subscription_price_map(
@@ -582,6 +589,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             _build_location_payload(
                 location=location,
                 location_amenities=location_amenities,
+                organization=orgs_by_id.get(location.organization_id),
                 distance_miles=round(distance_miles, 2) if distance_miles is not None else None,
             ),
         )
@@ -666,7 +674,12 @@ def get_public_location_detail(
     requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
 
     spaces: list[dict[str, object]] = []
-    payload = _build_location_payload(location=location, location_amenities=location_amenities)
+    organization = db.query(Organization).filter(Organization.id == location.organization_id).first()
+    payload = _build_location_payload(
+        location=location,
+        location_amenities=location_amenities,
+        organization=organization,
+    )
     for space, _, image in filtered_rows:
         space_amenities = _space_amenity_names(space)
         if filters.capacity is not None and space.capacity < filters.capacity:
@@ -894,6 +907,8 @@ def get_public_space_detail(
         "location": {
             "location_public_id": location.public_id,
             "organization_name": organization.name,
+            "booking_approval_mode": organization.booking_approval_mode or "manual",
+            "payment_failure_hold_minutes": organization.payment_failure_hold_minutes,
             "name": location.name,
             "address": location.address,
             "city": location.city,

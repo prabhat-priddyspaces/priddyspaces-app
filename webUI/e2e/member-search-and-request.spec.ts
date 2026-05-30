@@ -33,6 +33,10 @@ test("member can submit a booking request from a space detail page", async ({ pa
     rejected_at: null,
     cancelled_at: null,
     cancellation_deadline_at: "2026-04-09T14:00:00.000Z",
+    payment_hold_expires_at: null,
+    payment_failed_at: null,
+    booking_approval_mode: "auto",
+    payment_failure_hold_minutes: 30,
     operator_notes: null,
   };
 
@@ -94,6 +98,8 @@ test("member can submit a booking request from a space detail page", async ({ pa
         location: {
           location_public_id: "loc_1",
           organization_name: "Downtown Cowork",
+          booking_approval_mode: "auto",
+          payment_failure_hold_minutes: 30,
           name: "Downtown Hub",
           address: "100 Congress Ave",
           city: "Austin",
@@ -204,7 +210,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
 
   // Auto-populate fills the date and a slot once availability resolves.
   await expect(page.getByRole("button", { name: "Reserve & Pay" })).toBeEnabled();
-  await page.getByLabel("I authorize Downtown Cowork to charge my card now for instant bookings or upon approval for request-to-book spaces.").check();
+  await page.getByLabel("I authorize Downtown Cowork to charge my card now for this booking.").check();
   await page.getByRole("button", { name: "Reserve & Pay" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests$/);
@@ -314,6 +320,9 @@ test("member can redeem Priddy Points for a full day pass without a card", async
         images: [],
         location: {
           location_public_id: "loc_points_1",
+          organization_name: "Rewards Hub",
+          booking_approval_mode: "auto",
+          payment_failure_hold_minutes: 30,
           name: "Rewards Hub",
           address: "200 Market St",
           city: "Miami",

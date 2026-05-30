@@ -396,7 +396,15 @@ export function PublicSpaceDetailView({
     : detail?.cancellation_policy
       ? `${detail.cancellation_policy.refund_percent}% refund ${detail.cancellation_policy.cancel_window_hours}+h before`
       : null;
-  const reserveActionLabel = leaseBookingMode ? "Request to Book" : "Reserve & Pay";
+  const autoApproval = detail?.location.booking_approval_mode === "auto";
+  const reserveActionLabel = leaseBookingMode
+    ? "Request to Book"
+    : autoApproval
+      ? "Reserve & Pay"
+      : "Request to book";
+  const authorizationText = autoApproval
+    ? `I authorize ${chargeOwnerName} to charge my card now for this booking.`
+    : `I authorize ${chargeOwnerName} to charge my card if this booking is approved.`;
 
   function buildSelfNextHref(extra?: { planPublicId?: string | null; moveInDate?: string }) {
     const params = new URLSearchParams();
@@ -1074,7 +1082,7 @@ export function PublicSpaceDetailView({
                         className="mt-1"
                       />
                       <span>
-                        I authorize {chargeOwnerName} to charge my card now for instant bookings or upon approval for request-to-book spaces.
+                        {authorizationText}
                       </span>
                     </label>
                   ) : null}

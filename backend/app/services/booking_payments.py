@@ -8,22 +8,30 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
+from app.models.booking_series import BookingSeries
 from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
-from app.models.enums import BookingRequestStatus, BookingStatus, PaymentStatus
+from app.models.enums import BookingRequestStatus, BookingStatus, PaymentStatus, UserRole
 from app.models.invoice import Invoice
 from app.models.location import Location
 from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.payment_refund import PaymentRefund
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.tax_config import TaxConfig
+from app.models.user import User
 from app.services.owner_payments import ensure_payment_method_chargeable
 from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
+from app.services.notifications import (
+    send_booking_cancelled_email,
+    send_booking_request_cancelled_email,
+    send_owner_booking_cancelled_notification,
+)
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
 from app.services.cancellation_refunds import policy_for_space, policy_snapshot, refund_percent_from_snapshot
@@ -36,6 +44,124 @@ from app.services.loyalty import (
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PAYMENT_FAILURE_HOLD_MINUTES = 30
+
+
+def _payment_failure_hold_minutes(db: Session, req: BookingRequest) -> int:
+    organization = db.query(Organization).filter(Organization.id == req.tenant_id).first()
+    if organization is None or organization.payment_failure_hold_minutes is None:
+        return DEFAULT_PAYMENT_FAILURE_HOLD_MINUTES
+    return max(0, int(organization.payment_failure_hold_minutes))
+
+
+def cancel_payment_hold_for_request(
+    db: Session,
+    req: BookingRequest,
+    *,
+    reason: str = "expired",
+    now: datetime | None = None,
+) -> Booking | None:
+    now = now or datetime.now(timezone.utc)
+    booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+    if booking and booking.status != BookingStatus.CANCELED:
+        booking.status = BookingStatus.CANCELED
+        db.add(booking)
+    if req.booking_series_id:
+        db.query(Booking).filter(
+            Booking.booking_series_id == req.booking_series_id,
+            Booking.status == BookingStatus.PENDING,
+        ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
+        series = db.query(BookingSeries).filter(BookingSeries.id == req.booking_series_id).first()
+        if series and series.status != "cancelled":
+            series.status = "cancelled"
+            db.add(series)
+    release_redemption_for_request(db, req, reason="released")
+    req.status = BookingRequestStatus.CANCELLED
+    req.payment_status = req.payment_status or "failed"
+    req.payment_hold_expires_at = req.payment_hold_expires_at or now
+    req.cancelled_at = now
+    req.operator_notes = req.operator_notes or reason
+    db.add(req)
+    return booking
+
+
+def _owner_recipients_for_space(db: Session, space: Space) -> list[tuple[str, str, int]]:
+    roles = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
+    members = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.organization_id == space.tenant_id,
+            OrganizationMember.is_active.is_(True),
+            OrganizationMember.receives_new_booking_email.is_(True),
+            OrganizationMember.role.in_(roles),
+        )
+        .all()
+    )
+    user_ids = {member.user_id for member in members}
+    users = {user.id: user for user in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    seen: set[str] = set()
+    recipients: list[tuple[str, str, int]] = []
+    for member in members:
+        user = users.get(member.user_id)
+        if not user or not user.email or user.email in seen:
+            continue
+        seen.add(user.email)
+        recipients.append((user.email, member.role.value, user.id))
+    return recipients
+
+
+def expire_payment_holds(db: Session, *, limit: int = 100) -> dict[str, int]:
+    now = datetime.now(timezone.utc)
+    requests = (
+        db.query(BookingRequest)
+        .filter(
+            BookingRequest.status == BookingRequestStatus.PAYMENT_FAILED,
+            BookingRequest.payment_hold_expires_at.isnot(None),
+            BookingRequest.payment_hold_expires_at <= now,
+        )
+        .order_by(BookingRequest.payment_hold_expires_at.asc())
+        .limit(limit)
+        .all()
+    )
+    expired = 0
+    emails_attempted = 0
+    for req in requests:
+        space = db.query(Space).filter(Space.id == req.space_id).first()
+        location = db.query(Location).filter(Location.id == space.location_id).first() if space else None
+        booking = cancel_payment_hold_for_request(db, req, reason="payment_hold_expired", now=now)
+        db.commit()
+        db.refresh(req)
+        if booking:
+            db.refresh(booking)
+        expired += 1
+        if not space or not location:
+            continue
+        try:
+            if booking:
+                send_booking_cancelled_email(db, booking, req, space, location)
+            else:
+                send_booking_request_cancelled_email(db, req, space, location)
+            emails_attempted += 1
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to send member hold-expiry email request_public_id=%s", req.public_id)
+        for owner_email, role, user_id in _owner_recipients_for_space(db, space):
+            try:
+                send_owner_booking_cancelled_notification(
+                    db,
+                    owner_email,
+                    req,
+                    space,
+                    location,
+                    booking=booking,
+                    reason="Payment recovery window expired",
+                    recipient_role=role,
+                    recipient_user_id=user_id,
+                )
+                emails_attempted += 1
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to send owner hold-expiry email request_public_id=%s", req.public_id)
+    return {"expired_payment_holds": expired, "emails_attempted": emails_attempted}
 
 
 def get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
@@ -304,6 +430,7 @@ def charge_booking_request(
         payment.booking_id = booking.id
         req.status = BookingRequestStatus.APPROVED
         req.payment_status = "succeeded"
+        req.payment_hold_expires_at = None
         req.approved_at = datetime.now(timezone.utc)
         req.pricing_snapshot = json.dumps(payment_snapshot)
         req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
@@ -388,6 +515,7 @@ def charge_booking_request(
         payment.booking_id = booking.id
         req.status = BookingRequestStatus.APPROVED
         req.payment_status = "succeeded"
+        req.payment_hold_expires_at = None
         req.approved_at = datetime.now(timezone.utc)
         req.pricing_snapshot = json.dumps(payment_snapshot)
         req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
@@ -410,27 +538,40 @@ def charge_booking_request(
     if result:
         payment.provider_payment_id = result.provider_payment_id
         payment.provider_reference_id = result.provider_reference_id
-    req.status = BookingRequestStatus.PAYMENT_FAILED
+    now = datetime.now(timezone.utc)
+    hold_minutes = _payment_failure_hold_minutes(db, req)
+    booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+    keep_hold = bool(hold_minutes > 0 and booking and booking.status != BookingStatus.CANCELED)
+    req.payment_failed_at = now
     req.payment_status = "failed"
-    if req.booking_id:
-        booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
-        if booking:
-            booking.status = BookingStatus.CANCELED
-            db.add(booking)
-        req.booking_id = None
-    if req.booking_series_id:
-        db.query(Booking).filter(
-            Booking.booking_series_id == req.booking_series_id,
-            Booking.status == BookingStatus.PENDING,
-        ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
-    release_redemption_for_request(db, req, reason="released")
+    if keep_hold:
+        req.status = BookingRequestStatus.PAYMENT_FAILED
+        req.payment_hold_expires_at = now + timedelta(minutes=hold_minutes)
+    else:
+        if hold_minutes == 0:
+            cancel_payment_hold_for_request(db, req, reason="payment_failed_cancel_immediately", now=now)
+        else:
+            req.status = BookingRequestStatus.PAYMENT_FAILED
+            req.payment_hold_expires_at = None
+            if booking:
+                booking.status = BookingStatus.CANCELED
+                db.add(booking)
+            if req.booking_series_id:
+                db.query(Booking).filter(
+                    Booking.booking_series_id == req.booking_series_id,
+                    Booking.status == BookingStatus.PENDING,
+                ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
+            release_redemption_for_request(db, req, reason="released")
     logger.warning(
-        "booking_payment_failed request_public_id=%s payment_public_id=%s provider=%s attempt=%s payment_method_public_id=%s failure_reason=%s",
+        "booking_payment_failed request_public_id=%s payment_public_id=%s provider=%s attempt=%s payment_method_public_id=%s hold_minutes=%s hold_expires_at=%s final_status=%s failure_reason=%s",
         req.public_id,
         payment.public_id,
         setting.provider if setting else None,
         attempt,
         method.public_id if method else None,
+        hold_minutes,
+        req.payment_hold_expires_at.isoformat() if req.payment_hold_expires_at else None,
+        getattr(req.status, "value", req.status),
         failure_reason,
     )
     db.add(payment)
@@ -438,7 +579,7 @@ def charge_booking_request(
     db.commit()
     db.refresh(req)
     db.refresh(payment)
-    return req, None, payment
+    return req, booking if keep_hold else None, payment
 
 
 def _refund_snapshot(req: BookingRequest | None, payment: Payment | None) -> dict:

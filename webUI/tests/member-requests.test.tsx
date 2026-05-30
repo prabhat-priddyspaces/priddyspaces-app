@@ -54,6 +54,10 @@ describe("MemberRequestsPage", () => {
         rejected_at: null,
         cancelled_at: null,
         cancellation_deadline_at: null,
+        payment_hold_expires_at: "2099-05-29T22:11:00.000Z",
+        payment_failed_at: "2026-05-29T21:41:00.000Z",
+        booking_approval_mode: "auto",
+        payment_failure_hold_minutes: 30,
         failure_reason: "0",
       },
     ]);

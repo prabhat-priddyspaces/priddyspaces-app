@@ -34,6 +34,15 @@ function formatDeadline(iso: string | null): string | null {
   }
 }
 
+function holdExpired(req: BookingRequest): boolean {
+  if (!req.payment_hold_expires_at) return false;
+  return Date.now() > new Date(req.payment_hold_expires_at).getTime();
+}
+
+function approvalModeLabel(req: BookingRequest): string {
+  return req.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval";
+}
+
 import { AppShell } from "@/components/app-shell";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +73,10 @@ interface BookingRequest {
   status: string;
   payment_status: string | null;
   payment_provider: string | null;
+  booking_approval_mode: string;
+  payment_failure_hold_minutes: number | null;
+  payment_hold_expires_at: string | null;
+  payment_failed_at: string | null;
   cancellation_deadline_at: string | null;
   estimated_amount: MoneyValue | null;
   operator_notes: string | null;
@@ -603,6 +616,8 @@ export default function OwnerRequestsPage() {
             const range = timeRange(request);
             const isPending = request.status === "requested";
             const isFailed = request.status === "payment_failed";
+            const isHoldExpired = isFailed && holdExpired(request);
+            const holdDeadline = formatDeadline(request.payment_hold_expires_at);
             const paymentLine = `${request.payment_status || "Not charged"}${
               request.payment_provider ? ` · ${request.payment_provider}` : ""
             }`;
@@ -698,6 +713,8 @@ export default function OwnerRequestsPage() {
                     {price.detail}
                     {" · "}
                     {paymentLine}
+                    {" · "}
+                    {approvalModeLabel(request)}
                   </div>
                 </div>
 
@@ -737,7 +754,7 @@ export default function OwnerRequestsPage() {
                       </Button>
                     </>
                   )}
-                  {isFailed && (
+                  {isFailed && !isHoldExpired && (
                     <Button
                       size="sm"
                       variant="outline-danger"
@@ -747,6 +764,11 @@ export default function OwnerRequestsPage() {
                       Retry charge
                     </Button>
                   )}
+                  {isFailed && isHoldExpired ? (
+                    <Button size="sm" variant="ghost" disabled>
+                      Hold expired
+                    </Button>
+                  ) : null}
                   {!isPending && !isFailed && (
                     <Button size="sm" variant="ghost">
                       View
@@ -754,6 +776,20 @@ export default function OwnerRequestsPage() {
                   )}
                 </div>
                 <div className="lg:col-span-6 mt-1 grid gap-2">
+                  {isFailed ? (
+                    <div className="rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-[12px] text-danger">
+                      <div className="font-semibold">
+                        {isHoldExpired
+                          ? "Payment hold expired"
+                          : holdDeadline
+                            ? `Waiting for member payment update until ${holdDeadline}`
+                            : "Waiting for member payment update"}
+                      </div>
+                      <div className="mt-1 text-text-2">
+                        {request.failure_reason || FAILURE_FALLBACK}
+                      </div>
+                    </div>
+                  ) : null}
                   {emailSummaries.length > 0 ? (
                     <div className="grid gap-2 md:grid-cols-2">
                       {emailSummaries.map((summary) => {

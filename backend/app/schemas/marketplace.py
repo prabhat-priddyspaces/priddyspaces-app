@@ -35,6 +35,8 @@ class MarketplaceLocationSearchMetaOut(BaseModel):
 
 class MarketplaceLocationSummaryOut(BaseModel):
     location_public_id: str
+    booking_approval_mode: str = "manual"
+    payment_failure_hold_minutes: int | None = None
     name: str
     address: str
     city: str | None = None
@@ -115,6 +117,8 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
 class MarketplaceSpaceDetailLocationOut(BaseModel):
     location_public_id: str
     organization_name: str | None = None
+    booking_approval_mode: str = "manual"
+    payment_failure_hold_minutes: int | None = None
     name: str
     address: str
     city: str | None = None

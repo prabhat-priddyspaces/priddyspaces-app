@@ -307,7 +307,9 @@ def test_redemption_preview_repairs_priddy_signup_points(db_session, client_fact
 
 def test_priddy_points_cover_day_pass_without_card(db_session, client_factory):
     owner, customer, org, space, _method = _seed(db_session, space_type=SpaceType.SHARED_DESK)
+    org.booking_approval_mode = "auto"
     space.price_daily = 10
+    db_session.add(org)
     db_session.add(space)
     grant_priddy_signup_points(db_session, customer)
     db_session.commit()

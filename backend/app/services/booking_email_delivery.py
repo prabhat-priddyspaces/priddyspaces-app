@@ -14,8 +14,10 @@ BOOKING_EMAIL_OWNER_CONFIRMED = "owner_confirmed_booking"
 BOOKING_EMAIL_CONFIRMED = "booking_confirmed"
 BOOKING_EMAIL_REJECTED = "booking_rejected"
 BOOKING_EMAIL_PAYMENT_FAILED = "payment_failed"
+BOOKING_EMAIL_OWNER_PAYMENT_FAILED = "owner_payment_failed"
 BOOKING_EMAIL_CANCELLED = "booking_cancelled"
 BOOKING_EMAIL_REQUEST_CANCELLED = "booking_request_cancelled"
+BOOKING_EMAIL_OWNER_CANCELLED = "owner_booking_cancelled"
 
 BOOKING_EMAIL_TYPES = {
     BOOKING_EMAIL_REQUEST_SUBMITTED,
@@ -24,8 +26,10 @@ BOOKING_EMAIL_TYPES = {
     BOOKING_EMAIL_CONFIRMED,
     BOOKING_EMAIL_REJECTED,
     BOOKING_EMAIL_PAYMENT_FAILED,
+    BOOKING_EMAIL_OWNER_PAYMENT_FAILED,
     BOOKING_EMAIL_CANCELLED,
     BOOKING_EMAIL_REQUEST_CANCELLED,
+    BOOKING_EMAIL_OWNER_CANCELLED,
 }
 
 BOOKING_EMAIL_LABELS = {
@@ -35,8 +39,10 @@ BOOKING_EMAIL_LABELS = {
     BOOKING_EMAIL_CONFIRMED: "Booking confirmed",
     BOOKING_EMAIL_REJECTED: "Booking rejected",
     BOOKING_EMAIL_PAYMENT_FAILED: "Payment failed",
+    BOOKING_EMAIL_OWNER_PAYMENT_FAILED: "Owner payment failed notice",
     BOOKING_EMAIL_CANCELLED: "Booking canceled",
     BOOKING_EMAIL_REQUEST_CANCELLED: "Request canceled",
+    BOOKING_EMAIL_OWNER_CANCELLED: "Owner cancellation notice",
 }
 
 VISIBLE_STATUSES = {"queued", "sent", "delivered", "opened", "clicked", "bounced", "failed"}
@@ -77,8 +83,10 @@ def expected_notification_types(req: BookingRequest) -> list[str]:
         types.append(BOOKING_EMAIL_REJECTED)
     elif status == "payment_failed":
         types.append(BOOKING_EMAIL_PAYMENT_FAILED)
+        types.append(BOOKING_EMAIL_OWNER_PAYMENT_FAILED)
     elif status == "cancelled":
         types.append(BOOKING_EMAIL_CANCELLED if req.booking_id else BOOKING_EMAIL_REQUEST_CANCELLED)
+        types.append(BOOKING_EMAIL_OWNER_CANCELLED)
     return types
 
 

@@ -185,6 +185,10 @@ class BookingRequestOut(BaseModel):
     rejected_at: datetime | None = None
     cancelled_at: datetime | None = None
     cancellation_deadline_at: datetime | None = None
+    payment_hold_expires_at: datetime | None = None
+    payment_failed_at: datetime | None = None
+    booking_approval_mode: str = "manual"
+    payment_failure_hold_minutes: int | None = None
     payment_authorization_consent_at: datetime | None = None
     operator_notes: str | None = None
     instant_booking: bool = False

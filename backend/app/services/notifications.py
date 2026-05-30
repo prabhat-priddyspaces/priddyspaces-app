@@ -15,6 +15,8 @@ from app.services.booking_email_delivery import (
     BOOKING_EMAIL_CANCELLED,
     BOOKING_EMAIL_CONFIRMED,
     BOOKING_EMAIL_OWNER_CONFIRMED,
+    BOOKING_EMAIL_OWNER_CANCELLED,
+    BOOKING_EMAIL_OWNER_PAYMENT_FAILED,
     BOOKING_EMAIL_OWNER_REQUEST,
     BOOKING_EMAIL_PAYMENT_FAILED,
     BOOKING_EMAIL_REJECTED,
@@ -491,6 +493,65 @@ def send_owner_confirmed_booking_notification(
     )
 
 
+def _format_retry_deadline(req: "BookingRequest") -> str | None:
+    deadline = getattr(req, "payment_hold_expires_at", None)
+    if not deadline:
+        return None
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    return deadline.astimezone(timezone.utc).strftime("%b %d, %Y, %I:%M %p UTC").replace(" 0", " ")
+
+
+def send_owner_booking_payment_failed_notification(
+    db: Session,
+    owner_email: str,
+    req: "BookingRequest",
+    space: "Space",
+    location: "Location",
+    *,
+    failure_reason: str | None = None,
+    recipient_role: str = "owner",
+    recipient_user_id: int | None = None,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage:
+    requester_email = _requester_email(db, req)
+    requester = _requester_name(db, req)
+    if requester_email:
+        requester = f"{requester} ({requester_email})"
+    deadline = _format_retry_deadline(req)
+    lines = [
+        f"Payment failed for {requester}.",
+        f"Space: {space.name}",
+        f"Location: {location.name}",
+        f"From: {req.start_datetime}",
+        f"To: {req.end_datetime}",
+        f"Reason: {failure_reason or 'The payment processor declined the charge.'}",
+    ]
+    if deadline:
+        lines.append(f"The booking hold is open until {deadline}.")
+    else:
+        lines.append("The booking hold was not kept open.")
+    request_url = _frontend_url(f"/owner/requests?request={req.public_id}")
+    body = "\n".join(lines + ["", f"View request: {request_url}"])
+    html = _html_shell("Booking payment failed", lines, [("View request", request_url, "#991b1b")])
+    return send_booking_transactional_email(
+        db,
+        to_email=owner_email,
+        subject="Booking payment failed",
+        body=body,
+        html_body=html,
+        req=req,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_OWNER_PAYMENT_FAILED,
+        recipient_role=recipient_role,
+        recipient_user_id=recipient_user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
+    )
+
+
 def send_booking_request_submitted_email(
     db: Session,
     req: "BookingRequest",
@@ -638,12 +699,33 @@ def send_booking_payment_failed_email(
     if not to_email:
         return
     name = _requester_name(db, req)
+    reason = None
+    try:
+        from app.models.payment import Payment
+
+        payment = (
+            db.query(Payment)
+            .filter(Payment.booking_request_id == req.id)
+            .order_by(Payment.created_at.desc())
+            .first()
+        )
+        reason = payment.failure_reason if payment else None
+    except Exception:  # noqa: BLE001 - email should still be queued if lookup fails.
+        reason = None
+    deadline = _format_retry_deadline(req)
     lines = [
         f"Hi {name},",
         f"We could not charge the saved payment method for your booking request at {space.name}.",
         f"Reference: {req.public_id}",
-        "The owner can retry the charge after the payment method is updated.",
+        f"Reason: {reason or 'The payment processor declined the charge.'}",
     ]
+    if deadline:
+        if req.instant_booking:
+            lines.append(f"We are holding this booking until {deadline}. Update your card and retry before then.")
+        else:
+            lines.append(f"We are holding this booking until {deadline}. Update your card so the owner can retry before then.")
+    else:
+        lines.append("This booking was not held. Start a new request if you still want this time.")
     return send_booking_transactional_email(
         db=db,
         to_email=to_email,
@@ -656,6 +738,57 @@ def send_booking_payment_failed_email(
         notification_type=BOOKING_EMAIL_PAYMENT_FAILED,
         recipient_role="guest" if req.is_guest_checkout else "member",
         recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+        resend=resend,
+    )
+
+
+def send_owner_booking_cancelled_notification(
+    db: Session,
+    owner_email: str,
+    req: "BookingRequest",
+    space: "Space",
+    location: "Location",
+    *,
+    booking: "Booking | None" = None,
+    reason: str | None = None,
+    recipient_role: str = "owner",
+    recipient_user_id: int | None = None,
+    actor_user_id: int | None = None,
+    resend: bool = False,
+) -> OutboundMessage:
+    requester_email = _requester_email(db, req)
+    requester = _requester_name(db, req)
+    if requester_email:
+        requester = f"{requester} ({requester_email})"
+    lines = [
+        f"Booking cancelled for {requester}.",
+        f"Reference: {req.public_id}",
+        f"Space: {space.name}",
+        f"Location: {location.name}",
+        f"From: {req.start_datetime}",
+        f"To: {req.end_datetime}",
+    ]
+    if booking:
+        lines.insert(2, f"Booking: {booking.public_id}")
+    if reason:
+        lines.append(f"Reason: {reason}")
+    request_url = _frontend_url(f"/owner/requests?request={req.public_id}")
+    body = "\n".join(lines + ["", f"View request: {request_url}"])
+    html = _html_shell("Booking cancelled", lines, [("View request", request_url, "#374151")])
+    return send_booking_transactional_email(
+        db=db,
+        to_email=owner_email,
+        subject="Booking cancelled",
+        body=body,
+        html_body=html,
+        req=req,
+        booking=booking,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_OWNER_CANCELLED,
+        recipient_role=recipient_role,
+        recipient_user_id=recipient_user_id,
         actor_user_id=actor_user_id,
         resend=resend,
     )

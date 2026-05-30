@@ -9,6 +9,10 @@ type PromoCode = { public_id: string };
 type FeatureFlag = { public_id: string };
 type CancellationPolicy = { public_id: string };
 type SubscriptionPlan = { public_id: string };
+type BookingSettings = {
+  booking_approval_mode: "manual" | "auto";
+  payment_failure_hold_minutes: number;
+};
 
 export function OwnerSettingsScreen() {
   const { token } = useAuth();
@@ -22,11 +26,16 @@ export function OwnerSettingsScreen() {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
   const [connectStatus, setConnectStatus] = useState("Unknown");
 
   const [pricingForm, setPricingForm] = useState({ rate_type: "daily", rate_amount: "" });
   const [promoForm, setPromoForm] = useState({ code: "", discount_type: "percent", discount_value: "" });
   const [taxRate, setTaxRate] = useState("");
+  const [bookingSettingsForm, setBookingSettingsForm] = useState({
+    booking_approval_mode: "manual" as "manual" | "auto",
+    payment_failure_hold_minutes: "30"
+  });
   const [flagForm, setFlagForm] = useState({
     flag_key: "instant_booking_enabled",
     flag_value: "false",
@@ -55,17 +64,25 @@ export function OwnerSettingsScreen() {
       apiFetch(`/api/tax-config?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => null),
       apiFetch<CancellationPolicy[]>(`/api/cancellation-policies?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => []),
       apiFetch<SubscriptionPlan[]>(`/api/subscription-plans?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => []),
+      apiFetch<BookingSettings>(`/api/orgs/${orgId}/booking-settings`, { method: "GET" }, token).catch(() => null),
       apiFetch<{ connected: boolean }>(`/api/stripe/connect/status?organization_public_id=${orgId}`, { method: "GET" }, token).catch(
         () => ({ connected: false })
       )
     ])
-      .then(([promo, tax, policy, plan, connect]) => {
+      .then(([promo, tax, policy, plan, booking, connect]) => {
         setPromoCodes(promo);
         if (tax && (tax as any).rate_percent != null) {
           setTaxRate(String((tax as any).rate_percent));
         }
         setPolicies(policy);
         setPlans(plan);
+        if (booking) {
+          setBookingSettings(booking);
+          setBookingSettingsForm({
+            booking_approval_mode: booking.booking_approval_mode,
+            payment_failure_hold_minutes: String(booking.payment_failure_hold_minutes)
+          });
+        }
         setConnectStatus(connect.connected ? "Connected" : "Not connected");
       })
       .finally(() => setLoading(false));
@@ -141,6 +158,26 @@ export function OwnerSettingsScreen() {
       token
     );
     setMessage("Tax config saved");
+  }
+
+  async function saveBookingSettings() {
+    if (!token || !orgId) {
+      setMessage("Enter organization id");
+      return;
+    }
+    const saved = await apiFetch<BookingSettings>(
+      `/api/orgs/${orgId}/booking-settings`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          booking_approval_mode: bookingSettingsForm.booking_approval_mode,
+          payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes)
+        })
+      },
+      token
+    );
+    setBookingSettings(saved);
+    setMessage("Booking approval saved");
   }
 
   async function saveFeatureFlag() {
@@ -286,6 +323,47 @@ export function OwnerSettingsScreen() {
       <TextInput style={styles.input} placeholder="Rate %" value={taxRate} onChangeText={setTaxRate} />
       <TouchableOpacity style={styles.primaryButton} onPress={saveTaxConfig}>
         <Text style={styles.primaryButtonText}>Save tax</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Booking approval</Text>
+      <Text style={styles.subtitle}>
+        Current: {bookingSettings?.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval"} ·{" "}
+        {bookingSettings?.payment_failure_hold_minutes === 0
+          ? "cancel immediately"
+          : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min recovery`}
+      </Text>
+      <View style={styles.optionRow}>
+        {[
+          { value: "manual", label: "Manual approval" },
+          { value: "auto", label: "Auto approve" }
+        ].map((opt) => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[styles.optionButton, bookingSettingsForm.booking_approval_mode === opt.value && styles.optionActive]}
+            onPress={() => setBookingSettingsForm({ ...bookingSettingsForm, booking_approval_mode: opt.value as "manual" | "auto" })}
+          >
+            <Text style={styles.optionText}>{opt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.optionRow}>
+        {[
+          { value: "0", label: "Cancel immediately" },
+          { value: "15", label: "15 min" },
+          { value: "30", label: "30 min" },
+          { value: "60", label: "60 min" }
+        ].map((opt) => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[styles.optionButton, bookingSettingsForm.payment_failure_hold_minutes === opt.value && styles.optionActive]}
+            onPress={() => setBookingSettingsForm({ ...bookingSettingsForm, payment_failure_hold_minutes: opt.value })}
+          >
+            <Text style={styles.optionText}>{opt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <TouchableOpacity style={styles.primaryButton} onPress={saveBookingSettings}>
+        <Text style={styles.primaryButtonText}>Save booking approval</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Feature flags ({featureFlags.length})</Text>

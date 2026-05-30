@@ -37,6 +37,8 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     rejected_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancellation_deadline_at = Column(DateTime(timezone=True), nullable=True)
+    payment_hold_expires_at = Column(DateTime(timezone=True), nullable=True)
+    payment_failed_at = Column(DateTime(timezone=True), nullable=True)
     payment_authorization_consent_at = Column(DateTime(timezone=True), nullable=True)
     payment_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     operator_notes = Column(String(1024), nullable=True)
