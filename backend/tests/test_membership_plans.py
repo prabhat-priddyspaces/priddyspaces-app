@@ -181,7 +181,7 @@ def test_space_booking_modes_rejects_invalid_combo(db_session, client_factory):
 
     resp = client.put(
         f"/api/spaces/{space.public_id}/booking-modes",
-        json={"booking_mode": BookingMode.DAY_PASS.value, "is_enabled": True},
+        json={"booking_mode": BookingMode.MONTHLY_MEMBERSHIP.value, "is_enabled": True},
     )
     assert resp.status_code == 400
 
@@ -255,6 +255,28 @@ def test_marketplace_space_detail_includes_product_booking_modes(db_session, cli
     ]
     assert products[0]["label"] == "Day Pass"
     assert products[1]["membership_plan_public_id"] == plan_resp.json()["public_id"]
+
+
+def test_conference_room_space_detail_includes_hourly_and_day_rate_products(db_session, client_factory):
+    _, _, _, space = _seed_owner_with_space(db_session, space_type=SpaceType.CONFERENCE_ROOM)
+    space.price_hourly = 30
+    space.price_daily = 200
+    db_session.add(space)
+    db_session.commit()
+    client = _client(client_factory)
+
+    detail = client.get(f"/api/marketplace/spaces/{space.public_id}")
+    assert detail.status_code == 200, detail.text
+
+    products = detail.json()["space"]["booking_products"]
+    assert [product["booking_mode"] for product in products] == [
+        BookingMode.HOURLY.value,
+        BookingMode.DAY_PASS.value,
+    ]
+    assert products[0]["label"] == "Hourly reservation"
+    assert products[0]["price"] == "30.00"
+    assert products[1]["label"] == "Day Rate"
+    assert products[1]["price"] == "200.00"
 
 
 def test_public_membership_plans_include_capacity_and_availability(db_session, client_factory):

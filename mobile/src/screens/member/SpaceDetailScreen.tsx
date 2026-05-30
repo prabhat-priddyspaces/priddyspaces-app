@@ -284,7 +284,7 @@ export function SpaceDetailScreen() {
   async function handleRequest() {
     if (!token || !space) return;
     if (!isConferenceRoom && !isSharedDesk) return;
-    const dayPass = isSharedDesk;
+    const dayPass = isSharedDesk || (isConferenceRoom && fullDay);
     const effectiveStart = dayPass ? openWindow.start : startTime;
     const effectiveEnd = dayPass ? openWindow.end : endTime;
     if (availability && dateIsUnavailable(bookingDate)) {
@@ -292,10 +292,10 @@ export function SpaceDetailScreen() {
       return;
     }
     if (dayPass && fullDayDisabled) {
-      setMessage("Day pass is not available for this date.");
+      setMessage(isConferenceRoom ? "All day is not available for this date." : "Day pass is not available for this date.");
       return;
     }
-    if (isConferenceRoom && (!startOptions.includes(startTime) || !endOptions.includes(endTime))) {
+    if (isConferenceRoom && !dayPass && (!startOptions.includes(startTime) || !endOptions.includes(endTime))) {
       setMessage("Choose an available time.");
       return;
     }
@@ -322,7 +322,7 @@ export function SpaceDetailScreen() {
         end_datetime: end.toISOString(),
         booking_mode: dayPass ? "day_pass" : "hourly",
         full_day: dayPass,
-        seats_requested: dayPass ? Math.max(1, Number(seatQuantity || 1)) : 1
+        seats_requested: isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1
       };
       if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
         setPendingReservation(payload);
@@ -451,29 +451,55 @@ export function SpaceDetailScreen() {
           ) : null}
           {isConferenceRoom ? (
             <>
-              <Text style={styles.sectionLabel}>Start</Text>
-              <View style={styles.chipRow}>
-                {startOptions
-                  .slice(0, 10)
-                  .map((option) => (
-                  <TouchableOpacity
-                    key={`start-${option}`}
-                    style={[styles.chip, startTime === option ? styles.chipActive : null]}
-                    onPress={() => {
-                      setStartTime(option);
-                      const next = buildEndSlotOptions(selectedIntervals, option, granularity)[0];
-                      if (next) setEndTime(next);
-                    }}
-                  >
-                    <Text style={[styles.chipText, startTime === option ? styles.chipTextActive : null]}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
+              <Text style={styles.sectionLabel}>Booking type</Text>
+              <View style={styles.modeRow}>
+                <TouchableOpacity
+                  style={[styles.modeButton, !fullDay ? styles.modeButtonActive : null]}
+                  onPress={() => setFullDay(false)}
+                >
+                  <Text style={[styles.modeText, !fullDay ? styles.modeTextActive : null]}>Hourly</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modeButton,
+                    fullDay ? styles.modeButtonActive : null,
+                    fullDayDisabled ? styles.chipDisabled : null
+                  ]}
+                  disabled={fullDayDisabled}
+                  onPress={() => setFullDay(true)}
+                >
+                  <Text style={[styles.modeText, fullDay ? styles.modeTextActive : null]}>All day</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.sectionLabel}>End</Text>
-              <View style={styles.chipRow}>
-                {endOptions
-                  .slice(0, 10)
-                  .map((option) => (
+              {fullDay ? (
+                <Text style={styles.subtitle}>
+                  All day from {openWindow.start} to {openWindow.end}
+                </Text>
+              ) : (
+                <>
+                  <Text style={styles.sectionLabel}>Start</Text>
+                  <View style={styles.chipRow}>
+                    {startOptions
+                      .slice(0, 10)
+                      .map((option) => (
+                    <TouchableOpacity
+                      key={`start-${option}`}
+                      style={[styles.chip, startTime === option ? styles.chipActive : null]}
+                      onPress={() => {
+                        setStartTime(option);
+                        const next = buildEndSlotOptions(selectedIntervals, option, granularity)[0];
+                        if (next) setEndTime(next);
+                      }}
+                    >
+                      <Text style={[styles.chipText, startTime === option ? styles.chipTextActive : null]}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  </View>
+                  <Text style={styles.sectionLabel}>End</Text>
+                  <View style={styles.chipRow}>
+                    {endOptions
+                      .slice(0, 10)
+                      .map((option) => (
                     <TouchableOpacity
                       key={`end-${option}`}
                       style={[styles.chip, endTime === option ? styles.chipActive : null]}
@@ -482,7 +508,9 @@ export function SpaceDetailScreen() {
                       <Text style={[styles.chipText, endTime === option ? styles.chipTextActive : null]}>{option}</Text>
                     </TouchableOpacity>
                   ))}
-              </View>
+                  </View>
+                </>
+              )}
             </>
           ) : null}
           {isConferenceRoom || isSharedDesk ? (

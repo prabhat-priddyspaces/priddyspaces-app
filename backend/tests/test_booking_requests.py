@@ -188,6 +188,25 @@ def _request_payload(space: Space, method: MemberOwnerPaymentMethod | None, day:
     return payload
 
 
+def test_conference_day_rate_preview_uses_day_rate_label(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    client = client_factory({})
+
+    response = client.post(
+        "/api/booking-requests/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 3, 10, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 3, 10, 17, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "day_pass",
+            "full_day": True,
+            "seats_requested": 1,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["line_items"][0]["label"] == "Day Rate"
+
+
 def test_booking_request_create_and_list(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
     location = db_session.query(Location).filter(Location.id == space.location_id).first()

@@ -85,11 +85,6 @@ interface ReservationPayload {
   booking_mode: "hourly" | "day_pass";
   full_day: boolean;
   seats_requested?: number;
-  recurrence?: {
-    frequency: "weekly" | "monthly";
-    interval: number;
-    count: number;
-  };
 }
 
 function membershipBookingModeForSpaceType(spaceType: string) {
@@ -110,10 +105,30 @@ function buildInitials(name: string) {
 
 function getPriceRows(space: MarketplaceSpaceDetailResponse["space"]) {
   const rows: Array<{ label: string; value: string }> = [];
-  if (space.hourly_price != null) rows.push({ label: "Hourly", value: formatUsd(space.hourly_price, "/hour") });
-  if (space.price_daily != null) rows.push({ label: "Day Rate", value: formatUsd(space.price_daily, "/day") });
-  if (space.price_monthly != null) rows.push({ label: "Monthly", value: formatUsd(space.price_monthly, "/month") });
-  if (space.membership_price != null) rows.push({ label: "Membership", value: formatUsd(space.membership_price, "/month") });
+  const productPrices = space.booking_products ?? [];
+  const firstPlan = productPrices
+    .filter((product) => product.price_cents != null)
+    .sort((a, b) => (a.price_cents ?? 0) - (b.price_cents ?? 0))[0];
+
+  if (space.space_type === "conference_room") {
+    if (space.hourly_price != null) rows.push({ label: "Hourly", value: formatUsd(space.hourly_price, "/hour") });
+    if (space.price_daily != null) rows.push({ label: "Day Rate", value: formatUsd(space.price_daily, "/day") });
+    return rows;
+  }
+  if (space.space_type === "shared_desk") {
+    if (space.price_daily != null) rows.push({ label: "Day Pass", value: formatUsd(space.price_daily, "/day") });
+    if (space.membership_price != null) rows.push({ label: "Membership", value: formatUsd(space.membership_price, "/month") });
+    return rows;
+  }
+  if (space.space_type === "virtual_office") {
+    if (space.membership_price != null) rows.push({ label: "Virtual Membership", value: formatUsd(space.membership_price, "/month") });
+    return rows;
+  }
+  if (firstPlan?.price_cents != null) {
+    rows.push({ label: "Lease", value: formatCents(firstPlan.price_cents) + "/month" });
+  } else if (space.membership_price != null) {
+    rows.push({ label: "Lease", value: formatUsd(space.membership_price, "/month") });
+  }
   return rows;
 }
 
@@ -139,8 +154,6 @@ export function PublicSpaceDetailView({
   const [startTime, setStartTime] = useState(initialStartTime);
   const [endTime, setEndTime] = useState(initialEndTime);
   const [allDay, setAllDay] = useState(false);
-  const [recurrenceFrequency, setRecurrenceFrequency] = useState<"none" | "weekly" | "monthly">("none");
-  const [recurrenceCount, setRecurrenceCount] = useState("4");
   const [autoFilled, setAutoFilled] = useState(Boolean(initialDate));
   const [requesting, setRequesting] = useState(false);
   const [selectedMembershipPlanId, setSelectedMembershipPlanId] = useState("");
@@ -336,6 +349,7 @@ export function PublicSpaceDetailView({
     availability?.daily_price ?? detail?.space.price_daily ?? null;
   const hourlyAmount = moneyToNumber(hourlyPrice);
   const dailyAmount = moneyToNumber(dailyPrice);
+  const conferenceDayRateAvailable = isConferenceRoom && dailyAmount != null;
 
   useEffect(() => {
     if (isSharedDesk) setAllDay(true);
@@ -473,15 +487,6 @@ export function PublicSpaceDetailView({
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       return null;
     }
-    const recurrenceTotal = Math.max(1, Math.min(52, Number(recurrenceCount || 1)));
-    const recurrence =
-      recurrenceFrequency === "none"
-        ? undefined
-        : {
-            frequency: recurrenceFrequency,
-            interval: 1,
-            count: recurrenceTotal,
-          };
     return {
       space_public_id: detail.space.public_id,
       start_datetime: start.toISOString(),
@@ -489,7 +494,6 @@ export function PublicSpaceDetailView({
       booking_mode: allDay ? "day_pass" : "hourly",
       full_day: allDay,
       seats_requested: isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1,
-      recurrence,
     };
   }, [
     allDay,
@@ -499,8 +503,6 @@ export function PublicSpaceDetailView({
     endTime,
     openWindow.end,
     openWindow.start,
-    recurrenceCount,
-    recurrenceFrequency,
     seatQuantity,
     isSharedDesk,
     startTime,
@@ -796,7 +798,6 @@ export function PublicSpaceDetailView({
     priddyDiscountCents + ownerDiscountCents,
   );
   const pointsCoverTotal =
-    recurrenceFrequency === "none" &&
     loyaltyDiscountCents > 0 &&
     loyaltyDiscountCents >= (breakdown ? Math.round(breakdown.total * 100) : loyaltyPreview?.subtotal_cents || 0);
 
@@ -1213,6 +1214,22 @@ export function PublicSpaceDetailView({
                     </div>
                   ) : null}
 
+                  {conferenceDayRateAvailable ? (
+                    <label className="flex items-center justify-between gap-4 rounded-[18px] border border-line bg-surface-2 px-4 py-3 text-sm text-text-2">
+                      <span className="inline-flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={allDay}
+                          disabled={allDayDisabled}
+                          onChange={(event) => setAllDay(event.target.checked)}
+                          className="h-5 w-5 rounded border-line"
+                        />
+                        <span className="font-medium text-text">All day</span>
+                      </span>
+                      <span className="text-text-3">{formatUsd(dailyPrice, "/day")}</span>
+                    </label>
+                  ) : null}
+
                   {isSharedDesk ? (
                     <label className="grid gap-1 text-xs font-medium text-text-3">
                       Seats
@@ -1225,36 +1242,6 @@ export function PublicSpaceDetailView({
                         className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
                       />
                     </label>
-                  ) : null}
-
-                  {isConferenceRoom ? (
-                  <div className="grid gap-2 rounded-[18px] border border-line bg-surface-2 p-3">
-                    <label className="grid gap-1 text-xs font-medium text-text-3">
-                      Recurrence
-                      <select
-                        value={recurrenceFrequency}
-                        onChange={(event) => setRecurrenceFrequency(event.target.value as "none" | "weekly" | "monthly")}
-                        className="h-10 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
-                      >
-                        <option value="none">One time</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                    </label>
-                    {recurrenceFrequency !== "none" ? (
-                      <label className="grid gap-1 text-xs font-medium text-text-3">
-                        Occurrences
-                        <input
-                          type="number"
-                          min={1}
-                          max={52}
-                          value={recurrenceCount}
-                          onChange={(event) => setRecurrenceCount(event.target.value)}
-                          className="h-10 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
-                        />
-                      </label>
-                    ) : null}
-                  </div>
                   ) : null}
 
                   {bufferBefore > 0 || bufferAfter > 0 ? (

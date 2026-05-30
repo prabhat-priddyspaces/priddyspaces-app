@@ -5,7 +5,7 @@ VALID_BOOKING_MODES_BY_SPACE_TYPE: dict[SpaceType, set[BookingMode]] = {
     SpaceType.PRIVATE_OFFICE: {BookingMode.PRIVATE_OFFICE_LEASE},
     SpaceType.SUITE: {BookingMode.SUITE_LEASE},
     SpaceType.SHARED_DESK: {BookingMode.DAY_PASS, BookingMode.MONTHLY_MEMBERSHIP},
-    SpaceType.CONFERENCE_ROOM: {BookingMode.HOURLY},
+    SpaceType.CONFERENCE_ROOM: {BookingMode.HOURLY, BookingMode.DAY_PASS},
     SpaceType.VIRTUAL_OFFICE: {BookingMode.VIRTUAL_MEMBERSHIP},
 }
 

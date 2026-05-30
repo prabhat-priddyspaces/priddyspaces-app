@@ -150,6 +150,19 @@ def booking_products_for_space(db: Session, space: Space) -> list[dict[str, obje
                     space_capacity=space.capacity,
                 )
             )
+    if space_type == SpaceType.CONFERENCE_ROOM.value and BookingMode.DAY_PASS.value in enabled:
+        if space.price_daily is not None:
+            price = to_money_decimal(space.price_daily).quantize(CENT)
+            products.append(
+                BookingProduct(
+                    product_type="day_rate",
+                    booking_mode=BookingMode.DAY_PASS.value,
+                    label="Day Rate",
+                    price=price,
+                    price_cents=money_to_cents(price),
+                    space_capacity=space.capacity,
+                )
+            )
 
     if space_type == SpaceType.SHARED_DESK.value and BookingMode.DAY_PASS.value in enabled:
         if space.price_daily is not None:
@@ -207,11 +220,15 @@ def validate_direct_booking_product(
     seats = max(1, seats_requested or 1)
 
     if space_type == SpaceType.CONFERENCE_ROOM.value:
-        if full_day or normalized_mode != BookingMode.HOURLY.value:
-            raise HTTPException(status_code=400, detail="Conference rooms can only be booked hourly")
-        if space.price_hourly is None:
-            raise HTTPException(status_code=400, detail="Hourly price is required for conference room bookings")
-        return
+        if full_day or normalized_mode == BookingMode.DAY_PASS.value:
+            if space.price_daily is None:
+                raise HTTPException(status_code=400, detail="Day-rate price is required for all-day conference room bookings")
+            return
+        if normalized_mode == BookingMode.HOURLY.value:
+            if space.price_hourly is None:
+                raise HTTPException(status_code=400, detail="Hourly price is required for conference room bookings")
+            return
+        raise HTTPException(status_code=400, detail="Conference rooms can only be booked hourly or all day")
 
     if space_type == SpaceType.SHARED_DESK.value:
         if not full_day and normalized_mode != BookingMode.DAY_PASS.value:

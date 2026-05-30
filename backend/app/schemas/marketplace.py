@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.money import MoneyAmount
@@ -57,6 +59,7 @@ class MarketplaceLocationSummaryOut(BaseModel):
     distance_miles: float | None = None
     public_working_hours_enabled: bool = False
     public_working_hours: list[PublicWorkingHour] = Field(default_factory=list)
+    spaces: list["MarketplaceLocationSpaceOut"] = Field(default_factory=list)
 
 
 class MarketplaceLocationSearchOut(BaseModel):

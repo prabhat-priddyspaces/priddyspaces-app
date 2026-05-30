@@ -4,9 +4,12 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user, get_optional_user
 from app.db.deps import get_db
 from app.models.enums import BookingMode, LocationStatus, SpaceType, UserAppRole, UserRole, SpaceVisibility
+from app.models.membership_plan import MembershipPlan
 from app.models.organization import Organization
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
+from app.models.space_image import SpaceImage
+from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.schemas.space import SpaceCreate, SpaceOut, SpaceUpdate
 from app.schemas.space_override import SpacePriceOverride
 from app.services.amenities import get_location_amenities_map
@@ -173,6 +176,109 @@ def get_space(
         organization=organization,
         location_amenities_text=amenity_text,
     )
+
+
+@router.post("/spaces/{public_id}/duplicate", response_model=SpaceOut)
+def duplicate_space(
+    public_id: str,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    source = db.query(Space).filter(Space.public_id == public_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Space not found")
+    location = db.query(Location).filter(Location.id == source.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    user = get_or_create_user(db, token)
+    require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN})
+
+    duplicate = Space(
+        location_id=source.location_id,
+        tenant_id=source.tenant_id,
+        name=f"COPY of {_space_display_name(source.name, source.space_type.value)}",
+        space_type=source.space_type,
+        capacity=source.capacity,
+        price_monthly=source.price_monthly,
+        price_daily=source.price_daily,
+        price_hourly=source.price_hourly,
+        availability_status=source.availability_status,
+        availability_start_time=source.availability_start_time,
+        availability_end_time=source.availability_end_time,
+        buffer_before_minutes=source.buffer_before_minutes,
+        buffer_after_minutes=source.buffer_after_minutes,
+        visibility=source.visibility,
+        priddy_points_enabled=source.priddy_points_enabled,
+        owner_points_enabled=source.owner_points_enabled,
+        amenities=source.amenities,
+    )
+    db.add(duplicate)
+    db.flush()
+
+    for mode in db.query(SpaceBookingMode).filter(SpaceBookingMode.space_id == source.id).all():
+        db.add(
+            SpaceBookingMode(
+                tenant_id=mode.tenant_id,
+                space_id=duplicate.id,
+                booking_mode=mode.booking_mode,
+                is_enabled=mode.is_enabled,
+            )
+        )
+
+    for plan in db.query(MembershipPlan).filter(MembershipPlan.space_id == source.id).all():
+        db.add(
+            MembershipPlan(
+                tenant_id=plan.tenant_id,
+                organization_id=plan.organization_id,
+                space_id=duplicate.id,
+                booking_mode=plan.booking_mode,
+                name=plan.name,
+                description=plan.description,
+                price_cents=plan.price_cents,
+                billing_cycle=plan.billing_cycle,
+                stripe_price_id=plan.stripe_price_id,
+                commitment_months=plan.commitment_months,
+                auto_renew=plan.auto_renew,
+                included_meeting_room_hours_per_month=plan.included_meeting_room_hours_per_month,
+                overage_hourly_rate_cents=plan.overage_hourly_rate_cents,
+                seats_per_plan=plan.seats_per_plan,
+                max_active_subscriptions=plan.max_active_subscriptions,
+                is_active=plan.is_active,
+                sort_order=plan.sort_order,
+            )
+        )
+
+    for discount in db.query(SpaceVolumeDiscount).filter(SpaceVolumeDiscount.space_id == source.id).all():
+        db.add(
+            SpaceVolumeDiscount(
+                organization_id=discount.organization_id,
+                tenant_id=discount.tenant_id,
+                space_id=duplicate.id,
+                min_hours=discount.min_hours,
+                discount_percent=discount.discount_percent,
+                is_active=discount.is_active,
+            )
+        )
+
+    for image in db.query(SpaceImage).filter(SpaceImage.space_id == source.id).all():
+        db.add(
+            SpaceImage(
+                tenant_id=image.tenant_id,
+                space_id=duplicate.id,
+                image_url=image.image_url,
+                storage_key=image.storage_key,
+                is_primary=image.is_primary,
+                sort_order=image.sort_order,
+            )
+        )
+
+    db.commit()
+    db.refresh(duplicate)
+    location_amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
+    amenity_text = ", ".join(str(item["name"]) for item in location_amenities) if location_amenities else None
+    organization = db.query(Organization).filter(Organization.id == duplicate.tenant_id).first()
+    return _serialize_space(duplicate, organization=organization, location_amenities_text=amenity_text)
 
 
 @router.patch("/spaces/{public_id}", response_model=SpaceOut)

@@ -145,6 +145,73 @@ describe("public marketplace flows", () => {
     expect(pushMock).toHaveBeenCalledWith("/locations/loc_1?q=Miami&route=spaces");
   });
 
+  it("renders each matching space as its own search listing", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      meta: { total_locations: 1, page: 1, page_size: 20 },
+      results: [
+        {
+          location_public_id: "loc_1",
+          name: "Brickell Commons",
+          address: "100 Main St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33101",
+          neighborhood: "Downtown",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          featured_image_url: null,
+          location_amenities: ["WiFi"],
+          matching_space_count: 2,
+          featured_space_public_id: "space_1",
+          starting_day_pass_price: 49,
+          starting_monthly_price: null,
+          starting_hourly_price: null,
+          starting_membership_price: 299,
+          spaces: [
+            {
+              public_id: "space_1",
+              name: "Open Desk A1",
+              space_type: "shared_desk",
+              capacity: 1,
+              availability_status: "available",
+              availability_start_time: "08:00:00",
+              availability_end_time: "18:00:00",
+              price_daily: 49,
+              price_monthly: null,
+              hourly_price: null,
+              membership_price: 299,
+              amenities: ["WiFi"],
+              image_url: null,
+            },
+            {
+              public_id: "space_2",
+              name: "Open Desk B4",
+              space_type: "shared_desk",
+              capacity: 3,
+              availability_status: "available",
+              availability_start_time: "08:00:00",
+              availability_end_time: "18:00:00",
+              price_daily: 59,
+              price_monthly: null,
+              hourly_price: null,
+              membership_price: 299,
+              amenities: ["WiFi"],
+              image_url: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    render(<PublicMarketplaceBrowser routeKey="spaces" />);
+
+    expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Open Desk B4" })).toBeInTheDocument();
+    expect(screen.getByText("Showing 2 listings")).toBeInTheDocument();
+    expect(screen.queryByText(/matching spaces/i)).not.toBeInTheDocument();
+  });
+
   it("shows a designed fallback when a result image fails to load", async () => {
     apiFetchMock.mockResolvedValueOnce({
       meta: { total_locations: 1, page: 1, page_size: 20 },
@@ -324,5 +391,94 @@ describe("public marketplace flows", () => {
     expect(screen.getByText("9:00 AM")).toBeInTheDocument();
     expect(screen.getByText("to 5:00 PM")).toBeInTheDocument();
     expect(screen.queryByText("Saturday")).not.toBeInTheDocument();
+  });
+
+  it("shows conference room all-day booking without recurrence controls", async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (url.includes("/availability")) {
+        return Promise.resolve({
+          space_public_id: "space_1",
+          timezone: "America/New_York",
+          granularity_minutes: 60,
+          availability_start_time: "09:00",
+          availability_end_time: "18:00",
+          hourly_price: 30,
+          daily_price: 200,
+          days: [{ date: "2026-06-01", fully_blocked: false, busy_intervals: [] }],
+        });
+      }
+      if (url.startsWith("/api/marketplace/spaces/")) {
+        return Promise.resolve({
+          space: {
+            public_id: "space_1",
+            name: "Conference 14-B",
+            space_type: "conference_room",
+            capacity: 8,
+            availability_status: "available",
+            availability_start_time: "09:00:00",
+            availability_end_time: "18:00:00",
+            buffer_before_minutes: 0,
+            buffer_after_minutes: 0,
+            price_daily: 200,
+            price_monthly: null,
+            hourly_price: 30,
+            membership_price: null,
+            amenities: ["WiFi"],
+            volume_discounts: [],
+            booking_products: [
+              {
+                product_type: "hourly",
+                booking_mode: "hourly",
+                label: "Hourly reservation",
+                price: "30.00",
+                price_cents: 3000,
+              },
+              {
+                product_type: "day_rate",
+                booking_mode: "day_pass",
+                label: "Day Rate",
+                price: "200.00",
+                price_cents: 20000,
+              },
+            ],
+          },
+          images: [],
+          location: {
+            location_public_id: "loc_1",
+            name: "Brickell Commons",
+            address: "100 Main St",
+            city: "Miami",
+            state: "FL",
+            postal_code: "33101",
+            neighborhood: "Downtown",
+            timezone: "America/New_York",
+            lat: 25.7616,
+            lng: -80.1918,
+            public_phone: null,
+            public_email: null,
+            public_hours_weekdays: null,
+            public_hours_weekends: null,
+            public_working_hours_enabled: false,
+            public_working_hours: [],
+            public_parking_notes: [],
+            public_transit_notes: [],
+            public_included_items: [],
+          },
+          cancellation_policy: null,
+          support_contacts: [],
+        });
+      }
+      if (url.startsWith("/api/membership-plans/public")) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<PublicSpaceDetailView spaceId="space_1" backHref="/spaces" initialDate="2026-06-01" />);
+
+    expect(await screen.findByRole("heading", { name: "Conference 14-B" })).toBeInTheDocument();
+    expect(screen.getAllByText("Day Rate").length).toBeGreaterThan(0);
+    expect(screen.getByText("All day")).toBeInTheDocument();
+    expect(screen.queryByText("Recurrence")).not.toBeInTheDocument();
   });
 });

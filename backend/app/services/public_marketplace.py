@@ -650,6 +650,23 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             "starting_membership_price",
             min(membership_prices) if membership_prices else None,
         )
+        payload["_spaces"].append(
+            {
+                "public_id": space.public_id,
+                "name": _space_display_name(space),
+                "space_type": space.space_type.value,
+                "capacity": space.capacity,
+                "availability_status": space.availability_status.value,
+                "availability_start_time": _serialize_space_time(space.availability_start_time),
+                "availability_end_time": _serialize_space_time(space.availability_end_time),
+                "price_daily": space.price_daily,
+                "price_monthly": space.price_monthly,
+                "hourly_price": min(hourly_prices) if hourly_prices else None,
+                "membership_price": min(membership_prices) if membership_prices else None,
+                "amenities": location_amenities or space_amenities,
+                "image_url": image.image_url if image else None,
+            }
+        )
 
     results = list(grouped.values())
     results.sort(
@@ -666,7 +683,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
     paged = results[start_index:start_index + filters.page_size]
     for item in paged:
         item.pop("_relevance", None)
-        item.pop("_spaces", None)
+        item["spaces"] = item.pop("_spaces", [])
     return {
         "meta": {
             "total_locations": total_locations,
