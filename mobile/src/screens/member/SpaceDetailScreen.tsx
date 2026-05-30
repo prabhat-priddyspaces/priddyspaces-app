@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import { useStripe } from "@stripe/stripe-react-native";
@@ -6,6 +6,16 @@ import { useStripe } from "@stripe/stripe-react-native";
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 import { BookingPaymentMethodSetup } from "../../components/BookingPaymentMethodSetup";
+import {
+  DEFAULT_GRANULARITY_MINUTES,
+  buildEndSlotOptions,
+  buildSlotOptions,
+  getDayOpenWindow,
+  getOpenIntervalsForDay,
+  isDayBookable,
+  timeToMinutes,
+  type SpaceAvailabilityResponse,
+} from "../../lib/spaceAvailability";
 
 type Space = {
   public_id: string;
@@ -65,17 +75,6 @@ function toDateIso(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function timeToMinutes(value: string) {
-  const [hours, minutes] = value.slice(0, 5).split(":").map((part) => Number(part));
-  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
-}
-
-function minutesToTime(value: number) {
-  const hours = Math.floor(value / 60);
-  const minutes = value % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
-
 function nextDateOptions() {
   return Array.from({ length: 14 }).map((_, index) => {
     const date = new Date();
@@ -84,21 +83,12 @@ function nextDateOptions() {
   });
 }
 
-function buildTimeOptions(space: Space | null) {
-  const open = timeToMinutes(space?.availability_start_time || "09:00");
-  const close = timeToMinutes(space?.availability_end_time || "18:00");
-  const options: string[] = [];
-  for (let mins = open; mins <= close; mins += 30) {
-    options.push(minutesToTime(mins));
-  }
-  return options;
-}
-
 export function SpaceDetailScreen() {
   const { token } = useAuth();
   const route = useRoute<any>();
   const { spaceId } = route.params || {};
   const [space, setSpace] = useState<Space | null>(null);
+  const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
   const [images, setImages] = useState<SpaceImage[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [message, setMessage] = useState("");
@@ -116,6 +106,9 @@ export function SpaceDetailScreen() {
   useEffect(() => {
     if (!token || !spaceId) return;
     setLoading(true);
+    const fromDate = toDateIso(new Date());
+    const toDate = new Date();
+    toDate.setDate(toDate.getDate() + 14);
     Promise.all([
       apiFetch<Space>(`/api/spaces/${spaceId}`, { method: "GET" }, token),
       apiFetch<SpaceImage[]>(`/api/spaces/${spaceId}/media`, { method: "GET" }, token).catch(() => []),
@@ -123,16 +116,33 @@ export function SpaceDetailScreen() {
         `/api/subscription-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
         { method: "GET" },
         token
-      ).catch(() => [])
+      ).catch(() => []),
+      apiFetch<SpaceAvailabilityResponse>(
+        `/api/marketplace/spaces/${encodeURIComponent(spaceId)}/availability?from=${fromDate}&to=${toDateIso(toDate)}`,
+        { method: "GET" },
+        token
+      ).catch(() => null)
     ])
-      .then(([spaceResp, imageResp, planResp]) => {
+      .then(([spaceResp, imageResp, planResp, availabilityResp]) => {
         setSpace(spaceResp);
         setImages(imageResp);
         setPlans(planResp);
-        const options = buildTimeOptions(spaceResp);
+        setAvailability(availabilityResp);
+        const open = getDayOpenWindow({
+          availability_start_time: availabilityResp?.availability_start_time ?? spaceResp.availability_start_time ?? null,
+          availability_end_time: availabilityResp?.availability_end_time ?? spaceResp.availability_end_time ?? null
+        });
+        const granularity = availabilityResp?.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
+        const firstBookableDay = availabilityResp?.days.find((day) => isDayBookable(day, open, granularity));
+        const selectedDate = availabilityResp && firstBookableDay ? firstBookableDay.date : fromDate;
+        setBookingDate(selectedDate);
+        const today = availabilityResp?.days.find((day) => day.date === selectedDate);
+        const intervals = availabilityResp ? getOpenIntervalsForDay(today, open) : [open];
+        const options = buildSlotOptions(intervals, granularity, open.start);
         if (options.length > 0) {
           setStartTime(options[0]);
-          setEndTime(options[1] || options[0]);
+          const endOptions = buildEndSlotOptions(intervals, options[0], granularity);
+          setEndTime(endOptions[0] || options[0]);
         }
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load space"))
@@ -141,8 +151,84 @@ export function SpaceDetailScreen() {
 
   const hero = images.find((img) => img.is_primary) || images[0];
   const dateOptions = nextDateOptions();
-  const timeOptions = buildTimeOptions(space);
   const actionLabel = space?.booking_approval_mode === "auto" ? "Reserve & Pay" : "Request to book";
+  const openWindow = useMemo(
+    () =>
+      getDayOpenWindow({
+        availability_start_time: availability?.availability_start_time ?? space?.availability_start_time ?? null,
+        availability_end_time: availability?.availability_end_time ?? space?.availability_end_time ?? null
+      }),
+    [availability, space]
+  );
+  const granularity = availability?.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
+  const dayMap = useMemo(() => {
+    const map = new Map<string, SpaceAvailabilityResponse["days"][number]>();
+    for (const day of availability?.days ?? []) map.set(day.date, day);
+    return map;
+  }, [availability]);
+  const selectedDay = dayMap.get(bookingDate);
+  const selectedIntervals = useMemo(
+    () => (availability ? getOpenIntervalsForDay(selectedDay, openWindow) : [openWindow]),
+    [availability, openWindow, selectedDay],
+  );
+  const startOptions = useMemo(
+    () => buildSlotOptions(selectedIntervals, granularity, openWindow.start),
+    [granularity, openWindow.start, selectedIntervals],
+  );
+  const endOptions = useMemo(
+    () => buildEndSlotOptions(selectedIntervals, startTime, granularity),
+    [granularity, selectedIntervals, startTime],
+  );
+  const selectedDayHasConflict = Boolean(
+    availability &&
+      selectedDay &&
+      (selectedDay.fully_blocked ||
+        (selectedDay.busy_intervals ?? []).some((busy) => {
+          const busyStart = Math.max(timeToMinutes(busy.start), timeToMinutes(openWindow.start));
+          const busyEnd = Math.min(timeToMinutes(busy.end), timeToMinutes(openWindow.end));
+          return busyEnd > busyStart;
+        }))
+  );
+  const fullDayDisabled = !space?.price_daily || selectedDayHasConflict || (availability ? !selectedDay : false);
+
+  useEffect(() => {
+    if (fullDay) {
+      if (fullDayDisabled) setFullDay(false);
+      return;
+    }
+    if (startOptions.length === 0) {
+      if (startTime || endTime) {
+        setStartTime("");
+        setEndTime("");
+      }
+      return;
+    }
+    if (!startOptions.includes(startTime)) {
+      const nextStart = startOptions[0];
+      setStartTime(nextStart);
+      const nextEndOptions = buildEndSlotOptions(selectedIntervals, nextStart, granularity);
+      setEndTime(nextEndOptions[0] || "");
+      return;
+    }
+    if (endOptions.length > 0 && !endOptions.includes(endTime)) {
+      setEndTime(endOptions[0]);
+    }
+  }, [endOptions, endTime, fullDay, fullDayDisabled, granularity, selectedIntervals, startOptions, startTime]);
+
+  function dateIsUnavailable(option: string) {
+    if (!availability) return false;
+    return !isDayBookable(dayMap.get(option), openWindow, granularity);
+  }
+
+  function chooseDate(option: string) {
+    setBookingDate(option);
+    const day = dayMap.get(option);
+    const intervals = availability ? getOpenIntervalsForDay(day, openWindow) : [openWindow];
+    const starts = buildSlotOptions(intervals, granularity, openWindow.start);
+    const nextStart = starts[0] ?? "";
+    setStartTime(nextStart);
+    setEndTime(nextStart ? buildEndSlotOptions(intervals, nextStart, granularity)[0] ?? "" : "");
+  }
 
   async function submitBooking(payload: ReservationPayload, paymentMethodPublicId: string | null) {
     if (!token) return;
@@ -172,8 +258,20 @@ export function SpaceDetailScreen() {
 
   async function handleRequest() {
     if (!token || !space) return;
-    const effectiveStart = fullDay ? (space.availability_start_time || "09:00").slice(0, 5) : startTime;
-    const effectiveEnd = fullDay ? (space.availability_end_time || "18:00").slice(0, 5) : endTime;
+    const effectiveStart = fullDay ? openWindow.start : startTime;
+    const effectiveEnd = fullDay ? openWindow.end : endTime;
+    if (availability && dateIsUnavailable(bookingDate)) {
+      setMessage("Choose an available date.");
+      return;
+    }
+    if (fullDay && fullDayDisabled) {
+      setMessage("Full day is not available for this date.");
+      return;
+    }
+    if (!fullDay && (!startOptions.includes(startTime) || !endOptions.includes(endTime))) {
+      setMessage("Choose an available time.");
+      return;
+    }
     const start = new Date(`${bookingDate}T${effectiveStart}:00`);
     const end = new Date(`${bookingDate}T${effectiveEnd}:00`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
@@ -270,15 +368,31 @@ export function SpaceDetailScreen() {
           ) : null}
           <Text style={styles.sectionLabel}>Date</Text>
           <View style={styles.chipRow}>
-            {dateOptions.slice(0, 7).map((option) => (
-              <TouchableOpacity
-                key={option}
-                style={[styles.chip, bookingDate === option ? styles.chipActive : null]}
-                onPress={() => setBookingDate(option)}
-              >
-                <Text style={[styles.chipText, bookingDate === option ? styles.chipTextActive : null]}>{option.slice(5)}</Text>
-              </TouchableOpacity>
-            ))}
+            {dateOptions.slice(0, 7).map((option) => {
+              const unavailable = dateIsUnavailable(option);
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.chip,
+                    bookingDate === option ? styles.chipActive : null,
+                    unavailable ? styles.chipDisabled : null
+                  ]}
+                  disabled={unavailable}
+                  onPress={() => chooseDate(option)}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      bookingDate === option ? styles.chipTextActive : null,
+                      unavailable ? styles.chipTextDisabled : null
+                    ]}
+                  >
+                    {option.slice(5)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
           <View style={styles.modeRow}>
             <TouchableOpacity
@@ -290,7 +404,7 @@ export function SpaceDetailScreen() {
             <TouchableOpacity
               style={[styles.modeButton, fullDay ? styles.modeButtonActive : null]}
               onPress={() => setFullDay(true)}
-              disabled={!space.price_daily}
+              disabled={fullDayDisabled}
             >
               <Text style={[styles.modeText, fullDay ? styles.modeTextActive : null]}>Full day</Text>
             </TouchableOpacity>
@@ -299,8 +413,7 @@ export function SpaceDetailScreen() {
             <>
               <Text style={styles.sectionLabel}>Start</Text>
               <View style={styles.chipRow}>
-                {timeOptions
-                  .filter((option) => timeToMinutes(option) + 30 <= timeToMinutes(space.availability_end_time || "18:00"))
+                {startOptions
                   .slice(0, 10)
                   .map((option) => (
                   <TouchableOpacity
@@ -308,7 +421,7 @@ export function SpaceDetailScreen() {
                     style={[styles.chip, startTime === option ? styles.chipActive : null]}
                     onPress={() => {
                       setStartTime(option);
-                      const next = timeOptions.find((time) => timeToMinutes(time) > timeToMinutes(option));
+                      const next = buildEndSlotOptions(selectedIntervals, option, granularity)[0];
                       if (next) setEndTime(next);
                     }}
                   >
@@ -318,8 +431,7 @@ export function SpaceDetailScreen() {
               </View>
               <Text style={styles.sectionLabel}>End</Text>
               <View style={styles.chipRow}>
-                {timeOptions
-                  .filter((option) => timeToMinutes(option) > timeToMinutes(startTime))
+                {endOptions
                   .slice(0, 10)
                   .map((option) => (
                     <TouchableOpacity
@@ -427,6 +539,10 @@ const styles = StyleSheet.create({
     borderColor: "#111827",
     backgroundColor: "#111827"
   },
+  chipDisabled: {
+    opacity: 0.45,
+    backgroundColor: "#F3F4F6"
+  },
   chipText: {
     color: "#374151",
     fontWeight: "600",
@@ -434,6 +550,9 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: "#FFFFFF"
+  },
+  chipTextDisabled: {
+    color: "#9CA3AF"
   },
   modeRow: {
     marginTop: 12,

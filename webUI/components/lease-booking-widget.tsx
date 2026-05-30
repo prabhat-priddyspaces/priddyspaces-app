@@ -15,7 +15,15 @@ import {
   LeaseBookingMode,
   MembershipPlanPublic,
   termLabel,
+  type SpaceAvailabilityResponse,
 } from "@/lib/public-marketplace";
+import {
+  DEFAULT_GRANULARITY_MINUTES,
+  addDaysIso,
+  formatDateLong,
+  getDayOpenWindow,
+  isDayBookable,
+} from "@/lib/space-availability";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 
 const DATE_INPUT_FALLBACK = () => new Date().toISOString().slice(0, 10);
@@ -53,6 +61,7 @@ export function LeaseBookingWidget({
   const router = useRouter();
   const isAuthenticated = Boolean(getAccessToken());
   const [plans, setPlans] = useState<MembershipPlanPublic[]>([]);
+  const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [moveInDate, setMoveInDate] = useState<string>(initialMoveInDate || DATE_INPUT_FALLBACK());
@@ -88,6 +97,17 @@ export function LeaseBookingWidget({
       .finally(() => setLoading(false));
   }, [spacePublicId, bookingMode, initialPlanPublicId]);
 
+  useEffect(() => {
+    const fromIso = DATE_INPUT_FALLBACK();
+    const toIso = addDaysIso(fromIso, 120);
+    apiFetch<SpaceAvailabilityResponse>(
+      `/api/marketplace/spaces/${encodeURIComponent(spacePublicId)}/availability?from=${fromIso}&to=${toIso}`,
+      { method: "GET" },
+    )
+      .then(setAvailability)
+      .catch(() => setAvailability(null));
+  }, [spacePublicId]);
+
   const selectedPlan = useMemo(
     () => plans.find((p) => p.public_id === selectedPlanId) ?? null,
     [plans, selectedPlanId],
@@ -101,6 +121,27 @@ export function LeaseBookingWidget({
   const availableSeats = selectedPlan?.available_seats ?? null;
   const isFullyLeased = availableSeats === 0;
   const seatNoun = spaceType === "suite" ? "suite" : "office";
+  const availabilityOpen = useMemo(
+    () => (availability ? getDayOpenWindow(availability) : null),
+    [availability],
+  );
+  const availabilityGranularity = availability?.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
+  const moveInDay = availability?.days.find((day) => day.date === moveInDate);
+  const moveInBlocked = Boolean(
+    availability &&
+      moveInDay &&
+      availabilityOpen &&
+      !isDayBookable(moveInDay, availabilityOpen, availabilityGranularity),
+  );
+  const nextAvailableMoveIn = useMemo(() => {
+    if (!availability || !availabilityOpen) return null;
+    const next = availability.days.find(
+      (day) =>
+        day.date >= moveInDate &&
+        isDayBookable(day, availabilityOpen, availabilityGranularity),
+    );
+    return next?.date ?? null;
+  }, [availability, availabilityGranularity, availabilityOpen, moveInDate]);
 
   async function submitLeaseRequest(paymentMethodPublicId: string) {
     if (!selectedPlan) return;
@@ -136,6 +177,14 @@ export function LeaseBookingWidget({
     }
     if (!moveInDate) {
       setError("Choose a move-in date.");
+      return;
+    }
+    if (moveInBlocked) {
+      setError(
+        nextAvailableMoveIn
+          ? `That move-in date is unavailable. Next available date is ${formatDateLong(nextAvailableMoveIn)}.`
+          : "That move-in date is unavailable.",
+      );
       return;
     }
     setError("");
@@ -233,6 +282,13 @@ export function LeaseBookingWidget({
         </div>
       </label>
 
+      {moveInBlocked ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          That move-in date is unavailable.
+          {nextAvailableMoveIn ? ` Next available date is ${formatDateLong(nextAvailableMoveIn)}.` : ""}
+        </div>
+      ) : null}
+
       <label className="mb-4 grid gap-1">
         <span className="sr-only">Move-in date</span>
         <div className="relative">
@@ -282,7 +338,7 @@ export function LeaseBookingWidget({
       <button
         type="button"
         onClick={handleContinue}
-        disabled={submitting || !selectedPlan || isFullyLeased}
+        disabled={submitting || !selectedPlan || isFullyLeased || moveInBlocked}
         className="inline-flex h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting

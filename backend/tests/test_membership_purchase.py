@@ -266,6 +266,79 @@ def test_membership_purchase_request_create_and_approve(
     assert bal["overage_hourly_rate_cents"] == 5000
 
 
+def test_lease_purchase_request_rejects_overlapping_requested_lease(
+    db_session, client_factory
+):
+    _, member, _, _, space, _, method = _seed(db_session)
+    plan = _enable_mode_and_make_plan(
+        db_session, space, booking_mode=BookingMode.PRIVATE_OFFICE_LEASE
+    )
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
+    )
+    payload = {
+        "membership_plan_public_id": plan.public_id,
+        "desired_start_date": "2026-05-01",
+        "member_owner_payment_method_public_id": method.public_id,
+        "payment_authorization_consent": True,
+    }
+
+    first = member_client.post("/api/booking-requests", json=payload)
+    second = member_client.post("/api/booking-requests", json=payload)
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Space already leased for that period"
+
+
+def test_lease_approval_rejects_overlap_before_subscription_charge(
+    db_session, client_factory, monkeypatch
+):
+    owner, member, _, _, space, _, method = _seed(db_session)
+    plan = _enable_mode_and_make_plan(
+        db_session, space, booking_mode=BookingMode.PRIVATE_OFFICE_LEASE
+    )
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
+    )
+    create_resp = member_client.post(
+        "/api/booking-requests",
+        json={
+            "membership_plan_public_id": plan.public_id,
+            "desired_start_date": "2026-05-01",
+            "member_owner_payment_method_public_id": method.public_id,
+            "payment_authorization_consent": True,
+        },
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    db_session.add(
+        Subscription(
+            user_id=member.id,
+            space_id=space.id,
+            tenant_id=space.tenant_id,
+            status="active",
+            start_date=date(2026, 5, 15),
+            end_date=date(2026, 6, 15),
+            booking_mode=BookingMode.PRIVATE_OFFICE_LEASE.value,
+        )
+    )
+    db_session.commit()
+
+    def fail_create(**_kwargs):
+        raise AssertionError("Stripe subscription should not be created for a conflicted lease")
+
+    monkeypatch.setattr("app.api.booking_requests.create_stripe_subscription", fail_create)
+    owner_client = client_factory(
+        {"sub": "mp-owner", "email": owner.email, "email_verified": True}
+    )
+    approve_resp = owner_client.post(
+        f"/api/booking-requests/{create_resp.json()['public_id']}/approve", json={}
+    )
+
+    assert approve_resp.status_code == 409
+    assert approve_resp.json()["detail"] == "Space already leased for that period"
+
+
 def test_booking_request_xor_validator_rejects_mixed_payload(
     db_session, client_factory
 ):
@@ -368,6 +441,28 @@ def test_subscription_overlaps_blocks_private_office_lease(db_session):
         space_id=space.id,
         tenant_id=space.tenant_id,
         status="active",
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 6, 1),
+        booking_mode=BookingMode.PRIVATE_OFFICE_LEASE.value,
+        included_meeting_room_hours_per_month=16,
+    )
+    db_session.add(sub)
+    db_session.commit()
+
+    blocks = subscription_overlaps(
+        db_session, space.id, date(2026, 5, 10), date(2026, 5, 10)
+    )
+    assert blocks is True
+
+
+def test_subscription_overlaps_blocks_pending_payment_private_office_lease(db_session):
+    _, member, _, _, space, *_ = _seed(db_session, space_type=SpaceType.PRIVATE_OFFICE)
+
+    sub = Subscription(
+        user_id=member.id,
+        space_id=space.id,
+        tenant_id=space.tenant_id,
+        status="pending_payment",
         start_date=date(2026, 5, 1),
         end_date=date(2026, 6, 1),
         booking_mode=BookingMode.PRIVATE_OFFICE_LEASE.value,
