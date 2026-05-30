@@ -12,6 +12,7 @@ from app.models.cancellation_policy import CancellationPolicy
 from app.models.cancellation_policy_tier import CancellationPolicyTier
 from app.models.enums import AvailabilityStatus, LocationStatus, OrganizationReviewStatus, SpaceType, SpaceVisibility, UserRole
 from app.models.location import Location
+from app.models.membership_plan import MembershipPlan
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.pricing_rule import PricingRule
@@ -21,6 +22,7 @@ from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.schemas.working_hours import effective_public_working_hours
 from app.services.amenities import get_location_amenities_map
+from app.services.booking_products import booking_products_for_space
 from app.services.money import CENT, to_money_decimal
 
 
@@ -368,6 +370,25 @@ def _subscription_price_map(
     prices: dict[tuple[int, str], list[int]] = defaultdict(list)
     for row in rows:
         prices[(row.tenant_id, row.space_type.value)].append(row.price)
+
+    plan_modes = {
+        SpaceType.SHARED_DESK: {"monthly_membership"},
+        SpaceType.VIRTUAL_OFFICE: {"virtual_membership"},
+        SpaceType.PRIVATE_OFFICE: {"private_office_lease"},
+        SpaceType.SUITE: {"suite_lease"},
+    }.get(space_type, set())
+    if plan_modes:
+        plan_rows = (
+            db.query(MembershipPlan)
+            .filter(
+                MembershipPlan.tenant_id.in_(tenant_ids),
+                MembershipPlan.booking_mode.in_(plan_modes),
+                MembershipPlan.is_active.is_(True),
+            )
+            .all()
+        )
+        for plan in plan_rows:
+            prices[(plan.tenant_id, space_type.value)].append(int(plan.price_cents / 100))
     return dict(prices)
 
 
@@ -397,7 +418,7 @@ def _space_card_price(
     if category == "coworking":
         return space.price_daily or (min(membership_prices) if membership_prices else None)
     if category == "private_office":
-        return space.price_monthly
+        return min(membership_prices) if membership_prices else space.price_monthly
     if hourly_prices:
         return min(hourly_prices)
     return space.price_daily or space.price_monthly
@@ -567,6 +588,19 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
 
         hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
         membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+        product_prices = [
+            int((product.get("price_cents") or 0) / 100)
+            for product in booking_products_for_space(db, space)
+            if product.get("booking_mode") in {
+                "monthly_membership",
+                "virtual_membership",
+                "private_office_lease",
+                "suite_lease",
+            }
+            and product.get("price_cents")
+        ]
+        if product_prices:
+            membership_prices = product_prices
         if not _space_matches_time_window(
             space,
             category=filters.category,
@@ -699,6 +733,19 @@ def get_public_location_detail(
             continue
         hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
         membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+        product_prices = [
+            int((product.get("price_cents") or 0) / 100)
+            for product in booking_products_for_space(db, space)
+            if product.get("booking_mode") in {
+                "monthly_membership",
+                "virtual_membership",
+                "private_office_lease",
+                "suite_lease",
+            }
+            and product.get("price_cents")
+        ]
+        if product_prices:
+            membership_prices = product_prices
         if not _space_matches_time_window(
             space,
             category=filters.category,
@@ -753,7 +800,7 @@ def get_public_location_detail(
         if filters.category == "coworking":
             return item["price_daily"] or item["membership_price"]
         if filters.category == "private_office":
-            return item["price_monthly"]
+            return item["membership_price"] or item["price_monthly"]
         return item["hourly_price"] or item["price_daily"] or item["price_monthly"]
 
     spaces.sort(
@@ -809,6 +856,19 @@ def get_public_space_detail(
     )
     hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
     membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+    booking_products = booking_products_for_space(db, space)
+    product_monthly_prices = [
+        int((product.get("price_cents") or 0) / 100)
+        for product in booking_products
+        if product.get("booking_mode") in {
+            "monthly_membership",
+            "virtual_membership",
+            "private_office_lease",
+            "suite_lease",
+        }
+        and product.get("price_cents")
+    ]
+    product_membership_price = min(product_monthly_prices) if product_monthly_prices else None
 
     from app.models.space_volume_discount import SpaceVolumeDiscount
     volume_tiers = (
@@ -891,9 +951,10 @@ def get_public_space_detail(
             "price_daily": space.price_daily,
             "price_monthly": space.price_monthly,
             "hourly_price": min(hourly_prices) if hourly_prices else None,
-            "membership_price": min(membership_prices) if membership_prices else None,
+            "membership_price": product_membership_price or (min(membership_prices) if membership_prices else None),
             "amenities": amenities,
             "volume_discounts": volume_discount_payload,
+            "booking_products": booking_products,
         },
         "images": [
             {

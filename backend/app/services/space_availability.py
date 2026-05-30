@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
-from app.models.enums import BookingRequestStatus, BookingStatus
+from app.models.enums import BookingRequestStatus, BookingStatus, SpaceType
 from app.models.subscription import Subscription
 
 _BLOCKING_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due"}
@@ -33,6 +33,8 @@ def get_space_availability(
     end_date: date,
     availability_start_time: time | None = None,
     availability_end_time: time | None = None,
+    space_type: str | None = None,
+    space_capacity: int | None = None,
 ) -> list[dict]:
     """Per-day busy intervals (HH:MM, location-local) and full-day blocks for a space."""
     if end_date < start_date:
@@ -42,11 +44,19 @@ def get_space_availability(
     range_start = datetime.combine(start_date, time.min, tzinfo=tz).astimezone(timezone.utc)
     range_end = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc)
 
+    shared_desk_capacity = (
+        max(1, space_capacity or 1)
+        if space_type == SpaceType.SHARED_DESK.value
+        else None
+    )
+
+    booking_query = db.query(
+        func.coalesce(Booking.inventory_start_datetime, Booking.start_datetime),
+        func.coalesce(Booking.inventory_end_datetime, Booking.end_datetime),
+        func.coalesce(BookingRequest.seats_requested, 1),
+    ).outerjoin(BookingRequest, BookingRequest.id == Booking.booking_request_id)
     bookings = (
-        db.query(
-            func.coalesce(Booking.inventory_start_datetime, Booking.start_datetime),
-            func.coalesce(Booking.inventory_end_datetime, Booking.end_datetime),
-        )
+        booking_query
         .filter(
             Booking.space_id == space_id,
             Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
@@ -57,7 +67,11 @@ def get_space_availability(
     )
 
     requests = (
-        db.query(BookingRequest.start_datetime, BookingRequest.end_datetime)
+        db.query(
+            BookingRequest.start_datetime,
+            BookingRequest.end_datetime,
+            BookingRequest.seats_requested,
+        )
         .filter(
             BookingRequest.space_id == space_id,
             BookingRequest.status == BookingRequestStatus.REQUESTED,
@@ -92,7 +106,8 @@ def get_space_availability(
             cur += timedelta(days=1)
 
     busy_by_day: dict[date, list[tuple[str, str]]] = defaultdict(list)
-    for start_dt, end_dt in list(bookings) + list(requests):
+    sold_seats_by_day: dict[date, int] = defaultdict(int)
+    for start_dt, end_dt, seats_requested in list(bookings) + list(requests):
         if start_dt.tzinfo is None:
             start_dt = start_dt.replace(tzinfo=timezone.utc)
         if end_dt.tzinfo is None:
@@ -106,14 +121,17 @@ def get_space_availability(
             interval_start = max(start_local, day_start)
             interval_end = min(end_local, day_end)
             if interval_start < interval_end and start_date <= cur_day <= end_date:
-                end_label = (
-                    "24:00"
-                    if interval_end == day_end
-                    else interval_end.strftime("%H:%M")
-                )
-                busy_by_day[cur_day].append(
-                    (interval_start.strftime("%H:%M"), end_label)
-                )
+                if shared_desk_capacity is not None:
+                    sold_seats_by_day[cur_day] += max(1, seats_requested or 1)
+                else:
+                    end_label = (
+                        "24:00"
+                        if interval_end == day_end
+                        else interval_end.strftime("%H:%M")
+                    )
+                    busy_by_day[cur_day].append(
+                        (interval_start.strftime("%H:%M"), end_label)
+                    )
             cur_day += timedelta(days=1)
 
     open_start = availability_start_time or time(9, 0)
@@ -152,7 +170,12 @@ def get_space_availability(
     cur = start_date
     while cur <= end_date:
         intervals = sorted(busy_by_day.get(cur, []))
-        fully_blocked = cur in blocked_days or _covers_open_window(intervals)
+        if shared_desk_capacity is not None:
+            sold_out = sold_seats_by_day.get(cur, 0) >= shared_desk_capacity
+            fully_blocked = cur in blocked_days or sold_out
+            intervals = [(open_start.strftime("%H:%M"), open_end.strftime("%H:%M"))] if fully_blocked else []
+        else:
+            fully_blocked = cur in blocked_days or _covers_open_window(intervals)
         days.append(
             {
                 "date": cur.isoformat(),

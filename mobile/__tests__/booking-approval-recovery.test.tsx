@@ -156,7 +156,7 @@ describe("booking approval and recovery mobile flows", () => {
         });
       }
       if (path === "/api/spaces/space_1/media") return Promise.resolve([]);
-      if (path.startsWith("/api/subscription-plans/public")) return Promise.resolve([]);
+      if (path.startsWith("/api/membership-plans/public")) return Promise.resolve([]);
       if (path.startsWith("/api/marketplace/spaces/space_1/availability")) {
         return Promise.resolve({
           space_public_id: "space_1",

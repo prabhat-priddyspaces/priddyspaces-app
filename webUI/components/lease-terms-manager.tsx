@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type LeaseSpaceType = "private_office" | "suite";
-type LeaseBookingMode = "private_office_lease" | "suite_lease";
+type LeaseSpaceType = "private_office" | "suite" | "shared_desk" | "virtual_office";
+type LeaseBookingMode = "private_office_lease" | "suite_lease" | "monthly_membership" | "virtual_membership";
 
 interface OwnerMembershipPlan {
   public_id: string;
@@ -43,7 +43,10 @@ interface LeaseTermsManagerProps {
 }
 
 function bookingModeFor(spaceType: LeaseSpaceType): LeaseBookingMode {
-  return spaceType === "suite" ? "suite_lease" : "private_office_lease";
+  if (spaceType === "suite") return "suite_lease";
+  if (spaceType === "shared_desk") return "monthly_membership";
+  if (spaceType === "virtual_office") return "virtual_membership";
+  return "private_office_lease";
 }
 
 function defaultName(commitmentMonths: number | null) {
@@ -63,6 +66,20 @@ function emptyForm(spaceCapacity: number): FormState {
 
 export function LeaseTermsManager({ spacePublicId, spaceType, spaceCapacity }: LeaseTermsManagerProps) {
   const bookingMode = bookingModeFor(spaceType);
+  const recurringLabel =
+    spaceType === "shared_desk"
+      ? "Membership Terms"
+      : spaceType === "virtual_office"
+        ? "Virtual Membership Terms"
+        : "Lease Terms";
+  const itemLabel =
+    spaceType === "suite"
+      ? "suite"
+      : spaceType === "private_office"
+        ? "office"
+        : spaceType === "virtual_office"
+          ? "virtual office"
+          : "shared desk membership";
   const [plans, setPlans] = useState<OwnerMembershipPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -240,14 +257,14 @@ export function LeaseTermsManager({ spacePublicId, spaceType, spaceCapacity }: L
     <div className="grid gap-4 rounded-md border border-border bg-surface p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Lease Terms</h3>
+          <h3 className="text-lg font-semibold">{recurringLabel}</h3>
           <p className="text-sm text-textSecondary">
-            Configure the term lengths and monthly prices members can lease this {spaceType === "suite" ? "suite" : "office"} for.
+            Configure the term lengths and monthly prices members can buy for this {itemLabel}.
           </p>
         </div>
         {!showForm ? (
           <Button type="button" size="sm" onClick={startCreate}>
-            Add lease term
+            Add term
           </Button>
         ) : null}
       </div>
@@ -256,7 +273,7 @@ export function LeaseTermsManager({ spacePublicId, spaceType, spaceCapacity }: L
         <div className="text-sm text-textMuted">Loading…</div>
       ) : plans.length === 0 ? (
         <div className="rounded-md border border-dashed border-border p-4 text-sm text-textSecondary">
-          No lease terms yet. Add one to publish lease pricing on the public listing.
+          No terms yet. Add one to publish pricing on the public listing.
         </div>
       ) : (
         <div className="grid gap-2">

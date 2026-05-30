@@ -203,15 +203,23 @@ def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]
     return [VolumeDiscount(min_hours=float(r.min_hours), discount_percent=int(r.discount_percent)) for r in rows]
 
 
-def _snapshot_from_estimate(estimate: EstimateResult, *, occurrence_count: int, refund_snapshot: dict) -> dict:
+def _snapshot_from_estimate(
+    estimate: EstimateResult,
+    *,
+    occurrence_count: int,
+    refund_snapshot: dict,
+    quantity: int = 1,
+) -> dict:
+    multiplier = max(1, occurrence_count) * max(1, quantity)
     return {
-        "base_cents": estimate.base_cents * occurrence_count,
-        "discount_cents": estimate.discount_cents * occurrence_count,
-        "tax_cents": estimate.tax_cents * occurrence_count,
-        "total_cents": estimate.total_cents * occurrence_count,
+        "base_cents": estimate.base_cents * multiplier,
+        "discount_cents": estimate.discount_cents * multiplier,
+        "tax_cents": estimate.tax_cents * multiplier,
+        "total_cents": estimate.total_cents * multiplier,
         "rate_basis": estimate.rate_basis,
         "units": estimate.units,
-        "occurrence_count": occurrence_count,
+        "occurrence_count": max(1, occurrence_count),
+        "quantity": max(1, quantity),
         "refund_policy": refund_snapshot,
     }
 
@@ -252,7 +260,17 @@ def _estimate_request_snapshot(db: Session, req: BookingRequest, space: Space) -
     if location:
         refund_snapshot = policy_snapshot(db, policy_for_space(db, location, space))
     occurrence_count = max(1, req.occurrence_count or 1)
-    return _snapshot_from_estimate(estimate, occurrence_count=occurrence_count, refund_snapshot=refund_snapshot)
+    quantity = (
+        max(1, req.seats_requested or 1)
+        if is_day_pass and getattr(space.space_type, "value", space.space_type) == "shared_desk"
+        else 1
+    )
+    return _snapshot_from_estimate(
+        estimate,
+        occurrence_count=occurrence_count,
+        refund_snapshot=refund_snapshot,
+        quantity=quantity,
+    )
 
 
 def cancellation_deadline_for_request(db: Session, req: BookingRequest, space: Space) -> datetime:

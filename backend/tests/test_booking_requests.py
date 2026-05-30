@@ -265,6 +265,84 @@ def test_booking_request_create_and_list(db_session, client_factory):
     assert owner_request["location_name"] == "Main"
 
 
+def test_shared_desk_rejects_hourly_booking(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    space.space_type = SpaceType.SHARED_DESK
+    space.capacity = 4
+    space.price_daily = 25
+    space.price_hourly = None
+    db_session.add(space)
+
+    member = User(
+        email="desk-member@example.com",
+        auth_subject="sub-desk-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    payload = _request_payload(space, method, day=8)
+    payload["booking_mode"] = "hourly"
+    payload["full_day"] = False
+    resp = member_client.post("/api/booking-requests", json=payload)
+
+    assert resp.status_code == 400
+    assert "shared desks" in resp.json()["detail"].lower()
+
+
+def test_shared_desk_day_pass_uses_pooled_capacity(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    space.space_type = SpaceType.SHARED_DESK
+    space.capacity = 2
+    space.price_daily = 25
+    space.price_hourly = None
+    db_session.add(space)
+
+    member = User(
+        email="desk-capacity@example.com",
+        auth_subject="sub-desk-capacity",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    payload = {
+        "space_public_id": space.public_id,
+        "start_datetime": datetime(2026, 3, 9, 9, 0, tzinfo=timezone.utc).isoformat(),
+        "end_datetime": datetime(2026, 3, 9, 18, 0, tzinfo=timezone.utc).isoformat(),
+        "booking_mode": "day_pass",
+        "full_day": True,
+        "seats_requested": 2,
+        "payment_authorization_consent": True,
+        "member_owner_payment_method_public_id": method.public_id,
+    }
+    first = member_client.post("/api/booking-requests", json=payload)
+    assert first.status_code == 200, first.text
+
+    payload["seats_requested"] = 1
+    second = member_client.post("/api/booking-requests", json=payload)
+    assert second.status_code == 409
+    assert "shared desk seats" in second.json()["detail"].lower()
+
+
 def test_owner_can_update_organization_booking_settings(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
     org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()

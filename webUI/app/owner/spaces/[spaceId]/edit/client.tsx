@@ -45,6 +45,51 @@ function pointsPayload(value: string) {
   return null;
 }
 
+function typeConfig(spaceType: string) {
+  if (spaceType === "conference_room") {
+    return {
+      capacityLabel: "Room capacity",
+      capacityHelp: "Number of people the room can seat.",
+      showHourly: true,
+      showDaily: false,
+      showMonthly: false,
+      showAvailability: true,
+      showBuffers: true,
+    };
+  }
+  if (spaceType === "shared_desk") {
+    return {
+      capacityLabel: "Desks available per day",
+      capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
+      showHourly: false,
+      showDaily: true,
+      showMonthly: false,
+      showAvailability: true,
+      showBuffers: false,
+    };
+  }
+  if (spaceType === "virtual_office") {
+    return {
+      capacityLabel: "",
+      capacityHelp: "",
+      showHourly: false,
+      showDaily: false,
+      showMonthly: false,
+      showAvailability: false,
+      showBuffers: false,
+    };
+  }
+  return {
+    capacityLabel: spaceType === "suite" ? "Suite seats" : "Office seats",
+    capacityHelp: "Number of people included in this office or suite.",
+    showHourly: false,
+    showDaily: false,
+    showMonthly: false,
+    showAvailability: false,
+    showBuffers: false,
+  };
+}
+
 export function EditSpaceClient() {
   const params = useParams<{ spaceId: string }>();
   const searchParams = useSearchParams();
@@ -71,6 +116,7 @@ export function EditSpaceClient() {
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const config = typeConfig(form.space_type);
 
   useEffect(() => {
     if (!spaceId) return;
@@ -114,15 +160,15 @@ export function EditSpaceClient() {
           body: JSON.stringify({
             name: form.name,
             space_type: form.space_type,
-            capacity: Number(form.capacity || 1),
-            price_monthly: moneyPayload(form.price_monthly),
-            price_daily: moneyPayload(form.price_daily),
-            price_hourly: moneyPayload(form.price_hourly),
+            capacity: form.space_type === "virtual_office" ? 1 : Number(form.capacity || 1),
+            price_monthly: config.showMonthly ? moneyPayload(form.price_monthly) : null,
+            price_daily: config.showDaily ? moneyPayload(form.price_daily) : null,
+            price_hourly: config.showHourly ? moneyPayload(form.price_hourly) : null,
             availability_status: form.availability_status,
-            availability_start_time: form.availability_start_time || null,
-            availability_end_time: form.availability_end_time || null,
-            buffer_before_minutes: Number(form.buffer_before_minutes || 0),
-            buffer_after_minutes: Number(form.buffer_after_minutes || 0),
+            availability_start_time: config.showAvailability ? form.availability_start_time || null : null,
+            availability_end_time: config.showAvailability ? form.availability_end_time || null : null,
+            buffer_before_minutes: config.showBuffers ? Number(form.buffer_before_minutes || 0) : 0,
+            buffer_after_minutes: config.showBuffers ? Number(form.buffer_after_minutes || 0) : 0,
             visibility: form.visibility,
             priddy_points_enabled: pointsPayload(form.priddy_points_enabled),
             owner_points_enabled: pointsPayload(form.owner_points_enabled)
@@ -175,19 +221,25 @@ export function EditSpaceClient() {
                 <option value="private_office">Private Office</option>
                 <option value="shared_desk">Shared Desk</option>
                 <option value="virtual_office">Virtual Office</option>
+                <option value="suite">Suite</option>
               </select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="capacity">Capacity</Label>
-              <Input
-                id="capacity"
-                value={form.capacity}
-                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-                placeholder="4"
-              />
-            </div>
-            <div className="grid gap-2 md:grid-cols-3">
-              <div className="space-y-2">
+            {form.space_type !== "virtual_office" ? (
+              <div className="grid gap-2">
+                <Label htmlFor="capacity">{config.capacityLabel}</Label>
+                <Input
+                  id="capacity"
+                  value={form.capacity}
+                  onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+                  placeholder="4"
+                />
+                <div className="text-xs text-textMuted">{config.capacityHelp}</div>
+              </div>
+            ) : null}
+            {config.showHourly || config.showDaily || config.showMonthly ? (
+              <div className="grid gap-2 md:grid-cols-3">
+                {config.showHourly ? (
+                <div className="space-y-2">
                 <Label htmlFor="hourly">Hourly price (USD)</Label>
                 <Input
                   id="hourly"
@@ -200,11 +252,13 @@ export function EditSpaceClient() {
                   placeholder="30"
                 />
                 <div className="text-xs text-textMuted">
-                  Required for hourly meeting-room bookings. Enter a dollar amount, such as 19.99.
+                  Required for conference room bookings. Enter a dollar amount, such as 19.99.
                 </div>
               </div>
+                ) : null}
+                {config.showDaily ? (
               <div className="space-y-2">
-                <Label htmlFor="daily">Daily price (USD)</Label>
+                <Label htmlFor="daily">Day pass price (USD)</Label>
                 <Input
                   id="daily"
                   type="number"
@@ -216,9 +270,11 @@ export function EditSpaceClient() {
                   placeholder="200"
                 />
                 <div className="text-xs text-textMuted">
-                  Used for "Full day". Hourly bookings auto-cap to this amount.
+                  Charged per shared-desk day pass seat.
                 </div>
               </div>
+                ) : null}
+                {config.showMonthly ? (
               <div className="space-y-2">
                 <Label htmlFor="monthly">Monthly price (USD)</Label>
                 <Input
@@ -232,7 +288,9 @@ export function EditSpaceClient() {
                   placeholder="1200"
                 />
               </div>
+                ) : null}
             </div>
+            ) : null}
             <div className="grid gap-2">
               <Label htmlFor="availability">Availability</Label>
               <select
@@ -277,6 +335,7 @@ export function EditSpaceClient() {
                 onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
               />
             </div>
+            {config.showAvailability ? (
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="availability_start">Availability start</Label>
@@ -297,6 +356,8 @@ export function EditSpaceClient() {
                 />
               </div>
             </div>
+            ) : null}
+            {config.showBuffers ? (
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="buffer_before">Buffer before (minutes)</Label>
@@ -319,6 +380,7 @@ export function EditSpaceClient() {
                 />
               </div>
             </div>
+            ) : null}
             <div className="flex gap-3">
               <Button type="button" onClick={handleSave}>
                 Save Changes
@@ -332,10 +394,10 @@ export function EditSpaceClient() {
             {message ? <div className="text-sm text-textMuted">{message}</div> : null}
           </div>
         </Card>
-        {form.space_type === "private_office" || form.space_type === "suite" ? (
+        {["private_office", "suite", "shared_desk", "virtual_office"].includes(form.space_type) ? (
           <LeaseTermsManager
             spacePublicId={spaceId}
-            spaceType={form.space_type as "private_office" | "suite"}
+            spaceType={form.space_type as "private_office" | "suite" | "shared_desk" | "virtual_office"}
             spaceCapacity={Number(form.capacity || 1)}
           />
         ) : null}

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRoute } from "@react-navigation/native";
-import { useStripe } from "@stripe/stripe-react-native";
 
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -41,11 +40,14 @@ type SpaceImage = {
   is_primary: boolean;
 };
 
-type SubscriptionPlan = {
+type MembershipPlan = {
   public_id: string;
+  booking_mode: string;
   name: string;
   billing_cycle: string;
-  price: number;
+  price_cents: number;
+  commitment_months: number | null;
+  included_meeting_room_hours_per_month: number;
 };
 
 type PaymentMethodResolve = {
@@ -69,6 +71,7 @@ type ReservationPayload = {
   end_datetime: string;
   booking_mode: "hourly" | "day_pass";
   full_day: boolean;
+  seats_requested?: number;
 };
 
 function toDateIso(date: Date) {
@@ -90,7 +93,7 @@ export function SpaceDetailScreen() {
   const [space, setSpace] = useState<Space | null>(null);
   const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
   const [images, setImages] = useState<SpaceImage[]>([]);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [bookingDate, setBookingDate] = useState(toDateIso(new Date()));
@@ -101,7 +104,8 @@ export function SpaceDetailScreen() {
   const [subscribing, setSubscribing] = useState(false);
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
-  const stripe = useStripe();
+  const [pendingMembershipPlan, setPendingMembershipPlan] = useState<MembershipPlan | null>(null);
+  const [seatQuantity, setSeatQuantity] = useState("1");
 
   useEffect(() => {
     if (!token || !spaceId) return;
@@ -112,8 +116,8 @@ export function SpaceDetailScreen() {
     Promise.all([
       apiFetch<Space>(`/api/spaces/${spaceId}`, { method: "GET" }, token),
       apiFetch<SpaceImage[]>(`/api/spaces/${spaceId}/media`, { method: "GET" }, token).catch(() => []),
-      apiFetch<SubscriptionPlan[]>(
-        `/api/subscription-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
+      apiFetch<MembershipPlan[]>(
+        `/api/membership-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
         { method: "GET" },
         token
       ).catch(() => []),
@@ -152,6 +156,22 @@ export function SpaceDetailScreen() {
   const hero = images.find((img) => img.is_primary) || images[0];
   const dateOptions = nextDateOptions();
   const actionLabel = space?.booking_approval_mode === "auto" ? "Reserve & Pay" : "Request to book";
+  const isConferenceRoom = space?.space_type === "conference_room";
+  const isSharedDesk = space?.space_type === "shared_desk";
+  const isMembershipOnly = ["private_office", "suite", "virtual_office"].includes(space?.space_type || "");
+  const membershipPlans = useMemo(() => {
+    const expectedMode =
+      space?.space_type === "shared_desk"
+        ? "monthly_membership"
+        : space?.space_type === "virtual_office"
+          ? "virtual_membership"
+          : space?.space_type === "suite"
+            ? "suite_lease"
+            : space?.space_type === "private_office"
+              ? "private_office_lease"
+              : null;
+    return expectedMode ? plans.filter((plan) => plan.booking_mode === expectedMode) : [];
+  }, [plans, space?.space_type]);
   const openWindow = useMemo(
     () =>
       getDayOpenWindow({
@@ -190,6 +210,11 @@ export function SpaceDetailScreen() {
         }))
   );
   const fullDayDisabled = !space?.price_daily || selectedDayHasConflict || (availability ? !selectedDay : false);
+
+  useEffect(() => {
+    if (isSharedDesk) setFullDay(true);
+    if (isConferenceRoom) setFullDay(false);
+  }, [isConferenceRoom, isSharedDesk]);
 
   useEffect(() => {
     if (fullDay) {
@@ -258,17 +283,19 @@ export function SpaceDetailScreen() {
 
   async function handleRequest() {
     if (!token || !space) return;
-    const effectiveStart = fullDay ? openWindow.start : startTime;
-    const effectiveEnd = fullDay ? openWindow.end : endTime;
+    if (!isConferenceRoom && !isSharedDesk) return;
+    const dayPass = isSharedDesk;
+    const effectiveStart = dayPass ? openWindow.start : startTime;
+    const effectiveEnd = dayPass ? openWindow.end : endTime;
     if (availability && dateIsUnavailable(bookingDate)) {
       setMessage("Choose an available date.");
       return;
     }
-    if (fullDay && fullDayDisabled) {
-      setMessage("Full day is not available for this date.");
+    if (dayPass && fullDayDisabled) {
+      setMessage("Day pass is not available for this date.");
       return;
     }
-    if (!fullDay && (!startOptions.includes(startTime) || !endOptions.includes(endTime))) {
+    if (isConferenceRoom && (!startOptions.includes(startTime) || !endOptions.includes(endTime))) {
       setMessage("Choose an available time.");
       return;
     }
@@ -293,8 +320,9 @@ export function SpaceDetailScreen() {
         space_public_id: space.public_id,
         start_datetime: start.toISOString(),
         end_datetime: end.toISOString(),
-        booking_mode: fullDay ? "day_pass" : "hourly",
-        full_day: fullDay
+        booking_mode: dayPass ? "day_pass" : "hourly",
+        full_day: dayPass,
+        seats_requested: dayPass ? Math.max(1, Number(seatQuantity || 1)) : 1
       };
       if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
         setPendingReservation(payload);
@@ -310,36 +338,47 @@ export function SpaceDetailScreen() {
     }
   }
 
-  async function handleSubscribe(plan: SubscriptionPlan) {
+  async function submitMembership(plan: MembershipPlan, paymentMethodPublicId: string) {
+    if (!token) return;
+    await apiFetch<BookingRequestResult>(
+      "/api/booking-requests",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          membership_plan_public_id: plan.public_id,
+          desired_start_date: bookingDate,
+          seats_requested: 1,
+          member_owner_payment_method_public_id: paymentMethodPublicId,
+          payment_authorization_consent: true
+        })
+      },
+      token
+    );
+    setMessage("Request submitted for owner review.");
+  }
+
+  async function handleSubscribe(plan: MembershipPlan) {
     if (!token || !space) return;
     setSubscribing(true);
     setMessage("");
     try {
-      const res = await apiFetch<{ client_secret: string | null }>(
-        "/api/payments/subscription",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            space_public_id: space.public_id,
-            subscription_plan_public_id: plan.public_id
-          })
-        },
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(space.public_id)}`,
+        { method: "GET" },
         token
       );
-      if (!res.client_secret) {
-        setMessage("Membership started");
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || "This owner has not configured payments.");
+      }
+      if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
+        setPendingMembershipPlan(plan);
+        setPaymentSetupOpen(true);
+        setMessage("Add a booking card to continue.");
         return;
       }
-      const init = await stripe.initPaymentSheet({
-        paymentIntentClientSecret: res.client_secret,
-        merchantDisplayName: "Priddyspaces"
-      });
-      if (init.error) throw new Error(init.error.message);
-      const present = await stripe.presentPaymentSheet();
-      if (present.error) throw new Error(present.error.message);
-      setMessage("Membership active");
+      await submitMembership(plan, resolved.payment_method_public_id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Subscription failed");
+      setMessage(err instanceof Error ? err.message : "Membership request failed");
     } finally {
       setSubscribing(false);
     }
@@ -353,20 +392,24 @@ export function SpaceDetailScreen() {
       {space ? (
         <>
           <Text style={styles.title}>{space.space_type}</Text>
-          <Text style={styles.subtitle}>Capacity {space.capacity}</Text>
+          {space.space_type !== "virtual_office" ? (
+            <Text style={styles.subtitle}>
+              {isSharedDesk ? "Desks available" : "Capacity"} {space.capacity}
+            </Text>
+          ) : null}
           <Text style={styles.subtitle}>Status: {space.availability_status}</Text>
-          {space.availability_start_time || space.availability_end_time ? (
+          {(isConferenceRoom || isSharedDesk) && (space.availability_start_time || space.availability_end_time) ? (
             <Text style={styles.subtitle}>
               Hours: {space.availability_start_time || "--:--"} to {space.availability_end_time || "--:--"}
             </Text>
           ) : null}
           {space.amenities ? <Text style={styles.subtitle}>Amenities: {space.amenities}</Text> : null}
-          {space.buffer_before_minutes || space.buffer_after_minutes ? (
+          {isConferenceRoom && (space.buffer_before_minutes || space.buffer_after_minutes) ? (
             <Text style={styles.subtitle}>
               Buffer: {space.buffer_before_minutes || 0} min before, {space.buffer_after_minutes || 0} min after
             </Text>
           ) : null}
-          <Text style={styles.sectionLabel}>Date</Text>
+          <Text style={styles.sectionLabel}>{isMembershipOnly ? "Start date" : "Date"}</Text>
           <View style={styles.chipRow}>
             {dateOptions.slice(0, 7).map((option) => {
               const unavailable = dateIsUnavailable(option);
@@ -394,22 +437,19 @@ export function SpaceDetailScreen() {
               );
             })}
           </View>
-          <View style={styles.modeRow}>
-            <TouchableOpacity
-              style={[styles.modeButton, !fullDay ? styles.modeButtonActive : null]}
-              onPress={() => setFullDay(false)}
-            >
-              <Text style={[styles.modeText, !fullDay ? styles.modeTextActive : null]}>Hourly</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeButton, fullDay ? styles.modeButtonActive : null]}
-              onPress={() => setFullDay(true)}
-              disabled={fullDayDisabled}
-            >
-              <Text style={[styles.modeText, fullDay ? styles.modeTextActive : null]}>Full day</Text>
-            </TouchableOpacity>
-          </View>
-          {!fullDay ? (
+          {isSharedDesk ? (
+            <>
+              <Text style={styles.sectionLabel}>Seats</Text>
+              <TextInput
+                style={styles.input}
+                value={seatQuantity}
+                onChangeText={setSeatQuantity}
+                keyboardType="number-pad"
+                placeholder="1"
+              />
+            </>
+          ) : null}
+          {isConferenceRoom ? (
             <>
               <Text style={styles.sectionLabel}>Start</Text>
               <View style={styles.chipRow}>
@@ -445,40 +485,60 @@ export function SpaceDetailScreen() {
               </View>
             </>
           ) : null}
-          <TouchableOpacity style={styles.primaryButton} onPress={handleRequest} disabled={submitting}>
-            <Text style={styles.primaryButtonText}>
-              {submitting ? "Submitting..." : actionLabel}
-            </Text>
-          </TouchableOpacity>
-          {paymentSetupOpen && pendingReservation && token ? (
+          {isConferenceRoom || isSharedDesk ? (
+            <TouchableOpacity style={styles.primaryButton} onPress={handleRequest} disabled={submitting}>
+              <Text style={styles.primaryButtonText}>
+                {submitting ? "Submitting..." : actionLabel}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {paymentSetupOpen && token ? (
             <BookingPaymentMethodSetup
               token={token}
-              spacePublicId={pendingReservation.space_public_id}
+              spacePublicId={(pendingReservation?.space_public_id || space.public_id)}
               organizationName={space.organization_name}
               onSaved={(paymentMethodPublicId) => {
                 setPaymentSetupOpen(false);
-                setPendingReservation(null);
-                setSubmitting(true);
-                submitBooking(pendingReservation, paymentMethodPublicId)
-                  .catch((err) => setMessage(err instanceof Error ? err.message : "Request failed"))
-                  .finally(() => setSubmitting(false));
+                if (pendingMembershipPlan) {
+                  const plan = pendingMembershipPlan;
+                  setPendingMembershipPlan(null);
+                  setSubscribing(true);
+                  submitMembership(plan, paymentMethodPublicId)
+                    .catch((err) => setMessage(err instanceof Error ? err.message : "Membership request failed"))
+                    .finally(() => setSubscribing(false));
+                } else if (pendingReservation) {
+                  const reservation = pendingReservation;
+                  setPendingReservation(null);
+                  setSubmitting(true);
+                  submitBooking(reservation, paymentMethodPublicId)
+                    .catch((err) => setMessage(err instanceof Error ? err.message : "Request failed"))
+                    .finally(() => setSubmitting(false));
+                }
               }}
             />
           ) : null}
-          {plans.length > 0 ? (
+          {membershipPlans.length > 0 ? (
             <View style={styles.planSection}>
-              <Text style={styles.planTitle}>Membership plans</Text>
-              {plans.map((plan) => (
+              <Text style={styles.planTitle}>
+                {space.space_type === "virtual_office"
+                  ? "Virtual office membership"
+                  : space.space_type === "private_office" || space.space_type === "suite"
+                    ? "Lease terms"
+                    : "Coworking membership"}
+              </Text>
+              {membershipPlans.map((plan) => (
                 <View key={plan.public_id} style={styles.planCard}>
                   <Text style={styles.planName}>{plan.name}</Text>
-                  <Text style={styles.planMeta}>{plan.billing_cycle} • ${plan.price}</Text>
+                  <Text style={styles.planMeta}>
+                    {plan.commitment_months && plan.commitment_months > 1 ? `${plan.commitment_months}-month` : "Month-to-month"} • ${(plan.price_cents / 100).toLocaleString()}/mo
+                  </Text>
                   <TouchableOpacity
                     style={styles.secondaryButton}
                     onPress={() => handleSubscribe(plan)}
                     disabled={subscribing}
                   >
                     <Text style={styles.secondaryButtonText}>
-                      {subscribing ? "Processing..." : "Start membership"}
+                      {subscribing ? "Processing..." : "Request membership"}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -520,6 +580,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#374151"
+  },
+  input: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    color: "#111827"
   },
   chipRow: {
     marginTop: 8,

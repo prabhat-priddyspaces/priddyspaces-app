@@ -97,6 +97,26 @@ def create_membership_plan(
         sort_order=payload.sort_order,
     )
     db.add(plan)
+    existing_mode = (
+        db.query(SpaceBookingMode)
+        .filter(
+            SpaceBookingMode.space_id == space.id,
+            SpaceBookingMode.booking_mode == payload.booking_mode.value,
+        )
+        .first()
+    )
+    if existing_mode:
+        existing_mode.is_enabled = True
+        db.add(existing_mode)
+    else:
+        db.add(
+            SpaceBookingMode(
+                tenant_id=space.tenant_id,
+                space_id=space.id,
+                booking_mode=payload.booking_mode.value,
+                is_enabled=True,
+            )
+        )
     db.commit()
     db.refresh(plan)
     return plan

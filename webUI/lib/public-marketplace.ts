@@ -90,6 +90,22 @@ export interface MarketplaceVolumeDiscountTier {
   discount_percent: number;
 }
 
+export interface MarketplaceBookingProduct {
+  product_type: string;
+  booking_mode: string;
+  label: string;
+  price: MoneyValue | null;
+  price_cents: number | null;
+  membership_plan_public_id: string | null;
+  billing_cycle: string | null;
+  commitment_months: number | null;
+  seats_per_plan: number | null;
+  space_capacity: number | null;
+  available_seats: number | null;
+  included_meeting_room_hours_per_month: number | null;
+  overage_hourly_rate_cents: number | null;
+}
+
 export interface MarketplaceSpaceDetailSpace {
   public_id: string;
   name: string;
@@ -106,6 +122,7 @@ export interface MarketplaceSpaceDetailSpace {
   membership_price: number | null;
   amenities: string[];
   volume_discounts?: MarketplaceVolumeDiscountTier[];
+  booking_products?: MarketplaceBookingProduct[];
 }
 
 export interface MarketplaceSpaceDetailLocation {

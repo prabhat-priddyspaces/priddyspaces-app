@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, get_optional_user
 from app.db.deps import get_db
-from app.models.enums import LocationStatus, UserAppRole, UserRole, SpaceVisibility
+from app.models.enums import BookingMode, LocationStatus, SpaceType, UserAppRole, UserRole, SpaceVisibility
 from app.models.organization import Organization
 from app.models.space import Space
+from app.models.space_booking_mode import SpaceBookingMode
 from app.schemas.space import SpaceCreate, SpaceOut, SpaceUpdate
 from app.schemas.space_override import SpacePriceOverride
 from app.services.amenities import get_location_amenities_map
@@ -110,6 +111,21 @@ def create_space(
         amenities=payload.amenities
     )
     db.add(space)
+    db.flush()
+    default_mode = None
+    if payload.space_type == SpaceType.CONFERENCE_ROOM:
+        default_mode = BookingMode.HOURLY.value
+    elif payload.space_type == SpaceType.SHARED_DESK:
+        default_mode = BookingMode.DAY_PASS.value
+    if default_mode:
+        db.add(
+            SpaceBookingMode(
+                tenant_id=location.organization_id,
+                space_id=space.id,
+                booking_mode=default_mode,
+                is_enabled=True,
+            )
+        )
     db.commit()
     db.refresh(space)
     location_amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
@@ -183,17 +199,17 @@ def update_space(
         space.name = _space_display_name(payload.name, next_type)
     if payload.capacity is not None:
         space.capacity = payload.capacity
-    if payload.price_monthly is not None:
+    if "price_monthly" in payload.model_fields_set:
         space.price_monthly = payload.price_monthly
-    if payload.price_daily is not None:
+    if "price_daily" in payload.model_fields_set:
         space.price_daily = payload.price_daily
-    if payload.price_hourly is not None:
+    if "price_hourly" in payload.model_fields_set:
         space.price_hourly = payload.price_hourly
     if payload.availability_status is not None:
         space.availability_status = payload.availability_status
-    if payload.availability_start_time is not None:
+    if "availability_start_time" in payload.model_fields_set:
         space.availability_start_time = payload.availability_start_time
-    if payload.availability_end_time is not None:
+    if "availability_end_time" in payload.model_fields_set:
         space.availability_end_time = payload.availability_end_time
     if payload.buffer_before_minutes is not None:
         space.buffer_before_minutes = payload.buffer_before_minutes

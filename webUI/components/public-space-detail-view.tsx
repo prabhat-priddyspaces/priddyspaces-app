@@ -24,6 +24,7 @@ import {
   formatLocationAddress,
   formatSpaceTypeLabel,
   leaseBookingModeForSpaceType,
+  MembershipPlanPublic,
   MarketplaceSpaceDetailResponse,
   SpaceAvailabilityResponse,
 } from "@/lib/public-marketplace";
@@ -49,7 +50,6 @@ import {
   zonedDateTimeToUtc,
 } from "@/lib/space-availability";
 import { AvailabilityCalendar } from "@/components/availability-calendar";
-import { SubscriptionModal } from "@/components/subscription-modal";
 import { PublicLocationMiniMap } from "@/components/public-location-mini-map";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { GuestCheckoutModal } from "@/components/guest-checkout-modal";
@@ -59,14 +59,6 @@ import { formatCents, formatPoints } from "@/lib/loyalty";
 
 const AVAILABILITY_RANGE_DAYS = 60;
 const AVAILABILITY_STALE_MS = 3 * 60 * 1000;
-
-interface SubscriptionPlan {
-  public_id: string;
-  name: string;
-  billing_cycle: string;
-  price: number;
-  is_active: boolean;
-}
 
 interface PublicSpaceDetailViewProps {
   spaceId: string;
@@ -92,11 +84,18 @@ interface ReservationPayload {
   end_datetime: string;
   booking_mode: "hourly" | "day_pass";
   full_day: boolean;
+  seats_requested?: number;
   recurrence?: {
     frequency: "weekly" | "monthly";
     interval: number;
     count: number;
   };
+}
+
+function membershipBookingModeForSpaceType(spaceType: string) {
+  if (spaceType === "shared_desk") return "monthly_membership";
+  if (spaceType === "virtual_office") return "virtual_membership";
+  return null;
 }
 
 function buildDirectionsHref(address: string, lat: number | null, lng: number | null) {
@@ -133,7 +132,7 @@ export function PublicSpaceDetailView({
   const [detail, setDetail] = useState<MarketplaceSpaceDetailResponse | null>(null);
   const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null);
   const [availabilityFetchedAt, setAvailabilityFetchedAt] = useState<number | null>(null);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<MembershipPlanPublic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [date, setDate] = useState(initialDate);
@@ -144,11 +143,13 @@ export function PublicSpaceDetailView({
   const [recurrenceCount, setRecurrenceCount] = useState("4");
   const [autoFilled, setAutoFilled] = useState(Boolean(initialDate));
   const [requesting, setRequesting] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
-  const [subscriptionOpen, setSubscriptionOpen] = useState(false);
+  const [selectedMembershipPlanId, setSelectedMembershipPlanId] = useState("");
+  const [membershipStartDate, setMembershipStartDate] = useState(initialMoveInDate || todayIso());
+  const [pendingMembershipPlan, setPendingMembershipPlan] = useState<MembershipPlanPublic | null>(null);
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
   const [authorizationConsent, setAuthorizationConsent] = useState(false);
+  const [seatQuantity, setSeatQuantity] = useState("1");
   const [guestCheckoutOpen, setGuestCheckoutOpen] = useState(false);
   const [guestPayload, setGuestPayload] = useState<ReservationPayload | null>(null);
   const [loyaltyPreview, setLoyaltyPreview] = useState<LoyaltyRedemptionPreview | null>(null);
@@ -176,8 +177,8 @@ export function PublicSpaceDetailView({
     setError("");
     Promise.all([
       apiFetch<MarketplaceSpaceDetailResponse>(`/api/marketplace/spaces/${spaceId}`, { method: "GET" }),
-      apiFetch<SubscriptionPlan[]>(
-        `/api/subscription-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
+      apiFetch<MembershipPlanPublic[]>(
+        `/api/membership-plans/public?space_public_id=${encodeURIComponent(spaceId)}`,
         { method: "GET" },
       ).catch(() => []),
       fetchAndStoreAvailability().catch(() => null),
@@ -185,6 +186,13 @@ export function PublicSpaceDetailView({
       .then(([detailResponse, planResponse, availabilityResponse]) => {
         setDetail(detailResponse);
         setPlans(planResponse);
+        const initialMembershipPlan = initialPlanPublicId
+          ? planResponse.find((plan) => plan.public_id === initialPlanPublicId)
+          : null;
+        const firstMembershipPlan = initialMembershipPlan ?? planResponse.find((plan) =>
+          ["monthly_membership", "virtual_membership"].includes(plan.booking_mode),
+        );
+        setSelectedMembershipPlanId(firstMembershipPlan?.public_id ?? "");
         if (!availabilityResponse) {
           setAvailability(null);
           setAvailabilityFetchedAt(null);
@@ -197,7 +205,7 @@ export function PublicSpaceDetailView({
         setAvailability(null);
       })
       .finally(() => setLoading(false));
-  }, [fetchAndStoreAvailability, spaceId]);
+  }, [fetchAndStoreAvailability, initialPlanPublicId, spaceId]);
 
   const granularity =
     availability?.granularity_minutes ?? DEFAULT_GRANULARITY_MINUTES;
@@ -304,6 +312,23 @@ export function PublicSpaceDetailView({
   const leaseBookingMode = detail
     ? leaseBookingModeForSpaceType(detail.space.space_type)
     : null;
+  const membershipBookingMode = detail
+    ? membershipBookingModeForSpaceType(detail.space.space_type)
+    : null;
+  const isConferenceRoom = detail?.space.space_type === "conference_room";
+  const isSharedDesk = detail?.space.space_type === "shared_desk";
+  const isVirtualOffice = detail?.space.space_type === "virtual_office";
+  const membershipPlans = useMemo(
+    () => plans.filter((plan) => membershipBookingMode && plan.booking_mode === membershipBookingMode),
+    [membershipBookingMode, plans],
+  );
+  const selectedMembershipPlan = useMemo(
+    () =>
+      membershipPlans.find((plan) => plan.public_id === selectedMembershipPlanId) ??
+      membershipPlans[0] ??
+      null,
+    [membershipPlans, selectedMembershipPlanId],
+  );
 
   const hourlyPrice =
     availability?.hourly_price ?? detail?.space.hourly_price ?? null;
@@ -311,6 +336,11 @@ export function PublicSpaceDetailView({
     availability?.daily_price ?? detail?.space.price_daily ?? null;
   const hourlyAmount = moneyToNumber(hourlyPrice);
   const dailyAmount = moneyToNumber(dailyPrice);
+
+  useEffect(() => {
+    if (isSharedDesk) setAllDay(true);
+    if (isConferenceRoom) setAllDay(false);
+  }, [isConferenceRoom, isSharedDesk]);
 
   const dayOpenSpan = useMemo(() => {
     if (!selectedDay) return null;
@@ -345,18 +375,19 @@ export function PublicSpaceDetailView({
   }, [allDay, dayOpenSpan, startTime, endTime]);
 
   const volumeDiscounts = useMemo(() => detail?.space.volume_discounts ?? [], [detail?.space.volume_discounts]);
+  const bookingQuantity = isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1;
 
   const breakdown = useMemo(() => {
     if (allDay) {
       // Full-day: flat day rate, no volume discount.
       if (dailyAmount != null) {
         return {
-          base: dailyAmount,
+          base: dailyAmount * bookingQuantity,
           discountPercent: 0,
           discountAmount: 0,
-          total: dailyAmount,
+          total: dailyAmount * bookingQuantity,
           basis: "daily" as const,
-          units: 1,
+          units: bookingQuantity,
         };
       }
       if (hourlyAmount != null && dayOpenSpan != null) {
@@ -396,7 +427,7 @@ export function PublicSpaceDetailView({
       basis: "hourly" as const,
       units: hours,
     };
-  }, [allDay, dailyAmount, hourlyAmount, dayOpenSpan, hours, volumeDiscounts]);
+  }, [allDay, bookingQuantity, dailyAmount, hourlyAmount, dayOpenSpan, hours, volumeDiscounts]);
 
   const bufferBefore = availability?.buffer_before_minutes ?? detail?.space.buffer_before_minutes ?? 0;
   const bufferAfter = availability?.buffer_after_minutes ?? detail?.space.buffer_after_minutes ?? 0;
@@ -457,6 +488,7 @@ export function PublicSpaceDetailView({
       end_datetime: end.toISOString(),
       booking_mode: allDay ? "day_pass" : "hourly",
       full_day: allDay,
+      seats_requested: isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1,
       recurrence,
     };
   }, [
@@ -469,6 +501,8 @@ export function PublicSpaceDetailView({
     openWindow.start,
     recurrenceCount,
     recurrenceFrequency,
+    seatQuantity,
+    isSharedDesk,
     startTime,
   ]);
 
@@ -689,14 +723,64 @@ export function PublicSpaceDetailView({
     }
   }
 
-  function handleMembershipClick(plan: SubscriptionPlan) {
+  async function submitMembershipRequest(plan: MembershipPlanPublic, paymentMethodPublicId: string) {
+    await apiFetch(
+      "/api/booking-requests",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          membership_plan_public_id: plan.public_id,
+          desired_start_date: membershipStartDate,
+          seats_requested: 1,
+          member_owner_payment_method_public_id: paymentMethodPublicId,
+          payment_authorization_consent: true,
+        }),
+      },
+      getAccessToken() ?? undefined,
+    );
+    router.push("/member/requests");
+  }
+
+  async function handleMembershipClick(plan: MembershipPlanPublic) {
+    if (!detail) return;
     if (!getAccessToken()) {
-      setGuestPayload(null);
-      setGuestCheckoutOpen(true);
+      router.push(
+        buildLoginHref(
+          buildSelfNextHref({
+            planPublicId: plan.public_id,
+            moveInDate: membershipStartDate,
+          }),
+        ),
+      );
       return;
     }
-    setSelectedPlan(plan);
-    setSubscriptionOpen(true);
+    if (!membershipStartDate) {
+      setError("Choose a start date before continuing.");
+      return;
+    }
+    setRequesting(true);
+    setError("");
+    try {
+      const token = getAccessToken() ?? undefined;
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(detail.space.public_id)}`,
+        { method: "GET" },
+        token,
+      );
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
+      }
+      if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
+        setPendingMembershipPlan(plan);
+        setPaymentMethodOpen(true);
+        return;
+      }
+      await submitMembershipRequest(plan, resolved.payment_method_public_id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Membership request failed");
+    } finally {
+      setRequesting(false);
+    }
   }
 
   const requestedPriddyPoints = Math.max(0, Number(priddyPoints || 0));
@@ -715,6 +799,67 @@ export function PublicSpaceDetailView({
     recurrenceFrequency === "none" &&
     loyaltyDiscountCents > 0 &&
     loyaltyDiscountCents >= (breakdown ? Math.round(breakdown.total * 100) : loyaltyPreview?.subtotal_cents || 0);
+
+  const membershipPanel = membershipBookingMode ? (
+    <div className="rounded-2xl border border-line p-5">
+      <div className="text-sm font-semibold text-text">
+        {isVirtualOffice ? "Virtual office membership" : "Coworking membership"}
+      </div>
+      {membershipPlans.length > 0 && selectedMembershipPlan ? (
+        <div className="mt-4 grid gap-4">
+          <label className="grid gap-1 text-xs font-medium text-text-3">
+            Term
+            <select
+              value={selectedMembershipPlan.public_id}
+              onChange={(event) => setSelectedMembershipPlanId(event.target.value)}
+              className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
+            >
+              {membershipPlans.map((plan) => (
+                <option key={plan.public_id} value={plan.public_id}>
+                  {plan.commitment_months && plan.commitment_months > 1
+                    ? `${plan.commitment_months}-month`
+                    : "Month-to-month"}{" "}
+                  • {formatCents(plan.price_cents)}/mo
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-text-3">
+            Start date
+            <input
+              type="date"
+              value={membershipStartDate}
+              min={todayIso()}
+              onChange={(event) => setMembershipStartDate(event.target.value)}
+              className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
+            />
+          </label>
+          <div className="rounded-[18px] border border-line bg-surface-2 px-4 py-3">
+            <div className="flex items-center justify-between text-sm text-text-2">
+              <span>Monthly price</span>
+              <span className="font-semibold text-text">{formatCents(selectedMembershipPlan.price_cents)}</span>
+            </div>
+            {selectedMembershipPlan.included_meeting_room_hours_per_month > 0 ? (
+              <div className="mt-2 text-xs text-text-3">
+                Includes {selectedMembershipPlan.included_meeting_room_hours_per_month} meeting-room hours per month.
+              </div>
+            ) : null}
+          </div>
+          {error ? <div className="text-sm text-danger">{error}</div> : null}
+          <button
+            type="button"
+            onClick={() => handleMembershipClick(selectedMembershipPlan)}
+            disabled={requesting}
+            className="inline-flex h-12 items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {requesting ? "Submitting..." : isAuthenticated ? "Request membership" : "Sign in to request membership"}
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 text-sm text-text-3">Membership terms have not been published yet.</div>
+      )}
+    </div>
+  ) : null;
 
   if (loading) {
     return (
@@ -976,6 +1121,10 @@ export function PublicSpaceDetailView({
                   initialMoveInDate={initialMoveInDate}
                 />
               </div>
+            ) : isVirtualOffice ? (
+              <div className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-pop">
+                {membershipPanel}
+              </div>
             ) : (
             <div className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-pop">
               {detail.cancellation_policy ? (
@@ -1016,7 +1165,7 @@ export function PublicSpaceDetailView({
                     granularityMinutes={granularity}
                   />
 
-                  {!allDay ? (
+                  {isConferenceRoom && !allDay ? (
                     <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
                       <label className="grid gap-1 text-xs font-medium text-text-3">
                         <span className="inline-flex items-center gap-2">
@@ -1064,33 +1213,21 @@ export function PublicSpaceDetailView({
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAllDay(false)}
-                      disabled={hourlyAmount == null}
-                      className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                        !allDay
-                          ? "border-brand bg-brand text-white"
-                          : "border-line bg-surface text-text-2 hover:border-line-strong"
-                      }`}
-                    >
-                      By the hour
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAllDay(true)}
-                      disabled={allDayDisabled || dailyAmount == null}
-                      className={`rounded-2xl border px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                        allDay
-                          ? "border-brand bg-brand text-white"
-                          : "border-line bg-surface text-text-2 hover:border-line-strong"
-                      }`}
-                    >
-                      Full day
-                    </button>
-                  </div>
+                  {isSharedDesk ? (
+                    <label className="grid gap-1 text-xs font-medium text-text-3">
+                      Seats
+                      <input
+                        type="number"
+                        min={1}
+                        max={detail.space.capacity || 1}
+                        value={seatQuantity}
+                        onChange={(event) => setSeatQuantity(event.target.value)}
+                        className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
+                      />
+                    </label>
+                  ) : null}
 
+                  {isConferenceRoom ? (
                   <div className="grid gap-2 rounded-[18px] border border-line bg-surface-2 p-3">
                     <label className="grid gap-1 text-xs font-medium text-text-3">
                       Recurrence
@@ -1118,6 +1255,7 @@ export function PublicSpaceDetailView({
                       </label>
                     ) : null}
                   </div>
+                  ) : null}
 
                   {bufferBefore > 0 || bufferAfter > 0 ? (
                     <div className="rounded-[18px] border border-warning/30 bg-warning-soft px-4 py-3 text-xs leading-5 text-warning">
@@ -1229,7 +1367,7 @@ export function PublicSpaceDetailView({
                   <div className="mt-5 space-y-3 text-sm text-text-2">
                     {breakdown.basis === "daily" ? (
                       <div className="flex items-center justify-between">
-                        <span>Day rate</span>
+                        <span>{isSharedDesk ? `Day Pass x ${bookingQuantity}` : "Day rate"}</span>
                         <span>{formatUsd(breakdown.base)}</span>
                       </div>
                     ) : breakdown.basis === "capped_to_daily" ? (
@@ -1295,47 +1433,13 @@ export function PublicSpaceDetailView({
                 )}
               </div>
 
-              {plans.length > 0 ? (
-                <div className="rounded-2xl border border-line p-5">
-                  <div className="text-sm font-semibold text-text">Membership plans</div>
-                  <div className="mt-4 grid gap-3">
-                    {plans.map((plan) => (
-                      <div key={plan.public_id} className="rounded-xl border border-line bg-surface-2 px-4 py-3">
-                        <div className="text-sm font-semibold text-text">{plan.name}</div>
-                        <div className="mt-1 text-sm text-text-2">
-                          {plan.billing_cycle} • ${plan.price}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleMembershipClick(plan)}
-                          className="mt-3 inline-flex h-10 items-center justify-center rounded-full border border-line-strong px-4 text-sm font-medium text-text-2 transition hover:border-text hover:text-text"
-                        >
-                          {isAuthenticated ? "Start membership" : "Sign in for membership"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+              {isSharedDesk ? membershipPanel : null}
             </div>
             )}
           </aside>
         </div>
       </div>
 
-      {selectedPlan ? (
-        <SubscriptionModal
-          open={subscriptionOpen}
-          spacePublicId={spaceId}
-          planPublicId={selectedPlan.public_id}
-          planName={selectedPlan.name}
-          onClose={() => setSubscriptionOpen(false)}
-          onDone={() => {
-            setSubscriptionOpen(false);
-            router.push("/member/subscriptions");
-          }}
-        />
-      ) : null}
       <PaymentMethodModal
         open={paymentMethodOpen}
         spacePublicId={detail.space.public_id}
@@ -1343,7 +1447,11 @@ export function PublicSpaceDetailView({
         onClose={() => setPaymentMethodOpen(false)}
         onSaved={(paymentMethodPublicId) => {
           setPaymentMethodOpen(false);
-          if (pendingReservation) {
+          if (pendingMembershipPlan) {
+            const plan = pendingMembershipPlan;
+            setPendingMembershipPlan(null);
+            submitMembershipRequest(plan, paymentMethodPublicId).catch(() => null);
+          } else if (pendingReservation) {
             submitReservation(pendingReservation, paymentMethodPublicId).catch(() => null);
           }
         }}
