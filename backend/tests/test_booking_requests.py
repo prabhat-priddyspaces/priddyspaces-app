@@ -885,10 +885,13 @@ def test_booking_request_approval_sends_one_calendar_email_and_audits_actor(
     confirmed = [email for email in sent if email["subject"] == "Booking confirmed"]
     assert len(confirmed) == 1
     assert confirmed[0]["personalizations"][0]["to"][0]["email"] == member.email
-    assert len(confirmed[0]["attachments"]) == 1
-    attachment = confirmed[0]["attachments"][0]
-    assert attachment["filename"].endswith(".ics")
-    assert "text/calendar" in attachment["type"]
+    assert len(confirmed[0]["attachments"]) == 2
+    filenames = {attachment["filename"] for attachment in confirmed[0]["attachments"]}
+    types = {attachment["type"] for attachment in confirmed[0]["attachments"]}
+    assert any(filename.endswith(".ics") for filename in filenames)
+    assert any(filename.endswith(".png") for filename in filenames)
+    assert any("text/calendar" in content_type for content_type in types)
+    assert "image/png" in types
     assert confirmed[0]["personalizations"][0]["custom_args"]["outbound_public_id"]
 
     outbounds = _booking_outbounds(db_session, req_id, "booking_confirmed")

@@ -40,6 +40,8 @@ describe("owner AppShell mobile navigation", () => {
     // Drawer gives access to owner nav items that the 4-item bottom nav omits,
     // achieving parity with the desktop sidebar.
     const links = within(drawer);
+    expect(links.getByText("Scanner")).toBeInTheDocument();
+    expect(links.getByText("Attendance")).toBeInTheDocument();
     expect(links.getByText("Locations")).toBeInTheDocument();
     expect(links.getByText("Invoices")).toBeInTheDocument();
     expect(links.getByText("Members")).toBeInTheDocument();
@@ -58,6 +60,9 @@ describe("MobileSidebarDrawer customer variant", () => {
 
     const drawer = screen.getByTestId("mobile-sidebar-drawer");
     const links = within(drawer);
+    expect(links.getByText("Access passes")).toBeInTheDocument();
+    expect(links.getByText("My Space QR")).toBeInTheDocument();
+    expect(links.getByText("Directory")).toBeInTheDocument();
     expect(links.getByText("Memberships")).toBeInTheDocument();
     expect(links.getByText("Rewards")).toBeInTheDocument();
     expect(links.getByText("Invoices")).toBeInTheDocument();

@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.marketing import OutboundMessage
 from app.models.email_subscription_group import EmailSubscriptionGroup
+from app.models.space_access_pass import SpaceAccessPass
 from app.models.user import User
+from app.services.access_passes import access_pass_url, decrypted_token, qr_png_base64
 from app.services.booking_email_delivery import (
     BOOKING_EMAIL_CANCELLED,
     BOOKING_EMAIL_CONFIRMED,
@@ -619,6 +621,22 @@ def send_booking_confirmed_email(
         f"To: {req.end_datetime}",
     ]
     attachments = []
+    if booking:
+        access_pass = db.query(SpaceAccessPass).filter(SpaceAccessPass.booking_id == booking.id).first()
+        if access_pass:
+            pass_token = decrypted_token(access_pass)
+            pass_url = access_pass_url(pass_token)
+            lines.append(f"Access pass: {pass_url}")
+            qr_png = qr_png_base64(pass_token)
+            if qr_png:
+                attachments.append(
+                    {
+                        "content": qr_png,
+                        "type": "image/png",
+                        "filename": f"access-pass-{booking.public_id}.png",
+                        "disposition": "attachment",
+                    }
+                )
     if booking:
         attachments.append(
             _ics_attachment(

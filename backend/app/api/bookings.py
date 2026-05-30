@@ -21,6 +21,7 @@ from app.services.notifications import send_booking_cancelled_email
 from app.models.user import User
 from app.services.booking_payments import refund_booking_payment
 from app.services.cancellation_refunds import refund_percent_from_snapshot
+from app.services.access_passes import ensure_access_pass_for_booking, revoke_access_passes_for_booking
 
 router = APIRouter()
 
@@ -179,6 +180,10 @@ def update_booking(
 
     booking.status = payload.status
     db.add(booking)
+    if payload.status == BookingStatus.CONFIRMED:
+        ensure_access_pass_for_booking(db, booking)
+    elif payload.status == BookingStatus.CANCELED:
+        revoke_access_passes_for_booking(db, booking, reason="booking_cancelled")
     db.commit()
     db.refresh(booking)
     return booking
@@ -238,6 +243,7 @@ def cancel_booking(
         )
     booking.status = BookingStatus.CANCELED
     db.add(booking)
+    revoke_access_passes_for_booking(db, booking, reason="booking_cancelled")
     if req:
         req.status = BookingRequestStatus.CANCELLED
         req.cancelled_at = now
@@ -385,6 +391,7 @@ def refund_booking(
         )
     booking.status = BookingStatus.CANCELED
     db.add(booking)
+    revoke_access_passes_for_booking(db, booking, reason="booking_refunded")
     if req:
         req.status = BookingRequestStatus.CANCELLED
         req.cancelled_at = datetime.now(timezone.utc)
