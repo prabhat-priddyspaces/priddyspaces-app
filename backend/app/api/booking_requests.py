@@ -1275,7 +1275,12 @@ def preview_booking_request_price(
         else 1
     )
     multiplier = quantity
-    label = "Day Pass" if is_day_pass else "Hourly reservation"
+    if is_day_pass and _space_type_value(space) == SpaceType.CONFERENCE_ROOM.value:
+        label = "Day Rate"
+    elif is_day_pass:
+        label = "Day Pass"
+    else:
+        label = "Hourly reservation"
     return BookingPricePreviewOut(
         base_amount_cents=estimate.base_cents * multiplier,
         discount_amount_cents=estimate.discount_cents * multiplier,

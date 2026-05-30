@@ -51,7 +51,9 @@ function typeConfig(spaceType: string) {
       capacityLabel: "Room capacity",
       capacityHelp: "Number of people the room can seat.",
       showHourly: true,
-      showDaily: false,
+      showDaily: true,
+      dailyLabel: "Day rate price (USD)",
+      dailyHelp: "Optional all-day conference room price.",
       showMonthly: false,
       showAvailability: true,
       showBuffers: true,
@@ -63,6 +65,8 @@ function typeConfig(spaceType: string) {
       capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
       showHourly: false,
       showDaily: true,
+      dailyLabel: "Day pass price (USD)",
+      dailyHelp: "Charged per shared-desk day pass seat.",
       showMonthly: false,
       showAvailability: true,
       showBuffers: false,
@@ -74,6 +78,8 @@ function typeConfig(spaceType: string) {
       capacityHelp: "",
       showHourly: false,
       showDaily: false,
+      dailyLabel: "",
+      dailyHelp: "",
       showMonthly: false,
       showAvailability: false,
       showBuffers: false,
@@ -84,6 +90,8 @@ function typeConfig(spaceType: string) {
     capacityHelp: "Number of people included in this office or suite.",
     showHourly: false,
     showDaily: false,
+    dailyLabel: "",
+    dailyHelp: "",
     showMonthly: false,
     showAvailability: false,
     showBuffers: false,
@@ -258,7 +266,7 @@ export function EditSpaceClient() {
                 ) : null}
                 {config.showDaily ? (
               <div className="space-y-2">
-                <Label htmlFor="daily">Day pass price (USD)</Label>
+                <Label htmlFor="daily">{config.dailyLabel}</Label>
                 <Input
                   id="daily"
                   type="number"
@@ -269,9 +277,7 @@ export function EditSpaceClient() {
                   onChange={(e) => setForm({ ...form, price_daily: e.target.value })}
                   placeholder="200"
                 />
-                <div className="text-xs text-textMuted">
-                  Charged per shared-desk day pass seat.
-                </div>
+                <div className="text-xs text-textMuted">{config.dailyHelp}</div>
               </div>
                 ) : null}
                 {config.showMonthly ? (
@@ -321,20 +327,6 @@ export function EditSpaceClient() {
               Amenities are now assigned on the location. Update them from the location editor if
               this room should expose different amenities.
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <PointsSelect
-                id="priddy-points"
-                label="Priddy Points"
-                value={form.priddy_points_enabled}
-                onChange={(value) => setForm({ ...form, priddy_points_enabled: value })}
-              />
-              <PointsSelect
-                id="owner-points"
-                label="Owner points"
-                value={form.owner_points_enabled}
-                onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
-              />
-            </div>
             {config.showAvailability ? (
             <div className="grid gap-2 md:grid-cols-2">
               <div className="space-y-2">
@@ -381,6 +373,20 @@ export function EditSpaceClient() {
               </div>
             </div>
             ) : null}
+            <div className="grid gap-3 md:grid-cols-2">
+              <PointsSelect
+                id="priddy-points"
+                label="Priddy Points"
+                value={form.priddy_points_enabled}
+                onChange={(value) => setForm({ ...form, priddy_points_enabled: value })}
+              />
+              <PointsSelect
+                id="owner-points"
+                label="Owner points"
+                value={form.owner_points_enabled}
+                onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
+              />
+            </div>
             <div className="flex gap-3">
               <Button type="button" onClick={handleSave}>
                 Save Changes

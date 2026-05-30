@@ -186,4 +186,73 @@ describe("booking approval and recovery mobile flows", () => {
     expect(await screen.findByText("10:00")).toBeTruthy();
     expect(screen.queryByText("09:00")).toBeNull();
   });
+
+  it("submits conference rooms as all-day bookings when selected", async () => {
+    mockRouteParams = { spaceId: "space_1" };
+    const today = new Date().toISOString().slice(0, 10);
+    (apiFetch as jest.Mock).mockImplementation((path: string, init?: RequestInit) => {
+      if (path === "/api/spaces/space_1") {
+        return Promise.resolve({
+          public_id: "space_1",
+          organization_name: "North Loop",
+          booking_approval_mode: "auto",
+          space_type: "conference_room",
+          capacity: 6,
+          price_hourly: 50,
+          price_daily: 200,
+          availability_status: "available",
+          availability_start_time: "09:00",
+          availability_end_time: "18:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+        });
+      }
+      if (path === "/api/spaces/space_1/media") return Promise.resolve([]);
+      if (path.startsWith("/api/membership-plans/public")) return Promise.resolve([]);
+      if (path.startsWith("/api/marketplace/spaces/space_1/availability")) {
+        return Promise.resolve({
+          space_public_id: "space_1",
+          timezone: "UTC",
+          granularity_minutes: 30,
+          availability_start_time: "09:00",
+          availability_end_time: "18:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          hourly_price: "50.00",
+          daily_price: "200.00",
+          days: [{ date: today, fully_blocked: false, busy_intervals: [] }],
+        });
+      }
+      if (path.startsWith("/api/payment-methods/resolve")) {
+        return Promise.resolve({
+          is_configured: true,
+          has_payment_method: true,
+          payment_method_public_id: "pm_1",
+          message: null,
+        });
+      }
+      if (path === "/api/booking-requests") {
+        return Promise.resolve({ public_id: "req_1", status: "approved", payment_status: "succeeded" });
+      }
+      return Promise.resolve([]);
+    });
+
+    const screen = render(<SpaceDetailScreen />);
+
+    expect(await screen.findByText("Reserve & Pay")).toBeTruthy();
+    fireEvent.press(screen.getByText("All day"));
+    expect(await screen.findByText(/All day from/)).toBeTruthy();
+    fireEvent.press(screen.getByText("Reserve & Pay"));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/booking-requests",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"booking_mode":"day_pass"'),
+        }),
+        "token",
+      );
+    });
+  });
 });

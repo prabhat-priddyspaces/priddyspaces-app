@@ -42,6 +42,7 @@ export interface MarketplaceLocationSummary {
   distance_miles: number | null;
   public_working_hours_enabled?: boolean;
   public_working_hours?: PublicWorkingHour[];
+  spaces?: MarketplaceLocationSpace[];
 }
 
 export const DEFAULT_RADIUS_MILES = 50;
@@ -449,7 +450,11 @@ export function getSpacePriceChips(
     if (space.price_daily != null) chips.push(`Day Pass ${formatUsd(space.price_daily, "/day")}`);
     if (space.membership_price != null) chips.push(`Membership $${space.membership_price}/mo`);
   } else if (config.routeKey === "private-offices") {
-    if (space.price_monthly != null) chips.push(`Private Office ${formatUsd(space.price_monthly, "/mo")}`);
+    if (space.membership_price != null) {
+      chips.push(`Lease ${formatUsd(space.membership_price, "/mo")}`);
+    } else if (space.price_monthly != null) {
+      chips.push(`Private Office ${formatUsd(space.price_monthly, "/mo")}`);
+    }
   } else {
     // Meeting rooms: lead with hourly (the new default), keep daily as the alt rate.
     if (space.hourly_price != null) {

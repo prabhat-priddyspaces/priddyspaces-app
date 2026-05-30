@@ -28,6 +28,38 @@ const coworkingResults = {
       starting_monthly_price: null,
       starting_hourly_price: null,
       starting_membership_price: 299,
+      spaces: [
+        {
+          public_id: "space_public_1",
+          name: "Open Desk A1",
+          space_type: "shared_desk",
+          capacity: 1,
+          availability_status: "available",
+          availability_start_time: "08:00:00",
+          availability_end_time: "18:00:00",
+          price_daily: 69,
+          price_monthly: null,
+          hourly_price: null,
+          membership_price: 299,
+          amenities: ["Coffee", "WiFi"],
+          image_url: "https://images.example.com/brickell.jpg",
+        },
+        {
+          public_id: "space_public_2",
+          name: "Open Desk B4",
+          space_type: "shared_desk",
+          capacity: 3,
+          availability_status: "available",
+          availability_start_time: "08:00:00",
+          availability_end_time: "18:00:00",
+          price_daily: 79,
+          price_monthly: null,
+          hourly_price: null,
+          membership_price: 299,
+          amenities: ["Coffee", "WiFi"],
+          image_url: "https://images.example.com/brickell-alt.jpg",
+        },
+      ],
     },
     {
       location_public_id: "loc_public_2",
@@ -48,6 +80,23 @@ const coworkingResults = {
       starting_monthly_price: null,
       starting_hourly_price: 60,
       starting_membership_price: null,
+      spaces: [
+        {
+          public_id: "space_public_3",
+          name: "Conference 14-B",
+          space_type: "conference_room",
+          capacity: 8,
+          availability_status: "available",
+          availability_start_time: "09:00:00",
+          availability_end_time: "18:00:00",
+          price_daily: 220,
+          price_monthly: null,
+          hourly_price: 60,
+          membership_price: null,
+          amenities: ["WiFi", "Whiteboard", "TV Display"],
+          image_url: "https://images.example.com/harbor.jpg",
+        },
+      ],
     },
   ],
 };
@@ -89,7 +138,7 @@ test("public marketplace can ask for browser location and search the default rad
   await expect(page).toHaveURL(/radius_miles=50/);
   await expect(page.getByRole("button", { name: /Locate me/ })).toBeVisible();
   await expect(page.locator('input[placeholder="50"]')).toHaveValue("50");
-  await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
   await expect
     .poll(() =>
       marketplaceRequests.some(
@@ -345,8 +394,9 @@ test("public marketplace redirects to /spaces and supports route-driven location
 
   await expect(page).toHaveURL(/\/spaces$/);
   await expect(page.getByRole("heading", { name: "Find Your Next Coworking Spot" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Brickell Commons" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Harbor Rooms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open Desk B4" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
 
   await page.locator('input[placeholder="Neighborhood, city, state, or ZIP"]').fill("Miami");
   await page.getByRole("button", { name: "Search" }).click();
@@ -354,8 +404,8 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await expect(page).toHaveURL(/\/spaces\?q=Miami$/);
   await expect(page.getByText("Results stay in the URL")).toBeVisible();
 
-  await page.locator('[data-selected="false"]').filter({ hasText: "Harbor Rooms" }).hover();
-  await expect(page.locator('[data-selected="true"]').filter({ hasText: "Harbor Rooms" })).toBeVisible();
+  await page.locator('[data-selected="false"]').filter({ hasText: "Conference 14-B" }).hover();
+  await expect(page.locator('[data-selected="true"]').filter({ hasText: "Conference 14-B" })).toBeVisible();
 
   await page.getByRole("link", { name: "Meeting Rooms" }).click();
   await expect(page).toHaveURL(/\/meeting-rooms\?q=Miami$/);
@@ -371,7 +421,7 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await expect(page).toHaveURL(/start_time=10%3A00/);
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
-  await page.locator('[data-selected="true"]').filter({ hasText: "Harbor Rooms" }).click();
+  await page.locator('[data-selected="true"]').filter({ hasText: "Conference 14-B" }).click();
   await expect(page).toHaveURL(/\/spaces\/space_public_3\?/);
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
   await expect(page.getByRole("button", { name: /April 15, 2026/ })).toBeVisible();

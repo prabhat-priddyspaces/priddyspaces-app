@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
+import { LeaseTermsManager } from "@/components/lease-terms-manager";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,8 @@ interface LocationOption {
 interface SpaceResponse {
   public_id: string;
 }
+
+type TermManagedSpaceType = "private_office" | "suite" | "shared_desk" | "virtual_office";
 
 function moneyPayload(value: string) {
   const trimmed = value.trim();
@@ -39,7 +42,9 @@ function typeConfig(spaceType: string) {
       capacityLabel: "Room capacity",
       capacityHelp: "Number of people the room can seat.",
       showHourly: true,
-      showDaily: false,
+      showDaily: true,
+      dailyLabel: "Day rate price (USD)",
+      dailyHelp: "Optional all-day conference room price.",
       showAvailability: true,
       showBuffers: true,
     };
@@ -50,6 +55,8 @@ function typeConfig(spaceType: string) {
       capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
       showHourly: false,
       showDaily: true,
+      dailyLabel: "Day pass price (USD)",
+      dailyHelp: "Charged per shared-desk day pass seat.",
       showAvailability: true,
       showBuffers: false,
     };
@@ -60,6 +67,8 @@ function typeConfig(spaceType: string) {
       capacityHelp: "",
       showHourly: false,
       showDaily: false,
+      dailyLabel: "",
+      dailyHelp: "",
       showAvailability: false,
       showBuffers: false,
     };
@@ -69,9 +78,15 @@ function typeConfig(spaceType: string) {
     capacityHelp: "Number of people included in this office or suite.",
     showHourly: false,
     showDaily: false,
+    dailyLabel: "",
+    dailyHelp: "",
     showAvailability: false,
     showBuffers: false,
   };
+}
+
+function isTermManagedSpaceType(spaceType: string): spaceType is TermManagedSpaceType {
+  return ["private_office", "suite", "shared_desk", "virtual_office"].includes(spaceType);
 }
 
 export default function NewSpacePage() {
@@ -99,6 +114,11 @@ export default function NewSpacePage() {
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [createdSpace, setCreatedSpace] = useState<{
+    public_id: string;
+    space_type: TermManagedSpaceType;
+    capacity: number;
+  } | null>(null);
   const config = typeConfig(form.space_type);
 
   useEffect(() => {
@@ -132,6 +152,16 @@ export default function NewSpacePage() {
       setMessage("");
       if (!form.location_public_id) {
         setMessage("Choose a location before creating a room.");
+        return;
+      }
+      if (createdSpace?.space_type === form.space_type) {
+        if (nextStep === "media") {
+          router.push(
+            `/owner/spaces/media?spaceId=${encodeURIComponent(createdSpace.public_id)}&locationId=${encodeURIComponent(form.location_public_id)}`
+          );
+        } else {
+          router.push(`/owner/locations/spaces?locationId=${encodeURIComponent(form.location_public_id)}`);
+        }
         return;
       }
       const capacity = form.space_type === "virtual_office" ? 1 : Number(form.capacity || 1);
@@ -169,6 +199,13 @@ export default function NewSpacePage() {
         router.push(
           `/owner/spaces/media?spaceId=${encodeURIComponent(space.public_id)}&locationId=${encodeURIComponent(form.location_public_id)}`
         );
+      } else if (isTermManagedSpaceType(form.space_type)) {
+        setCreatedSpace({
+          public_id: space.public_id,
+          space_type: form.space_type,
+          capacity,
+        });
+        setMessage("Space saved. Add terms below, or return to inventory when finished.");
       } else {
         router.push(`/owner/locations/spaces?locationId=${encodeURIComponent(form.location_public_id)}`);
       }
@@ -268,20 +305,6 @@ export default function NewSpacePage() {
               Amenities are now managed at the location level. Create or edit them from the
               location form and organization settings.
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <PointsSelect
-                id="priddy-points"
-                label="Priddy Points"
-                value={form.priddy_points_enabled}
-                onChange={(value) => setForm({ ...form, priddy_points_enabled: value })}
-              />
-              <PointsSelect
-                id="owner-points"
-                label="Owner points"
-                value={form.owner_points_enabled}
-                onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
-              />
-            </div>
             {config.showHourly || config.showDaily ? (
             <div className="grid gap-2 md:grid-cols-2">
               {config.showHourly ? (
@@ -304,7 +327,7 @@ export default function NewSpacePage() {
               ) : null}
               {config.showDaily ? (
               <div className="space-y-2">
-                <Label htmlFor="daily">Day pass price (USD)</Label>
+                <Label htmlFor="daily">{config.dailyLabel}</Label>
                 <Input
                   id="daily"
                   type="number"
@@ -315,9 +338,7 @@ export default function NewSpacePage() {
                   onChange={(e) => setForm({ ...form, price_daily: e.target.value })}
                   placeholder="200"
                 />
-                <div className="text-xs text-textMuted">
-                  Charged per shared-desk day pass seat.
-                </div>
+                <div className="text-xs text-textMuted">{config.dailyHelp}</div>
               </div>
               ) : null}
             </div>
@@ -370,6 +391,20 @@ export default function NewSpacePage() {
               </div>
             </div>
             ) : null}
+            <div className="grid gap-3 md:grid-cols-2">
+              <PointsSelect
+                id="priddy-points"
+                label="Priddy Points"
+                value={form.priddy_points_enabled}
+                onChange={(value) => setForm({ ...form, priddy_points_enabled: value })}
+              />
+              <PointsSelect
+                id="owner-points"
+                label="Owner points"
+                value={form.owner_points_enabled}
+                onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
+              />
+            </div>
             <div className="flex flex-wrap gap-3">
               <Button type="button" onClick={() => handleSave("media")} disabled={saving}>
                 {saving ? "Saving..." : "Save And Add Photos"}
@@ -380,7 +415,7 @@ export default function NewSpacePage() {
                 onClick={() => handleSave("inventory")}
                 disabled={saving}
               >
-                  Save Space
+                  {createdSpace?.space_type === form.space_type ? "Done" : "Save Space"}
               </Button>
               <Link href={form.location_public_id ? `/owner/locations/spaces?locationId=${form.location_public_id}` : "/owner/locations"}>
                 <Button type="button" variant="ghost">
@@ -391,6 +426,30 @@ export default function NewSpacePage() {
             {message ? <div className="text-sm text-textMuted">{message}</div> : null}
           </div>
         </Card>
+        {isTermManagedSpaceType(form.space_type) ? (
+          createdSpace?.space_type === form.space_type ? (
+            <LeaseTermsManager
+              spacePublicId={createdSpace.public_id}
+              spaceType={createdSpace.space_type}
+              spaceCapacity={createdSpace.space_type === "virtual_office" ? 1 : createdSpace.capacity}
+            />
+          ) : (
+            <Card>
+              <div className="grid gap-1">
+                <h3 className="text-lg font-semibold">
+                  {form.space_type === "shared_desk"
+                    ? "Membership Terms"
+                    : form.space_type === "virtual_office"
+                      ? "Virtual Membership Terms"
+                      : "Lease Terms"}
+                </h3>
+                <p className="text-sm text-textSecondary">
+                  Save this space to add the term lengths and monthly prices members can buy.
+                </p>
+              </div>
+            </Card>
+          )
+        ) : null}
       </div>
     </AppShell>
   );

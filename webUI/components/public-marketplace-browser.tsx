@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   Calendar as CalendarIcon,
@@ -13,7 +13,6 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
-  Star,
   Users,
 } from "lucide-react";
 
@@ -35,6 +34,7 @@ import {
   buildTabHref,
   formatLocationAddress,
   getLocationPriceChips,
+  getSpacePriceChips,
   MarketplaceLocationSearchResponse,
 } from "@/lib/public-marketplace";
 import { PublicMarketplaceMap } from "@/components/public-marketplace-map";
@@ -84,7 +84,6 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
 
   const [form, setForm] = useState(DEFAULT_FORM);
   const [results, setResults] = useState<MarketplaceLocationSearchResponse["results"]>([]);
-  const [totalLocations, setTotalLocations] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
@@ -102,6 +101,20 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
     searchInputRef,
     (place) => onPlaceSelectRef.current(place),
     { types: ["geocode"] },
+  );
+  const resultCards = useMemo(
+    () =>
+      results.flatMap((location) => {
+        const spaces = location.spaces?.length ? location.spaces : [null];
+        return spaces.map((space) => ({
+          location,
+          space,
+          cardKey: space
+            ? `${location.location_public_id}-${space.public_id}`
+            : location.location_public_id,
+        }));
+      }),
+    [results],
   );
 
   useEffect(() => {
@@ -140,7 +153,6 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
     })
       .then((response) => {
         setResults(response.results);
-        setTotalLocations(response.meta.total_locations);
         setSelectedLocationId((current) =>
           response.results.some((result) => result.location_public_id === current)
             ? current
@@ -150,7 +162,6 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to load marketplace locations");
         setResults([]);
-        setTotalLocations(0);
         setSelectedLocationId(null);
       })
       .finally(() => setLoading(false));
@@ -530,7 +541,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             <div className="flex items-end justify-between gap-3">
               <div>
                 <div className="text-[14px] text-text-2">
-                  <strong className="text-text">Showing {totalLocations} locations</strong>
+                  <strong className="text-text">Showing {resultCards.length} listings</strong>
                 </div>
                 <div className="text-[11px] text-text-3 mt-0.5">
                   Results stay in the URL, so you can refresh or share this search.
@@ -554,17 +565,23 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               </Card>
             ) : null}
 
-            {results.map((location, index) => {
+            {resultCards.map(({ location, space, cardKey }, index) => {
               const chips = getLocationPriceChips(config, location);
+              const spaceChips = space ? getSpacePriceChips(config, space) : [];
               const active = location.location_public_id === selectedLocationId;
               const locationHref = buildMarketplaceLocationHref(
                 routeKey,
                 location.location_public_id,
                 currentSearch,
               );
-              const primaryHref = location.featured_space_public_id
+              const primaryHref = space
+                ? buildMarketplaceSpaceHref(space.public_id, routeKey, currentSearch)
+                : location.featured_space_public_id
                 ? buildMarketplaceSpaceHref(location.featured_space_public_id, routeKey, currentSearch)
                 : locationHref;
+              const listingTitle = space?.name || location.name;
+              const listingImage = space?.image_url || location.featured_image_url;
+              const primaryPrice = spaceChips[0] ?? (chips[0] ? `${chips[0].value} ${chips[0].label.toLowerCase()}` : null);
               const featured = index === 0;
 
               function handleCardActivate() {
@@ -574,14 +591,15 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
 
               return (
                 <div
-                  key={location.location_public_id}
+                  key={cardKey}
                   ref={(node) => {
+                    cardRefs.current[cardKey] = node;
                     cardRefs.current[location.location_public_id] = node;
                   }}
                   data-selected={active ? "true" : "false"}
                   role="link"
                   tabIndex={0}
-                  aria-label={`Open ${location.name}`}
+                  aria-label={`Open ${listingTitle}`}
                   onMouseEnter={() => handleSelectLocation(location.location_public_id)}
                   onFocus={() => handleSelectLocation(location.location_public_id)}
                   onClick={handleCardActivate}
@@ -612,8 +630,8 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       }}
                     >
                       <PublicImageWithFallback
-                        src={location.featured_image_url}
-                        alt={location.name}
+                        src={listingImage}
+                        alt={listingTitle}
                         className="h-full w-full object-cover"
                         fallbackClassName="absolute inset-0 grid place-items-center text-brand opacity-50"
                       />
@@ -626,7 +644,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                           Featured
                         </Badge>
                       ) : null}
-                      {!location.featured_image_url ? (
+                      {!listingImage ? (
                         <div className="absolute inset-0 grid place-items-center text-brand opacity-40 pointer-events-none">
                           <Building2 size={28} />
                         </div>
@@ -637,7 +655,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <h2 className="text-[15px] font-semibold tracking-[-0.01em] truncate">
-                              {location.name}
+                              {listingTitle}
                             </h2>
                             <div className="text-[11px] text-text-3 mt-0.5 truncate">
                               {formatLocationAddress(location)}
@@ -671,29 +689,21 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       </div>
                       <div className="flex flex-wrap items-end gap-x-2 gap-y-2 mt-2">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <div className="flex items-center gap-1 text-[11px] text-text-3">
-                            <Star
-                              size={11}
-                              className="fill-warning text-warning"
-                            />
-                            <strong className="text-text font-mono" style={{ fontVariantNumeric: "tabular-nums" }}>
-                              {location.matching_space_count}
-                            </strong>
-                            <span>
-                              {location.matching_space_count === 1
-                                ? "matching space"
-                                : "matching spaces"}
-                            </span>
-                          </div>
-                          {chips[0] ? (
+                          {space ? (
+                            <div className="flex items-center gap-1 text-[11px] text-text-3">
+                              <Users size={11} />
+                              <strong className="text-text font-mono" style={{ fontVariantNumeric: "tabular-nums" }}>
+                                {space.capacity}
+                              </strong>
+                              <span>{space.capacity === 1 ? "seat" : "seats"}</span>
+                            </div>
+                          ) : null}
+                          {primaryPrice ? (
                             <span
                               className="font-mono text-[14px] font-semibold tracking-[-0.01em] truncate"
                               style={{ fontVariantNumeric: "tabular-nums" }}
                             >
-                              {chips[0].value}
-                              <span className="text-[10px] text-text-3 font-sans font-medium ml-1">
-                                {chips[0].label.toLowerCase()}
-                              </span>
+                              {primaryPrice}
                             </span>
                           ) : null}
                         </div>
