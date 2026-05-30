@@ -23,6 +23,7 @@ from app.models.user import User
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.loyalty import grant_priddy_signup_points
 from app.services.organization_approval import send_organization_approval_request_email
+from app.services.access_passes import claim_guest_bookings_for_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -158,6 +159,7 @@ def _handle_user_upsert(db: Session, data: dict) -> None:
             ptm.is_active = True
 
     grant_priddy_signup_points(db, user)
+    claim_guest_bookings_for_user(db, user)
 
     _write_audit(db, "user.synced", "user", clerk_id, {"email": email})
 

@@ -11,6 +11,8 @@ type MenuItem = {
 
 const ownerItems: MenuItem[] = [
   { label: "Dashboard", screen: "Dashboard", target: "tab" },
+  { label: "Scanner", screen: "Scanner", target: "tab" },
+  { label: "Attendance", screen: "Attendance", target: "tab" },
   { label: "Locations", screen: "Locations", target: "tab" },
   { label: "Bookings", screen: "Bookings", target: "tab" },
   { label: "Team", screen: "OwnerTeam", target: "stack" },
@@ -23,14 +25,23 @@ const ownerItems: MenuItem[] = [
 const memberItems: MenuItem[] = [
   { label: "Marketplace", screen: "Marketplace", target: "tab" },
   { label: "Bookings", screen: "Bookings", target: "tab" },
+  { label: "Access Passes", screen: "AccessPasses", target: "tab" },
+  { label: "My Space QR", screen: "MySpaceQr", target: "tab" },
+  { label: "Directory", screen: "Directory", target: "tab" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" }
+];
+
+const adminItems: MenuItem[] = [
+  { label: "Scanner", screen: "Scanner", target: "tab" },
+  { label: "Attendance", screen: "Attendance", target: "tab" },
+  { label: "Profile", screen: "Profile", target: "tab" },
 ];
 
 export function MenuScreen() {
   const navigation = useNavigation<any>();
   const { me, signOut } = useAuth();
-  const items = me?.role === "owner" ? ownerItems : memberItems;
+  const items = me?.platform_role ? adminItems : me?.role === "owner" ? ownerItems : memberItems;
 
   function goTo(item: MenuItem) {
     if (item.target === "stack") {

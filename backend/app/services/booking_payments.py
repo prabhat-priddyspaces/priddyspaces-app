@@ -32,6 +32,7 @@ from app.services.notifications import (
     send_booking_request_cancelled_email,
     send_owner_booking_cancelled_notification,
 )
+from app.services.access_passes import ensure_access_pass_for_booking, ensure_access_passes_for_booking_request
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
 from app.services.cancellation_refunds import policy_for_space, policy_snapshot, refund_percent_from_snapshot
@@ -411,6 +412,8 @@ def finalize_successful_booking_request_payment(
     finalize_redemption_for_payment(db, req, booking, payment)
     db.commit()
     record_earned_for_payment(db, payment, booking=booking, booking_request=req)
+    ensure_access_passes_for_booking_request(db, req)
+    db.commit()
     return req, booking, payment
 
 
@@ -435,6 +438,9 @@ def charge_booking_request(
     )
     if existing_success and req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+        if booking:
+            ensure_access_pass_for_booking(db, booking, req=req)
+            db.commit()
         return req, booking, existing_success
 
     if req.status not in (BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED):
@@ -550,6 +556,8 @@ def charge_booking_request(
         db.refresh(booking)
         db.refresh(payment)
         finalize_redemption_for_payment(db, req, booking, payment)
+        db.commit()
+        ensure_access_passes_for_booking_request(db, req)
         db.commit()
         return req, booking, payment
 

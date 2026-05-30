@@ -115,6 +115,11 @@ from app.services.notifications import (
 )
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
+from app.services.access_passes import (
+    ensure_access_passes_for_booking_request,
+    ensure_guest_user_for_request,
+    revoke_access_passes_for_request,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1480,6 +1485,8 @@ def create_booking_request(
         req, booking, _payment = charge_booking_request(db, req)
         if req.status == BookingRequestStatus.APPROVED:
             _activate_booking_series_if_needed(db, req)
+            ensure_access_passes_for_booking_request(db, req)
+            db.commit()
             send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=user.id)
             _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=user.id)
         elif req.status == BookingRequestStatus.PAYMENT_FAILED:
@@ -1691,6 +1698,51 @@ def approve_booking_request(
         req = _approve_membership_request(db, req, payload.operator_notes)
         after_status = req.status
         booking = None
+    elif req.is_guest_checkout:
+        before_status = req.status
+        guest_user = ensure_guest_user_for_request(db, req)
+        if not guest_user:
+            raise HTTPException(status_code=400, detail="Guest email is required")
+        occurrences = expand_occurrences(
+            start_datetime=req.start_datetime,
+            end_datetime=req.end_datetime,
+            location=location,
+            space=space,
+        )
+        _validate_locked_occurrences_available(
+            db,
+            space=space,
+            location=location,
+            occurrences=occurrences,
+            ignore_booking_request_id=req.id,
+            booking_mode="day_pass" if req.request_kind == BookingRequestKind.DAILY_BOOKING.value else "hourly",
+            full_day=req.request_kind == BookingRequestKind.DAILY_BOOKING.value,
+            seats_requested=req.seats_requested or 1,
+        )
+        req.user_id = guest_user.id
+        req.status = BookingRequestStatus.APPROVED
+        req.operator_notes = payload.operator_notes
+        req.payment_status = req.payment_status or "not_charged"
+        req.approved_at = datetime.now(timezone.utc)
+        booking = Booking(
+            user_id=guest_user.id,
+            space_id=req.space_id,
+            tenant_id=req.tenant_id,
+            start_datetime=req.start_datetime,
+            end_datetime=req.end_datetime,
+            inventory_start_datetime=occurrences[0].inventory_start_datetime,
+            inventory_end_datetime=occurrences[0].inventory_end_datetime,
+            booking_request_id=req.id,
+            status=BookingStatus.CONFIRMED,
+        )
+        db.add(booking)
+        db.flush()
+        req.booking_id = booking.id
+        db.add(req)
+        db.commit()
+        db.refresh(booking)
+        db.refresh(req)
+        after_status = req.status
     elif settings.PAYMENT_CHARGE_ON_APPROVAL:
         before_status = req.status
         if not req.booking_id:
@@ -1765,6 +1817,8 @@ def approve_booking_request(
         after_status = req.status
     if req.status == BookingRequestStatus.APPROVED:
         booking_for_email = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+        ensure_access_passes_for_booking_request(db, req)
+        db.commit()
         send_booking_confirmed_email(db, req, booking_for_email, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
         _send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
@@ -1920,6 +1974,8 @@ def retry_booking_request_payment(
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
     if req.status == BookingRequestStatus.APPROVED:
         _activate_booking_series_if_needed(db, req)
+        ensure_access_passes_for_booking_request(db, req)
+        db.commit()
         send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=actor_id)
         _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
@@ -1965,6 +2021,7 @@ def reject_booking_request(
     req.operator_notes = payload.operator_notes
     req.rejected_at = datetime.now(timezone.utc)
     db.add(req)
+    revoke_access_passes_for_request(db, req, reason="booking_request_rejected")
     db.commit()
     db.refresh(req)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
@@ -2030,6 +2087,7 @@ def cancel_booking_request(
     req.status = BookingRequestStatus.CANCELLED
     req.cancelled_at = now
     db.add(req)
+    revoke_access_passes_for_request(db, req, reason="booking_request_cancelled")
     db.commit()
     db.refresh(req)
     if booking:

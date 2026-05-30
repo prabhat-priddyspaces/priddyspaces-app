@@ -18,6 +18,7 @@ from app.services.invoices import generate_invoice_pdf
 from app.services.loyalty import record_earned_for_payment, reverse_for_payment_refund
 from app.services.notifications import send_email
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
+from app.services.access_passes import ensure_access_pass_for_booking
 from app.services.storage import upload_invoice_pdf
 
 SUPPORTED_EVENTS = {
@@ -235,6 +236,7 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
 
     booking.status = BookingStatus.CONFIRMED
     db.add(booking)
+    ensure_access_pass_for_booking(db, booking)
     db.commit()
     db.refresh(booking)
 

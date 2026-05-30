@@ -44,6 +44,22 @@
 - `POST /api/booking-requests/{booking_request_public_id}/reject`
 - `POST /api/bookings`
 - `GET /api/bookings/{booking_public_id}`
+- `POST /api/bookings/{booking_public_id}/check-in`
+- `POST /api/bookings/{booking_public_id}/check-out`
+
+### Space Access Passes
+- `GET /api/access-passes` - member-only list of valid/upcoming passes for confirmed bookings.
+- `POST /api/access-passes` - member-only ensure/get pass for one owned confirmed booking.
+- `POST /api/access-passes/resolve` - reception, owner, assigned admin/staff, or platform team resolves a scanned QR token.
+- `POST /api/access-passes/public/resolve` - public guest fallback link resolves token status for email QR pages.
+- `POST /api/access-passes/check-in` - validates token, role/location scope, payment state, booking status, and booking window before creating attendance.
+- `POST /api/access-passes/check-out` - records checkout after check-in.
+
+### Attendance
+- `GET /api/attendance` - owner/admin/platform attendance history with filters for location, date, space type, currently in office, checked in/out, and member name/email.
+- `GET /api/attendance/current` - owner/admin/platform list of members currently checked in.
+- `GET /api/attendance/locations` - location options visible to the current owner/admin/platform user.
+- `GET /api/member/directory` - member-only same-location directory based on active memberships or recent confirmed bookings.
 
 ### Pricing
 - `POST /api/pricing-rules`

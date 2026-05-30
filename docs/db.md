@@ -17,6 +17,8 @@
 - Invoice
 - Payment
 - PaymentEvent
+- SpaceAccessPass
+- SpaceAttendanceRecord
 - User
 - AuditLog
 
@@ -27,6 +29,9 @@
 - Email verification required before allowing payment.
 - Pricing overrides only when admin permission toggle enabled.
 - All tenant-owned records include `tenant_id`.
+- Space access passes are generated only for confirmed bookings and are invalidated by cancellation, rejection, refund, void, expiry, or checkout.
+- QR codes must contain only an opaque access token/fallback URL; token lookup uses a hash and server-side validation.
+- Attendance stores one check-in event and one check-out event per booking, including scanner user, member, booking, location, space, and timestamp.
 
 ## Suggested Fields (examples)
 ### Location
@@ -71,6 +76,40 @@
 - end_datetime
 - status
 - stripe_payment_intent_id
+- checked_in_at
+- checked_out_at
+
+### SpaceAccessPass
+- id
+- public_id
+- tenant_id
+- booking_id
+- booking_request_id
+- location_id
+- space_id
+- user_id
+- token_hash
+- token_encrypted
+- valid_from_at
+- expires_at
+- status
+- revoked_at
+- revoked_reason
+- last_used_at
+
+### SpaceAttendanceRecord
+- id
+- public_id
+- tenant_id
+- access_pass_id
+- booking_id
+- location_id
+- space_id
+- member_id
+- scanned_by_user_id
+- event_type (`check_in` or `check_out`)
+- status
+- event_at
 
 ### User
 - id

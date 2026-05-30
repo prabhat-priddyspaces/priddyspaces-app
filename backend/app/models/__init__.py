@@ -32,6 +32,8 @@ from app.models.payment_refund import PaymentRefund
 from app.models.platform_setting import PlatformSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.space import Space
+from app.models.space_access_pass import SpaceAccessPass
+from app.models.space_attendance_record import SpaceAttendanceRecord
 from app.models.space_image import SpaceImage
 from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.models.pricing_rule import PricingRule
@@ -103,6 +105,8 @@ __all__ = [
     "PlatformSetting",
     "PlatformTeamMember",
     "Space",
+    "SpaceAccessPass",
+    "SpaceAttendanceRecord",
     "SpaceImage",
     "SpaceVolumeDiscount",
     "PricingRule",

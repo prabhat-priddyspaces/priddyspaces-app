@@ -27,6 +27,11 @@ import { MenuScreen } from "../screens/MenuScreen";
 import { InvoicesScreen } from "../screens/InvoicesScreen";
 import { PaymentsScreen } from "../screens/PaymentsScreen";
 import { AssistantScreen } from "../screens/AssistantScreen";
+import { AccessPassesScreen } from "../screens/access/AccessPassesScreen";
+import { MySpaceQrScreen } from "../screens/access/MySpaceQrScreen";
+import { MemberDirectoryScreen } from "../screens/access/MemberDirectoryScreen";
+import { AccessScannerScreen } from "../screens/access/AccessScannerScreen";
+import { AttendanceScreen } from "../screens/access/AttendanceScreen";
 
 const Stack = createNativeStackNavigator();
 const MemberStack = createNativeStackNavigator();
@@ -113,6 +118,9 @@ function MemberTabs() {
     >
       <Tabs.Screen name="Marketplace" component={MarketplaceStack} options={{ headerShown: false }} />
       <Tabs.Screen name="Bookings" component={BookingsScreen} />
+      <Tabs.Screen name="AccessPasses" component={AccessPassesScreen} options={{ title: "Access Passes" }} />
+      <Tabs.Screen name="MySpaceQr" component={MySpaceQrScreen} options={{ title: "My Space QR" }} />
+      <Tabs.Screen name="Directory" component={MemberDirectoryScreen} />
       <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>
   );
@@ -128,8 +136,26 @@ function OwnerTabs() {
       })}
     >
       <Tabs.Screen name="Dashboard" component={OwnerDashboardScreen} />
+      <Tabs.Screen name="Scanner" component={AccessScannerScreen} />
+      <Tabs.Screen name="Attendance" component={AttendanceScreen} />
       <Tabs.Screen name="Locations" component={OwnerLocationsScreen} />
       <Tabs.Screen name="Bookings" component={OwnerBookingsScreen} />
+      <Tabs.Screen name="Profile" component={ProfileScreen} />
+    </Tabs.Navigator>
+  );
+}
+
+function AdminTabs() {
+  return (
+    <Tabs.Navigator
+      screenOptions={({ navigation }) => ({
+        headerShown: true,
+        headerLeft: () => <MenuHeaderButton navigation={navigation} />,
+        headerRight: () => <AssistantHeaderButton navigation={navigation} />,
+      })}
+    >
+      <Tabs.Screen name="Scanner" component={AccessScannerScreen} />
+      <Tabs.Screen name="Attendance" component={AttendanceScreen} />
       <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>
   );
@@ -138,7 +164,7 @@ function OwnerTabs() {
 function MainApp() {
   const { me } = useAuth();
 
-  if (!me?.role) {
+  if (!me?.role && !me?.platform_role) {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -158,7 +184,7 @@ function MainApp() {
     <Stack.Navigator screenOptions={{ headerShown: true }}>
       <Stack.Screen
         name="App"
-        component={me.role === "owner" ? OwnerTabs : MemberTabs}
+        component={me.platform_role ? AdminTabs : me.role === "owner" ? OwnerTabs : MemberTabs}
         options={{ headerShown: false }}
       />
       <Stack.Screen name="BookingDetail" component={BookingDetailScreen} options={{ title: "Booking" }} />
@@ -166,6 +192,11 @@ function MainApp() {
       <Stack.Screen name="Menu" component={MenuScreen} options={{ title: "Menu" }} />
       <Stack.Screen name="Invoices" component={InvoicesScreen} options={{ title: "Invoices" }} />
       <Stack.Screen name="Payments" component={PaymentsScreen} options={{ title: "Payments" }} />
+      <Stack.Screen name="MemberDirectory" component={MemberDirectoryScreen} options={{ title: "Directory" }} />
+      <Stack.Screen name="AccessPasses" component={AccessPassesScreen} options={{ title: "Access Passes" }} />
+      <Stack.Screen name="MySpaceQr" component={MySpaceQrScreen} options={{ title: "My Space QR" }} />
+      <Stack.Screen name="AccessScanner" component={AccessScannerScreen} options={{ title: "Scanner" }} />
+      <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: "Attendance" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
       <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
       <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} />

@@ -7,6 +7,7 @@ type MeData = {
   email: string;
   role: string | null;
   app_role: string | null;
+  platform_role: string | null;
   has_organization: boolean;
   default_route: string;
 };
@@ -81,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: data.email,
         role: data.role,
         app_role: data.app_role,
+        platform_role: data.platform_role,
         has_organization: data.has_organization ?? false,
         default_route: data.default_route ?? "/onboarding/personal",
       };
