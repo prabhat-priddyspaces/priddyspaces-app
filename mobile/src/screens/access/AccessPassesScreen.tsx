@@ -55,7 +55,7 @@ export function AccessPassesScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Access Passes</Text>
-      <Text style={styles.subtitle}>Secure QR passes for approved bookings.</Text>
+      <Text style={styles.subtitle}>Secure QR passes for confirmed bookings.</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {loading && passes.length === 0 ? <ActivityIndicator style={{ marginTop: 18 }} /> : null}
       <FlatList
@@ -67,7 +67,7 @@ export function AccessPassesScreen() {
           !loading ? (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No valid access passes</Text>
-              <Text style={styles.muted}>Approved bookings will show a QR code here until the booking window expires.</Text>
+              <Text style={styles.muted}>Confirmed bookings will show a QR code here until the booking window expires.</Text>
             </View>
           ) : null
         }

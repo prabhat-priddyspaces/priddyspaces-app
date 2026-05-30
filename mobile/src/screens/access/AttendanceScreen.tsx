@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { useAuth } from "../../context/AuthContext";
-import { AttendanceFilters, AttendanceRecord, listAttendance } from "../../lib/accessPasses";
+import {
+  AttendanceFilters,
+  AttendanceLocation,
+  AttendanceRecord,
+  listAttendance,
+  listAttendanceLocations,
+  listCurrentAttendance,
+} from "../../lib/accessPasses";
 import { accessStyles as styles, formatDateTime, titleize } from "./accessStyles";
 
 function AttendanceCard({ row }: { row: AttendanceRecord }) {
@@ -25,10 +32,49 @@ function AttendanceCard({ row }: { row: AttendanceRecord }) {
   );
 }
 
+function FilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[
+        styles.secondaryButton,
+        { marginRight: 8, marginTop: 8, backgroundColor: selected ? "#EEF2FF" : "#FFFFFF", borderColor: selected ? "#4F46E5" : "#E5E7EB" },
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.secondaryButtonText, { color: selected ? "#3730A3" : "#111827" }]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const spaceTypes = [
+  ["", "All types"],
+  ["conference_room", "Conference"],
+  ["private_office", "Private"],
+  ["shared_desk", "Desk"],
+  ["suite", "Suite"],
+  ["virtual_office", "Virtual"],
+] as const;
+
+const statuses = [
+  ["", "Any status"],
+  ["checked_in", "Checked in"],
+  ["checked_out", "Checked out"],
+] as const;
+
 export function AttendanceScreen() {
   const { token } = useAuth();
   const [filters, setFilters] = useState<AttendanceFilters>({ page: 1, page_size: 100 });
   const [rows, setRows] = useState<AttendanceRecord[]>([]);
+  const [currentRows, setCurrentRows] = useState<AttendanceRecord[]>([]);
+  const [locations, setLocations] = useState<AttendanceLocation[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -38,8 +84,14 @@ export function AttendanceScreen() {
     setLoading(true);
     setMessage("");
     try {
-      const result = await listAttendance(filters, token);
+      const [result, current, locationOptions] = await Promise.all([
+        listAttendance(filters, token),
+        listCurrentAttendance(filters.location_public_id, token),
+        listAttendanceLocations(token),
+      ]);
       setRows(result.results);
+      setCurrentRows(current);
+      setLocations(locationOptions);
       setTotal(result.total);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Failed to load attendance");
@@ -58,14 +110,35 @@ export function AttendanceScreen() {
       <Text style={styles.subtitle}>Office attendance and check-in history.</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>Currently in office: {currentRows.length}</Text>
+        {currentRows.length === 0 ? (
+          <Text style={styles.muted}>No one is currently checked in.</Text>
+        ) : (
+          currentRows.slice(0, 3).map((row) => (
+            <Text key={row.booking_public_id} style={styles.muted}>
+              {row.member_name || row.member_email} · {row.location_name}
+            </Text>
+          ))
+        )}
+      </View>
+      <View style={styles.card}>
         <Text style={styles.value}>Filtered records: {total}</Text>
-        <TextInput
-          style={[styles.input, { marginTop: 12 }]}
-          value={filters.location_public_id || ""}
-          onChangeText={(value) => setFilters((current) => ({ ...current, location_public_id: value }))}
-          placeholder="Location public ID"
-          autoCapitalize="none"
-        />
+        <Text style={styles.label}>Location</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <FilterChip
+            label="All locations"
+            selected={!filters.location_public_id}
+            onPress={() => setFilters((current) => ({ ...current, location_public_id: "" }))}
+          />
+          {locations.map((location) => (
+            <FilterChip
+              key={location.location_public_id}
+              label={location.location_name}
+              selected={filters.location_public_id === location.location_public_id}
+              onPress={() => setFilters((current) => ({ ...current, location_public_id: location.location_public_id }))}
+            />
+          ))}
+        </ScrollView>
         <TextInput
           style={[styles.input, { marginTop: 10 }]}
           value={filters.date || ""}
@@ -73,20 +146,28 @@ export function AttendanceScreen() {
           placeholder="Date YYYY-MM-DD"
           autoCapitalize="none"
         />
-        <TextInput
-          style={[styles.input, { marginTop: 10 }]}
-          value={filters.space_type || ""}
-          onChangeText={(value) => setFilters((current) => ({ ...current, space_type: value }))}
-          placeholder="Space type"
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={[styles.input, { marginTop: 10 }]}
-          value={filters.status || ""}
-          onChangeText={(value) => setFilters((current) => ({ ...current, status: value }))}
-          placeholder="checked_in or checked_out"
-          autoCapitalize="none"
-        />
+        <Text style={styles.label}>Space type</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {spaceTypes.map(([value, label]) => (
+            <FilterChip
+              key={value || "all"}
+              label={label}
+              selected={(filters.space_type || "") === value}
+              onPress={() => setFilters((current) => ({ ...current, space_type: value }))}
+            />
+          ))}
+        </ScrollView>
+        <Text style={styles.label}>Status</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {statuses.map(([value, label]) => (
+            <FilterChip
+              key={value || "all"}
+              label={label}
+              selected={(filters.status || "") === value}
+              onPress={() => setFilters((current) => ({ ...current, status: value }))}
+            />
+          ))}
+        </ScrollView>
         <TextInput
           style={[styles.input, { marginTop: 10 }]}
           value={filters.search || ""}

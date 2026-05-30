@@ -86,6 +86,11 @@ class AttendanceListOut(BaseModel):
     page_size: int
 
 
+class AttendanceLocationOut(BaseModel):
+    location_public_id: str
+    location_name: str
+
+
 class MemberDirectoryItemOut(BaseModel):
     member_public_id: str
     name: str | None = None

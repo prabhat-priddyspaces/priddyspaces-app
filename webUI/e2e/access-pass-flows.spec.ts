@@ -127,12 +127,13 @@ test("owner attendance filters include member search", async ({ page }) => {
       attendanceRequests.push(url.search);
       return json(route, { results: [attendanceRow], total: 1, page: 1, page_size: 100 });
     }
+    if (key === "GET /api/attendance/locations") return json(route, [{ location_public_id: "loc_1", location_name: "Main" }]);
     if (key === "GET /api/attendance/current") return json(route, [attendanceRow]);
     return json(route, []);
   });
 
   await page.goto("/owner/attendance");
-  await expect(page.getByText("Member One")).toBeVisible();
+  await expect(page.getByText("Member One").first()).toBeVisible();
   await page.getByPlaceholder("Member search").fill("member@example.com");
   await expect.poll(() => attendanceRequests.some((query) => query.includes("search=member%40example.com"))).toBe(true);
 });

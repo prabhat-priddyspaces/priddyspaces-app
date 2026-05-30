@@ -73,6 +73,11 @@ export interface AttendanceList {
   page_size: number;
 }
 
+export interface AttendanceLocation {
+  location_public_id: string;
+  location_name: string;
+}
+
 export interface MemberDirectoryItem {
   member_public_id: string;
   name: string | null;
@@ -161,6 +166,10 @@ export function listAttendance(filters: AttendanceFilters = {}, token?: string) 
   });
   const query = params.toString();
   return apiFetch<AttendanceList>(`/api/attendance${query ? `?${query}` : ""}`, { method: "GET" }, token);
+}
+
+export function listAttendanceLocations(token?: string) {
+  return apiFetch<AttendanceLocation[]>("/api/attendance/locations", { method: "GET" }, token);
 }
 
 export function listCurrentAttendance(locationPublicId?: string, token?: string) {

@@ -19,6 +19,7 @@ from app.schemas.access_pass import (
     AccessPassResolveOut,
     AccessPassTokenIn,
     AttendanceListOut,
+    AttendanceLocationOut,
     AttendanceRecordOut,
     MemberDirectoryItemOut,
 )
@@ -371,6 +372,22 @@ def list_attendance(
     start = (page - 1) * page_size
     results = [_serialize_attendance(*row) for row in rows[start : start + page_size]]
     return AttendanceListOut(results=results, total=total, page=page, page_size=page_size)
+
+
+@router.get("/attendance/locations", response_model=list[AttendanceLocationOut])
+def list_attendance_locations(
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    loc_ids = _attendance_location_ids(db, user, None)
+    if not loc_ids:
+        return []
+    locations = db.query(Location).filter(Location.id.in_(loc_ids)).order_by(Location.name.asc()).all()
+    return [
+        AttendanceLocationOut(location_public_id=location.public_id, location_name=location.name)
+        for location in locations
+    ]
 
 
 @router.get("/attendance/current", response_model=list[AttendanceRecordOut])

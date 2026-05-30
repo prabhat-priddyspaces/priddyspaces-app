@@ -10,6 +10,8 @@ import {
   checkInAccessPass,
   listAccessPasses,
   listAttendance,
+  listAttendanceLocations,
+  listCurrentAttendance,
   listMemberDirectory,
   resolveAccessPass,
 } from "../src/lib/accessPasses";
@@ -44,6 +46,8 @@ jest.mock("../src/lib/accessPasses", () => {
     checkInAccessPass: jest.fn(),
     checkOutAccessPass: jest.fn(),
     listAttendance: jest.fn(),
+    listAttendanceLocations: jest.fn(),
+    listCurrentAttendance: jest.fn(),
   };
 });
 
@@ -140,6 +144,8 @@ describe("mobile access pass screens", () => {
       checked_in_at: "2026-07-01T10:05:00Z",
     });
     (listAttendance as jest.Mock).mockResolvedValue({ results: [attendance], total: 1, page: 1, page_size: 100 });
+    (listAttendanceLocations as jest.Mock).mockResolvedValue([{ location_public_id: "loc_1", location_name: "Main" }]);
+    (listCurrentAttendance as jest.Mock).mockResolvedValue([attendance]);
   });
 
   it("renders populated and empty access pass states", async () => {
@@ -186,7 +192,8 @@ describe("mobile access pass screens", () => {
 
   it("sends attendance filter params to the API", async () => {
     const screen = render(<AttendanceScreen />);
-    expect(await screen.findByText("Member One")).toBeTruthy();
+    expect(await screen.findByText("Currently in office: 1")).toBeTruthy();
+    expect((await screen.findAllByText("Member One")).length).toBeGreaterThan(0);
     fireEvent.changeText(screen.getByPlaceholderText("Member name or email"), "member@example.com");
 
     await waitFor(() => {

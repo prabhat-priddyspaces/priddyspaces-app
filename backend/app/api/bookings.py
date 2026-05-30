@@ -21,7 +21,12 @@ from app.services.notifications import send_booking_cancelled_email
 from app.models.user import User
 from app.services.booking_payments import refund_booking_payment
 from app.services.cancellation_refunds import refund_percent_from_snapshot
-from app.services.access_passes import ensure_access_pass_for_booking, revoke_access_passes_for_booking
+from app.services.access_passes import (
+    ensure_access_pass_for_booking,
+    mark_booking_check_in,
+    mark_booking_check_out,
+    revoke_access_passes_for_booking,
+)
 
 router = APIRouter()
 
@@ -281,17 +286,7 @@ def check_in_booking(
     booking, _user, _location, _space = _booking_for_checkin(db, public_id, token)
     if booking.status != BookingStatus.CONFIRMED:
         raise HTTPException(status_code=400, detail="Booking must be confirmed to check in")
-    if booking.checked_in_at is not None:
-        return BookingCheckInOut(
-            public_id=booking.public_id,
-            checked_in_at=booking.checked_in_at,
-            checked_out_at=booking.checked_out_at,
-        )
-    booking.checked_in_at = datetime.now(timezone.utc)
-    booking.no_show = False
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
+    booking = mark_booking_check_in(db, booking, _user)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,
@@ -318,18 +313,7 @@ def check_out_booking(
     token: dict = Depends(get_current_user),
 ):
     booking, _user, _location, _space = _booking_for_checkin(db, public_id, token)
-    if booking.checked_in_at is None:
-        raise HTTPException(status_code=400, detail="Booking must be checked in before check-out")
-    if booking.checked_out_at is not None:
-        return BookingCheckInOut(
-            public_id=booking.public_id,
-            checked_in_at=booking.checked_in_at,
-            checked_out_at=booking.checked_out_at,
-        )
-    booking.checked_out_at = datetime.now(timezone.utc)
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
+    booking = mark_booking_check_out(db, booking, _user)
     actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     write_audit_log(
         db,

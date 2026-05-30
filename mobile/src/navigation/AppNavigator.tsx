@@ -120,6 +120,7 @@ function MemberTabs() {
       <Tabs.Screen name="Bookings" component={BookingsScreen} />
       <Tabs.Screen name="AccessPasses" component={AccessPassesScreen} options={{ title: "Access Passes" }} />
       <Tabs.Screen name="MySpaceQr" component={MySpaceQrScreen} options={{ title: "My Space QR" }} />
+      <Tabs.Screen name="Directory" component={MemberDirectoryScreen} />
       <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>
   );

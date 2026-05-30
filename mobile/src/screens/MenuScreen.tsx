@@ -27,7 +27,7 @@ const memberItems: MenuItem[] = [
   { label: "Bookings", screen: "Bookings", target: "tab" },
   { label: "Access Passes", screen: "AccessPasses", target: "tab" },
   { label: "My Space QR", screen: "MySpaceQr", target: "tab" },
-  { label: "Directory", screen: "MemberDirectory", target: "stack" },
+  { label: "Directory", screen: "Directory", target: "tab" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" }
 ];

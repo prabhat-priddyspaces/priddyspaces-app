@@ -37,7 +37,7 @@ export function MySpaceQrScreen() {
       contentContainerStyle={{ paddingBottom: 30 }}
     >
       <Text style={styles.title}>My Space QR</Text>
-      <Text style={styles.subtitle}>Focused QR for your next approved booking.</Text>
+      <Text style={styles.subtitle}>Focused QR for your next confirmed booking.</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {loading && !pass ? <ActivityIndicator style={{ marginTop: 18 }} /> : null}
       {pass ? (
@@ -45,7 +45,7 @@ export function MySpaceQrScreen() {
       ) : !loading ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No QR available</Text>
-          <Text style={styles.muted}>Only valid approved bookings can produce usable QR codes.</Text>
+          <Text style={styles.muted}>Only valid confirmed bookings can produce usable QR codes.</Text>
         </View>
       ) : null}
     </ScrollView>

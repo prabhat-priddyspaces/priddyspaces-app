@@ -463,6 +463,74 @@ def mark_check_in(db: Session, raw_token: str, scanner: User) -> dict:
     return pass_context_to_resolve_out(ctx)
 
 
+def _attendance_event_exists(db: Session, booking_id: int, event_type: str) -> bool:
+    return (
+        db.query(SpaceAttendanceRecord.id)
+        .filter(
+            SpaceAttendanceRecord.booking_id == booking_id,
+            SpaceAttendanceRecord.event_type == event_type,
+        )
+        .first()
+        is not None
+    )
+
+
+def mark_booking_check_in(db: Session, booking: Booking, scanner: User) -> Booking:
+    access_pass = ensure_access_pass_for_booking(db, booking)
+    if not access_pass:
+        raise HTTPException(status_code=400, detail="Booking is not eligible for an access pass")
+    req = _booking_request_for_booking(db, booking)
+    status = resolve_pass_status(db, access_pass, booking, req)
+    if status == "already_checked_in":
+        if not _attendance_event_exists(db, booking.id, CHECK_IN):
+            db.add(
+                SpaceAttendanceRecord(
+                    tenant_id=access_pass.tenant_id,
+                    access_pass_id=access_pass.id,
+                    booking_id=booking.id,
+                    location_id=access_pass.location_id,
+                    space_id=access_pass.space_id,
+                    member_id=access_pass.user_id,
+                    scanned_by_user_id=scanner.id,
+                    event_type=CHECK_IN,
+                    status="checked_in",
+                    event_at=booking.checked_in_at or now_utc(),
+                )
+            )
+            db.commit()
+            db.refresh(booking)
+        return booking
+    if status != "valid":
+        raise HTTPException(status_code=400, detail=f"Pass is {status}")
+    event_at = now_utc()
+    booking.checked_in_at = event_at
+    booking.no_show = False
+    access_pass.last_used_at = event_at
+    db.add(booking)
+    db.add(access_pass)
+    db.add(
+        SpaceAttendanceRecord(
+            tenant_id=access_pass.tenant_id,
+            access_pass_id=access_pass.id,
+            booking_id=booking.id,
+            location_id=access_pass.location_id,
+            space_id=access_pass.space_id,
+            member_id=access_pass.user_id,
+            scanned_by_user_id=scanner.id,
+            event_type=CHECK_IN,
+            status="checked_in",
+            event_at=event_at,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Already checked in") from exc
+    db.refresh(booking)
+    return booking
+
+
 def mark_check_out(db: Session, raw_token: str, scanner: User) -> dict:
     ctx = pass_context_for_token(db, raw_token)
     if ctx.pass_status == "checked_out":
@@ -500,6 +568,63 @@ def mark_check_out(db: Session, raw_token: str, scanner: User) -> dict:
     return pass_context_to_resolve_out(ctx)
 
 
+def mark_booking_check_out(db: Session, booking: Booking, scanner: User) -> Booking:
+    access_pass = ensure_access_pass_for_booking(db, booking)
+    if not access_pass:
+        raise HTTPException(status_code=400, detail="Booking is not eligible for an access pass")
+    req = _booking_request_for_booking(db, booking)
+    status = resolve_pass_status(db, access_pass, booking, req)
+    if status == "checked_out":
+        if not _attendance_event_exists(db, booking.id, CHECK_OUT):
+            db.add(
+                SpaceAttendanceRecord(
+                    tenant_id=access_pass.tenant_id,
+                    access_pass_id=access_pass.id,
+                    booking_id=booking.id,
+                    location_id=access_pass.location_id,
+                    space_id=access_pass.space_id,
+                    member_id=access_pass.user_id,
+                    scanned_by_user_id=scanner.id,
+                    event_type=CHECK_OUT,
+                    status="checked_out",
+                    event_at=booking.checked_out_at or now_utc(),
+                )
+            )
+            db.commit()
+            db.refresh(booking)
+        return booking
+    if booking.checked_in_at is None:
+        raise HTTPException(status_code=400, detail="Booking must be checked in before check-out")
+    if status not in {"already_checked_in", "expired"}:
+        raise HTTPException(status_code=400, detail=f"Pass is {status}")
+    event_at = now_utc()
+    booking.checked_out_at = event_at
+    access_pass.last_used_at = event_at
+    db.add(booking)
+    db.add(access_pass)
+    db.add(
+        SpaceAttendanceRecord(
+            tenant_id=access_pass.tenant_id,
+            access_pass_id=access_pass.id,
+            booking_id=booking.id,
+            location_id=access_pass.location_id,
+            space_id=access_pass.space_id,
+            member_id=access_pass.user_id,
+            scanned_by_user_id=scanner.id,
+            event_type=CHECK_OUT,
+            status="checked_out",
+            event_at=event_at,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Already checked out") from exc
+    db.refresh(booking)
+    return booking
+
+
 def recent_member_location_ids(db: Session, user_id: int) -> set[int]:
     space_ids = {sid for sid, in db.query(Booking.space_id).filter(Booking.user_id == user_id).distinct()}
     space_ids.update(sid for sid, in db.query(Subscription.space_id).filter(Subscription.user_id == user_id).distinct())
@@ -513,6 +638,7 @@ def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> li
     if not location_ids:
         return []
     cutoff = now_utc() - timedelta(days=max(1, days))
+    today = now_utc().date()
     rows = (
         db.query(Booking, User, Space, Location)
         .join(User, User.id == Booking.user_id)
@@ -542,5 +668,35 @@ def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> li
             "space_name": _space_name(space),
             "space_type": getattr(space.space_type, "value", space.space_type),
             "last_seen_at": booking.start_datetime,
+        }
+    subscription_rows = (
+        db.query(Subscription, User, Space, Location)
+        .join(User, User.id == Subscription.user_id)
+        .join(Space, Space.id == Subscription.space_id)
+        .join(Location, Location.id == Space.location_id)
+        .filter(
+            Space.location_id.in_(location_ids),
+            Subscription.user_id != user.id,
+            Subscription.status.in_(["active", "canceling"]),
+            Subscription.start_date <= today,
+            or_(Subscription.end_date.is_(None), Subscription.end_date >= today),
+        )
+        .order_by(Subscription.start_date.desc())
+        .all()
+    )
+    for subscription, member, space, location in subscription_rows:
+        key = (member.id, location.id)
+        if key in out:
+            continue
+        out[key] = {
+            "member_public_id": member.public_id,
+            "name": _display_name(member),
+            "email": member.email,
+            "location_public_id": location.public_id,
+            "location_name": location.name,
+            "space_public_id": space.public_id,
+            "space_name": _space_name(space),
+            "space_type": getattr(space.space_type, "value", space.space_type),
+            "last_seen_at": datetime.combine(subscription.start_date, datetime.min.time(), tzinfo=timezone.utc),
         }
     return list(out.values())

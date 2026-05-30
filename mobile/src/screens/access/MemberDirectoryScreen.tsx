@@ -31,7 +31,7 @@ export function MemberDirectoryScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Member Directory</Text>
-      <Text style={styles.subtitle}>Members recently associated with your locations.</Text>
+      <Text style={styles.subtitle}>Members recently or actively associated with your locations.</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {loading && rows.length === 0 ? <ActivityIndicator style={{ marginTop: 18 }} /> : null}
       <FlatList
@@ -52,7 +52,7 @@ export function MemberDirectoryScreen() {
           !loading ? (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No members found</Text>
-              <Text style={styles.muted}>Directory entries appear when other members have recent bookings at your locations.</Text>
+              <Text style={styles.muted}>Directory entries appear when other members have active memberships or recent confirmed bookings at your locations.</Text>
             </View>
           ) : null
         }

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AccessScannerPage,
   AttendancePage,
+  GuestAccessPassPage,
   MemberAccessPassesPage,
   MemberDirectoryPage,
 } from "../components/access-passes/access-pass-pages";
@@ -104,8 +105,10 @@ const mocks = vi.hoisted(() => ({
   resolveAccessPass: vi.fn(),
   checkInAccessPass: vi.fn(),
   listAttendance: vi.fn(),
+  listAttendanceLocations: vi.fn(),
   listCurrentAttendance: vi.fn(),
   listMemberDirectory: vi.fn(),
+  resolveGuestAccessPass: vi.fn(),
 }));
 
 vi.mock("../lib/access-passes", async () => {
@@ -117,8 +120,10 @@ vi.mock("../lib/access-passes", async () => {
     checkInAccessPass: mocks.checkInAccessPass,
     checkOutAccessPass: vi.fn(),
     listAttendance: mocks.listAttendance,
+    listAttendanceLocations: mocks.listAttendanceLocations,
     listCurrentAttendance: mocks.listCurrentAttendance,
     listMemberDirectory: mocks.listMemberDirectory,
+    resolveGuestAccessPass: mocks.resolveGuestAccessPass,
   };
 });
 
@@ -128,7 +133,9 @@ beforeEach(() => {
   mocks.resolveAccessPass.mockResolvedValue(resolvedPass);
   mocks.checkInAccessPass.mockResolvedValue(checkedInPass);
   mocks.listAttendance.mockResolvedValue({ results: [attendanceRow], total: 1, page: 1, page_size: 100 });
+  mocks.listAttendanceLocations.mockResolvedValue([{ location_public_id: "loc_1", location_name: "Main" }]);
   mocks.listCurrentAttendance.mockResolvedValue([attendanceRow]);
+  mocks.resolveGuestAccessPass.mockResolvedValue(accessPass);
   mocks.listMemberDirectory.mockResolvedValue([
     {
       member_public_id: "user_2",
@@ -170,7 +177,7 @@ describe("scanner screen", () => {
     });
     fireEvent.click(screen.getByText("Resolve"));
 
-    expect(await screen.findByText("Member One")).toBeInTheDocument();
+    expect((await screen.findAllByText("Member One")).length).toBeGreaterThan(0);
     expect(mocks.resolveAccessPass).toHaveBeenCalledWith("secure-token", "token");
 
     fireEvent.click(screen.getByText("Check in"));
@@ -202,5 +209,18 @@ describe("member directory screen", () => {
     expect(await screen.findByText("Peer Member")).toBeInTheDocument();
     expect(screen.getByText("peer@example.com")).toBeInTheDocument();
     expect(screen.queryByText("member@example.com")).not.toBeInTheDocument();
+  });
+});
+
+describe("guest access pass screen", () => {
+  it("does not render a QR for expired or cancelled guest passes", async () => {
+    mocks.resolveGuestAccessPass.mockResolvedValue({ ...accessPass, pass_status: "expired" });
+    window.history.pushState({}, "", "/guest/access-pass#secure-token");
+
+    render(<GuestAccessPassPage />);
+
+    expect((await screen.findAllByText("Expired")).length).toBeGreaterThan(0);
+    expect(screen.getByText("This access pass can no longer be used at reception.")).toBeInTheDocument();
+    expect(screen.queryByTestId("access-pass-qr")).not.toBeInTheDocument();
   });
 });

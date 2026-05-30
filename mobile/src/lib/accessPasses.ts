@@ -73,6 +73,11 @@ export type AttendanceList = {
   page_size: number;
 };
 
+export type AttendanceLocation = {
+  location_public_id: string;
+  location_name: string;
+};
+
 export type MemberDirectoryItem = {
   member_public_id: string;
   name: string | null;
@@ -150,6 +155,15 @@ export function listAttendance(filters: AttendanceFilters = {}, token?: string) 
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
     .join("&");
   return apiFetch<AttendanceList>(`/api/attendance${query ? `?${query}` : ""}`, { method: "GET" }, token);
+}
+
+export function listAttendanceLocations(token?: string) {
+  return apiFetch<AttendanceLocation[]>("/api/attendance/locations", { method: "GET" }, token);
+}
+
+export function listCurrentAttendance(locationPublicId?: string, token?: string) {
+  const query = locationPublicId ? `?location_public_id=${encodeURIComponent(locationPublicId)}` : "";
+  return apiFetch<AttendanceRecord[]>(`/api/attendance/current${query}`, { method: "GET" }, token);
 }
 
 export function listMemberDirectory(token?: string) {

@@ -29,6 +29,7 @@ import {
   extractAccessPassToken,
   listAccessPasses,
   listAttendance,
+  listAttendanceLocations,
   listCurrentAttendance,
   listMemberDirectory,
   resolveAccessPass,
@@ -36,6 +37,7 @@ import {
   type AccessPass,
   type AccessPassResolve,
   type AttendanceFilters,
+  type AttendanceLocation,
   type AttendanceRecord,
   type MemberDirectoryItem,
 } from "@/lib/access-passes";
@@ -217,7 +219,7 @@ export function MemberAccessPassesPage({ focused = false }: { focused?: boolean 
             {focused ? "My Space QR" : "Access Passes"}
           </h1>
           <p className="text-sm text-text-3">
-            {focused ? "Use this QR for your next approved booking." : "Approved bookings show secure QR passes here."}
+            {focused ? "Use this QR for your next confirmed booking." : "Confirmed bookings show secure QR passes here."}
           </p>
         </div>
         <Button type="button" onClick={() => void load()} disabled={loading}>
@@ -231,7 +233,7 @@ export function MemberAccessPassesPage({ focused = false }: { focused?: boolean 
         <EmptyState
           icon={QrCode}
           title="No valid access passes"
-          body="When a booking is approved, your secure QR access pass will appear here until the booking window expires."
+          body="When a booking is confirmed, your secure QR access pass will appear here until the booking window expires."
         />
       ) : null}
       <div className="grid gap-4">
@@ -270,12 +272,12 @@ export function MemberDirectoryPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Member Directory</h1>
-        <p className="text-sm text-text-3">Members recently associated with your booked locations.</p>
+        <p className="text-sm text-text-3">Members recently or actively associated with your locations.</p>
       </div>
       <ErrorText message={error} />
       {loading ? <LoadingState label="Loading directory..." /> : null}
       {!loading && rows.length === 0 ? (
-        <EmptyState icon={Users} title="No members found" body="Directory entries appear after other members have active or recent bookings at your locations." />
+        <EmptyState icon={Users} title="No members found" body="Directory entries appear after other members have active memberships or recent confirmed bookings at your locations." />
       ) : null}
       <div className="grid gap-3">
         {rows.map((row) => (
@@ -580,6 +582,7 @@ export function AttendancePage({ shell }: { shell: ShellKind }) {
   const { getApiToken, isAuthReady } = useApiToken();
   const [rows, setRows] = useState<AttendanceRecord[]>([]);
   const [currentRows, setCurrentRows] = useState<AttendanceRecord[]>([]);
+  const [locations, setLocations] = useState<AttendanceLocation[]>([]);
   const [filters, setFilters] = useState<AttendanceFilters>({ page: 1, page_size: 100 });
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -591,13 +594,15 @@ export function AttendancePage({ shell }: { shell: ShellKind }) {
     setError(null);
     try {
       const token = (await getApiToken()) ?? undefined;
-      const [attendance, current] = await Promise.all([
+      const [attendance, current, locationOptions] = await Promise.all([
         listAttendance(filters, token),
         listCurrentAttendance(filters.location_public_id, token),
+        listAttendanceLocations(token),
       ]);
       setRows(attendance.results);
       setTotal(attendance.total);
       setCurrentRows(current);
+      setLocations(locationOptions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load attendance");
     } finally {
@@ -625,6 +630,15 @@ export function AttendancePage({ shell }: { shell: ShellKind }) {
         <Card className="p-4">
           <div className="text-sm text-text-3">Currently in office</div>
           <div className="mt-1 text-2xl font-semibold text-text">{currentRows.length}</div>
+          <div className="mt-3 space-y-1 text-xs text-text-3">
+            {currentRows.length === 0 ? <div>No one is currently checked in.</div> : null}
+            {currentRows.slice(0, 3).map((row) => (
+              <div key={row.booking_public_id} className="truncate">
+                {row.member_name || row.member_email} · {row.location_name}
+              </div>
+            ))}
+            {currentRows.length > 3 ? <div>+{currentRows.length - 3} more</div> : null}
+          </div>
         </Card>
         <Card className="p-4">
           <div className="text-sm text-text-3">Filtered records</div>
@@ -636,11 +650,18 @@ export function AttendancePage({ shell }: { shell: ShellKind }) {
         </Card>
       </div>
       <Card className="grid gap-3 p-4 md:grid-cols-3 lg:grid-cols-6">
-        <Input
+        <select
           value={filters.location_public_id || ""}
           onChange={(event) => setFilters((current) => ({ ...current, location_public_id: event.target.value }))}
-          placeholder="Location ID"
-        />
+          className="h-9 rounded-xl border border-line-strong bg-surface px-3 text-[13px] text-text outline-none"
+        >
+          <option value="">All locations</option>
+          {locations.map((location) => (
+            <option key={location.location_public_id} value={location.location_public_id}>
+              {location.location_name}
+            </option>
+          ))}
+        </select>
         <Input
           type="date"
           value={filters.date || ""}
@@ -730,7 +751,18 @@ export function GuestAccessPassPage() {
         </Card>
         <ErrorText message={error} />
         {loading ? <LoadingState label="Loading pass..." /> : null}
-        {pass ? <AccessPassCard pass={pass} focused /> : null}
+        {pass && ["not_yet_valid", "valid", "already_checked_in"].includes(pass.pass_status) ? (
+          <AccessPassCard pass={pass} focused />
+        ) : null}
+        {pass && !["not_yet_valid", "valid", "already_checked_in"].includes(pass.pass_status) ? (
+          <Card className="space-y-4">
+            <div>
+              <Badge variant={passBadgeVariant(pass.pass_status)}>{titleize(pass.pass_status)}</Badge>
+              <p className="mt-2 text-sm text-text-3">This access pass can no longer be used at reception.</p>
+            </div>
+            <PassDetails pass={pass} />
+          </Card>
+        ) : null}
       </div>
     </main>
   );

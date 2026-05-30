@@ -21,6 +21,7 @@ from app.models.payment import Payment
 from app.models.space import Space
 from app.models.space_access_pass import SpaceAccessPass
 from app.models.space_attendance_record import SpaceAttendanceRecord
+from app.models.subscription import Subscription
 from app.models.user import User
 from app.services.access_passes import decrypted_token, ensure_access_pass_for_booking
 from app.services.payment_providers import ChargeResult
@@ -298,12 +299,15 @@ def test_cancelled_refunded_and_expired_bookings_cannot_check_in(db_session, cli
 
 
 def test_currently_in_office_filter_and_checkout(db_session, client_factory):
-    owner, _org, _location, space = _owner_space(db_session)
+    owner, _org, location, space = _owner_space(db_session)
     member = _user(db_session, "checkout-member@example.com", UserAppRole.MEMBER)
     now = datetime.now(timezone.utc)
     booking = _booking(db_session, member, space, start=now - timedelta(minutes=5), end=now + timedelta(hours=2))
     token = _token_for_booking(db_session, booking)
     owner_client = client_factory(_auth(owner))
+    assert owner_client.get("/api/attendance/locations").json() == [
+        {"location_public_id": location.public_id, "location_name": location.name}
+    ]
     assert owner_client.post("/api/access-passes/check-in", json={"token": token}).status_code == 200
     assert owner_client.get("/api/attendance?currently_in_office=true").json()["total"] == 1
 
@@ -314,6 +318,35 @@ def test_currently_in_office_filter_and_checkout(db_session, client_factory):
     assert owner_client.get("/api/attendance?status=checked_out").json()["total"] == 1
 
 
+def test_legacy_booking_checkin_creates_attendance_record_and_enforces_pass_window(db_session, client_factory):
+    owner, _org, _location, space = _owner_space(db_session)
+    member = _user(db_session, "legacy-checkin-member@example.com", UserAppRole.MEMBER)
+    now = datetime.now(timezone.utc)
+    early_booking = _booking(db_session, member, space, start=now + timedelta(hours=1), end=now + timedelta(hours=2))
+    active_booking = _booking(db_session, member, space, start=now - timedelta(minutes=5), end=now + timedelta(hours=2))
+    _token_for_booking(db_session, early_booking)
+    _token_for_booking(db_session, active_booking)
+    owner_client = client_factory(_auth(owner))
+
+    early = owner_client.post(f"/api/bookings/{early_booking.public_id}/check-in")
+    assert early.status_code == 400
+    assert early.json()["detail"] == "Pass is not_yet_valid"
+
+    checked_in = owner_client.post(f"/api/bookings/{active_booking.public_id}/check-in")
+    assert checked_in.status_code == 200
+    assert db_session.query(SpaceAttendanceRecord).filter(
+        SpaceAttendanceRecord.booking_id == active_booking.id,
+        SpaceAttendanceRecord.event_type == "check_in",
+    ).count() == 1
+
+    checked_out = owner_client.post(f"/api/bookings/{active_booking.public_id}/check-out")
+    assert checked_out.status_code == 200
+    assert db_session.query(SpaceAttendanceRecord).filter(
+        SpaceAttendanceRecord.booking_id == active_booking.id,
+        SpaceAttendanceRecord.event_type == "check_out",
+    ).count() == 1
+
+
 def test_member_directory_is_limited_to_other_members_at_same_location(db_session, client_factory):
     _owner, _org, _location, space = _owner_space(db_session)
     _other_owner, _other_org, _other_location, other_space = _owner_space(
@@ -322,18 +355,30 @@ def test_member_directory_is_limited_to_other_members_at_same_location(db_sessio
     )
     requester = _user(db_session, "directory-requester@example.com", UserAppRole.MEMBER)
     same_location = _user(db_session, "directory-peer@example.com", UserAppRole.MEMBER)
+    subscription_peer = _user(db_session, "directory-subscription@example.com", UserAppRole.MEMBER)
     other_location = _user(db_session, "directory-hidden@example.com", UserAppRole.MEMBER)
     now = datetime.now(timezone.utc)
     _booking(db_session, requester, space, start=now - timedelta(days=1), end=now - timedelta(days=1, hours=-1))
     _booking(db_session, same_location, space, start=now - timedelta(days=1), end=now - timedelta(days=1, hours=-1))
     _booking(db_session, other_location, other_space, start=now - timedelta(days=1), end=now - timedelta(days=1, hours=-1))
+    db_session.add(
+        Subscription(
+            user_id=subscription_peer.id,
+            space_id=space.id,
+            tenant_id=space.tenant_id,
+            status="active",
+            start_date=now.date() - timedelta(days=10),
+            end_date=None,
+        )
+    )
+    db_session.commit()
 
     requester_client = client_factory(_auth(requester))
     response = requester_client.get("/api/member/directory")
 
     assert response.status_code == 200
     emails = {row["email"] for row in response.json()}
-    assert emails == {same_location.email}
+    assert emails == {same_location.email, subscription_peer.email}
 
 
 def test_guest_registration_claims_prior_approved_booking(db_session, client_factory):
