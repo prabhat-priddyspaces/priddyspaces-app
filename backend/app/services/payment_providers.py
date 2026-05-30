@@ -97,6 +97,48 @@ def _stripe_get(value: Any, key: str, default: Any = None) -> Any:
     return getattr(value, key, default)
 
 
+def stripe_object_to_dict(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return {
+            str(key): stripe_object_to_dict(item) if _is_stripe_object_like(item) else _stripe_value_to_plain(item)
+            for key, item in value.items()
+        }
+    for method_name in ("to_dict_recursive", "to_dict"):
+        method = getattr(value, method_name, None)
+        if callable(method):
+            data = method()
+            if isinstance(data, dict):
+                return stripe_object_to_dict(data)
+    data = getattr(value, "_data", None)
+    if isinstance(data, dict):
+        return stripe_object_to_dict(data)
+    items = getattr(value, "items", None)
+    if callable(items):
+        try:
+            return stripe_object_to_dict(dict(items()))
+        except Exception:
+            return {}
+    return {}
+
+
+def _is_stripe_object_like(value: Any) -> bool:
+    if isinstance(value, dict):
+        return True
+    return any(callable(getattr(value, method_name, None)) for method_name in ("to_dict_recursive", "to_dict")) or isinstance(getattr(value, "_data", None), dict)
+
+
+def _stripe_value_to_plain(value: Any) -> Any:
+    if isinstance(value, list):
+        return [stripe_object_to_dict(item) if _is_stripe_object_like(item) else _stripe_value_to_plain(item) for item in value]
+    if isinstance(value, tuple):
+        return [_stripe_value_to_plain(item) for item in value]
+    if _is_stripe_object_like(value):
+        return stripe_object_to_dict(value)
+    return value
+
+
 def _stripe_card_details(method: Any) -> dict[str, Any]:
     card = _stripe_get(method, "card", {}) or {}
     billing_details = _stripe_get(method, "billing_details", {}) or {}
@@ -232,12 +274,14 @@ class StripePaymentProvider:
         except stripe.error.StripeError as exc:
             failure_reason = _stripe_failure_reason_from_error(exc)
             return ChargeResult(status="failed", failure_reason=failure_reason, raw_response={"error": str(exc)})
-        raw = intent.to_dict_recursive() if hasattr(intent, "to_dict_recursive") else dict(intent)
-        if intent.status == "succeeded":
-            return ChargeResult(status="succeeded", provider_payment_id=intent.id, raw_response=raw)
+        raw = stripe_object_to_dict(intent)
+        intent_status = raw.get("status") or _stripe_get(intent, "status")
+        intent_id = raw.get("id") or _stripe_get(intent, "id")
+        if intent_status == "succeeded":
+            return ChargeResult(status="succeeded", provider_payment_id=intent_id, raw_response=raw)
         return ChargeResult(
             status="failed",
-            provider_payment_id=intent.id,
+            provider_payment_id=intent_id,
             raw_response=raw,
             failure_reason=_stripe_failure_reason_from_intent(intent),
         )
@@ -249,13 +293,13 @@ class StripePaymentProvider:
         if amount_cents is not None:
             kwargs["amount"] = amount_cents
         refund = stripe.Refund.create(**kwargs)
-        raw = refund.to_dict_recursive() if hasattr(refund, "to_dict_recursive") else dict(refund)
-        return ChargeResult(status="refunded", provider_payment_id=provider_payment_id, provider_reference_id=refund.id, raw_response=raw)
+        raw = stripe_object_to_dict(refund)
+        return ChargeResult(status="refunded", provider_payment_id=provider_payment_id, provider_reference_id=raw.get("id") or _stripe_get(refund, "id"), raw_response=raw)
 
     def get_payment_status(self, provider_payment_id: str) -> ChargeResult:
         intent = stripe.PaymentIntent.retrieve(provider_payment_id, api_key=self.secret_key)
-        raw = intent.to_dict_recursive() if hasattr(intent, "to_dict_recursive") else dict(intent)
-        return ChargeResult(status=intent.status, provider_payment_id=intent.id, raw_response=raw)
+        raw = stripe_object_to_dict(intent)
+        return ChargeResult(status=raw.get("status") or _stripe_get(intent, "status"), provider_payment_id=raw.get("id") or _stripe_get(intent, "id"), raw_response=raw)
 
     def test_connection(self) -> bool:
         stripe.Balance.retrieve(api_key=self.secret_key)

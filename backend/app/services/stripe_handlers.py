@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingStatus, PaymentStatus
 from app.models.invoice import Invoice
@@ -12,6 +13,7 @@ from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.services.booking_payments import finalize_successful_booking_request_payment
 from app.services.invoices import generate_invoice_pdf
 from app.services.loyalty import record_earned_for_payment, reverse_for_payment_refund
 from app.services.notifications import send_email
@@ -124,8 +126,89 @@ def _upsert_subscription_payment(
     return payment
 
 
+def _metadata(data: dict[str, Any]) -> dict[str, Any]:
+    metadata = data.get("metadata") or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _latest_payment_for_request(db: Session, req: BookingRequest, payment_intent_id: str | None) -> Payment | None:
+    if payment_intent_id:
+        payment = db.query(Payment).filter(Payment.stripe_payment_intent_id == payment_intent_id).first()
+        if payment:
+            return payment
+        payment = db.query(Payment).filter(Payment.provider_payment_id == payment_intent_id).first()
+        if payment:
+            return payment
+    return (
+        db.query(Payment)
+        .filter(Payment.booking_request_id == req.id)
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
+        .first()
+    )
+
+
+def _payment_from_request_intent(db: Session, req: BookingRequest, data: dict[str, Any]) -> Payment:
+    payment_intent_id = data.get("id")
+    payment = _latest_payment_for_request(db, req, payment_intent_id)
+    if payment:
+        return payment
+
+    amount_cents = int(data.get("amount") or 0)
+    payment = Payment(
+        user_id=req.user_id,
+        booking_request_id=req.id,
+        booking_id=req.booking_id,
+        tenant_id=req.tenant_id,
+        amount=amount_cents // 100,
+        amount_cents=amount_cents,
+        currency=(data.get("currency") or "usd")[:3],
+        provider="stripe",
+        payment_method_id=req.member_owner_payment_method_id,
+        status=PaymentStatus.REQUIRES_PAYMENT,
+        attempt_number=max(1, req.payment_attempt_count or 1),
+        stripe_payment_intent_id=payment_intent_id,
+        provider_payment_id=payment_intent_id,
+    )
+    db.add(payment)
+    db.flush()
+    return payment
+
+
+def _handle_booking_request_payment_success(db: Session, req: BookingRequest, data: dict[str, Any]) -> Payment:
+    payment_intent_id = data.get("id")
+    payment = _payment_from_request_intent(db, req, data)
+    _req, booking, payment = finalize_successful_booking_request_payment(
+        db,
+        req=req,
+        payment=payment,
+        provider_payment_id=payment_intent_id,
+        provider_reference_id=data.get("latest_charge"),
+        raw_response=data,
+    )
+    return payment
+
+
 def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id: int | None) -> None:
     payment_intent_id = data.get("id")
+    booking_request_public_id = _metadata(data).get("booking_request_public_id")
+    if booking_request_public_id:
+        req = db.query(BookingRequest).filter(BookingRequest.public_id == booking_request_public_id).first()
+        if req:
+            payment = _handle_booking_request_payment_success(db, req, data)
+            customer_email = data.get("receipt_email") or ""
+            if not customer_email and payment.user_id:
+                customer = db.query(User).filter(User.id == payment.user_id).first()
+                if customer:
+                    customer_email = customer.email
+            if customer_email:
+                send_email(
+                    to_email=customer_email,
+                    subject="Payment receipt",
+                    body=f"Your payment for booking request {req.public_id} is confirmed.",
+                    db=db,
+                )
+        return
+
     payment = db.query(Payment).filter(Payment.stripe_payment_intent_id == payment_intent_id).first()
     if payment:
         payment.status = PaymentStatus.SUCCEEDED
@@ -142,7 +225,7 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
         db.commit()
         db.refresh(payment)
 
-    booking_public_id = data.get("metadata", {}).get("booking_public_id")
+    booking_public_id = _metadata(data).get("booking_public_id")
     if not booking_public_id:
         return
 
@@ -287,7 +370,13 @@ def handle_event(db: Session, event: dict[str, Any]) -> dict[str, Any]:
 
     data = event.get("data", {}).get("object", {})
     tenant_id = None
-    booking_public_id = data.get("metadata", {}).get("booking_public_id") if isinstance(data, dict) else None
+    metadata = _metadata(data) if isinstance(data, dict) else {}
+    booking_public_id = metadata.get("booking_public_id")
+    booking_request_public_id = metadata.get("booking_request_public_id")
+    if booking_request_public_id:
+        req = db.query(BookingRequest).filter(BookingRequest.public_id == booking_request_public_id).first()
+        if req:
+            tenant_id = req.tenant_id
     if booking_public_id:
         booking = db.query(Booking).filter(Booking.public_id == booking_public_id).first()
         if booking:
@@ -308,7 +397,11 @@ def handle_event(db: Session, event: dict[str, Any]) -> dict[str, Any]:
     if event_type == "payment_intent.payment_failed":
         payment_intent_id = data.get("id")
         payment = db.query(Payment).filter(Payment.stripe_payment_intent_id == payment_intent_id).first()
+        if not payment:
+            payment = db.query(Payment).filter(Payment.provider_payment_id == payment_intent_id).first()
         if payment:
+            if payment.status == PaymentStatus.SUCCEEDED:
+                return {"handled": True, "type": event_type, "ignored": "already_succeeded"}
             payment.status = PaymentStatus.FAILED
             if tenant_id is not None and not payment.tenant_id:
                 payment.tenant_id = tenant_id
