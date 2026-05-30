@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,103 @@ import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import type { MarketingTemplate, OrganizationOption } from "@/lib/marketing";
+
+const shortcodeGroups = [
+  {
+    label: "Member",
+    items: [
+      ["{{ member.first_name }}", "First name"],
+      ["{{ member.last_name }}", "Last name"],
+      ["{{ member.full_name }}", "Full name"],
+      ["{{ member.email }}", "Email"],
+      ["{{ member.phone }}", "Phone"],
+      ["{{ member.company }}", "Company"],
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      ["{{ business.name }}", "Organization"],
+      ["{{ business.address }}", "Address"],
+      ["{{ business.city }}", "City"],
+      ["{{ business.state }}", "State"],
+      ["{{ business.postal_code }}", "Postal code"],
+      ["{{ business.support_email }}", "Support email"],
+      ["{{ business.phone }}", "Phone"],
+      ["{{ business.website }}", "Website"],
+    ],
+  },
+  {
+    label: "Owner",
+    items: [
+      ["{{ owner.full_name }}", "Owner"],
+      ["{{ owner.email }}", "Owner email"],
+      ["{{ owner.phone }}", "Owner phone"],
+    ],
+  },
+  {
+    label: "Location",
+    items: [
+      ["{{ location.name }}", "Location"],
+      ["{{ location.address }}", "Address"],
+      ["{{ location.city }}", "City"],
+      ["{{ location.state }}", "State"],
+      ["{{ location.postal_code }}", "Postal code"],
+      ["{{ location.phone }}", "Phone"],
+      ["{{ location.email }}", "Email"],
+    ],
+  },
+  {
+    label: "Reservation",
+    items: [
+      ["{{ booking.space_name }}", "Space"],
+      ["{{ booking.location_name }}", "Location"],
+      ["{{ booking.start_date }}", "Start date"],
+      ["{{ booking.start_time }}", "Start time"],
+      ["{{ booking.end_date }}", "End date"],
+      ["{{ booking.end_time }}", "End time"],
+      ["{{ booking.number }}", "Booking ID"],
+      ["{{ booking.request_number }}", "Request ID"],
+    ],
+  },
+  {
+    label: "Invoice",
+    items: [
+      ["{{ invoice.number }}", "Invoice ID"],
+      ["{{ invoice.amount }}", "Invoice amount"],
+      ["{{ invoice.balance_due }}", "Balance due"],
+      ["{{ invoice.status }}", "Invoice status"],
+      ["{{ invoice.due_date }}", "Due date"],
+    ],
+  },
+  {
+    label: "Payment",
+    items: [
+      ["{{ payment.amount }}", "Payment amount"],
+      ["{{ payment.status }}", "Payment status"],
+      ["{{ payment.failure_reason }}", "Decline reason"],
+      ["{{ payment.provider }}", "Provider"],
+    ],
+  },
+  {
+    label: "Card",
+    items: [
+      ["{{ card.brand }}", "Card brand"],
+      ["{{ card.last4 }}", "Card last4"],
+      ["{{ card.expiry }}", "Card expiry"],
+    ],
+  },
+  {
+    label: "Links",
+    items: [
+      ["{{ links.booking }}", "Booking link"],
+      ["{{ links.invoice }}", "Invoice link"],
+      ["{{ links.retry_payment }}", "Retry payment"],
+      ["{{ links.update_payment_method }}", "Update card"],
+      ["{{ links.access_pass }}", "Access pass"],
+    ],
+  },
+] as const;
 
 export default function MarketingTemplatesPage() {
   const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
@@ -25,6 +122,9 @@ export default function MarketingTemplatesPage() {
     text_body: "Hi {{ member.first_name }},\n\nUnsubscribe: {{ links.unsubscribe }}",
   });
   const [testEmail, setTestEmail] = useState("");
+  const [activeBody, setActiveBody] = useState<"html_body" | "text_body">("html_body");
+  const htmlRef = useRef<HTMLTextAreaElement | null>(null);
+  const textRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     async function loadOrgs() {
@@ -61,6 +161,21 @@ export default function MarketingTemplatesPage() {
       category: template.category || "general",
       html_body: template.html_body || "",
       text_body: template.text_body || "",
+    });
+  }
+
+  function insertShortcode(shortcode: string) {
+    const field = activeBody;
+    const ref = field === "html_body" ? htmlRef.current : textRef.current;
+    const current = form[field] || "";
+    const start = ref?.selectionStart ?? current.length;
+    const end = ref?.selectionEnd ?? current.length;
+    const next = `${current.slice(0, start)}${shortcode}${current.slice(end)}`;
+    setForm({ ...form, [field]: next });
+    requestAnimationFrame(() => {
+      const target = field === "html_body" ? htmlRef.current : textRef.current;
+      target?.focus();
+      target?.setSelectionRange(start + shortcode.length, start + shortcode.length);
     });
   }
 
@@ -136,7 +251,7 @@ export default function MarketingTemplatesPage() {
 
         {message ? <div className="text-sm text-textMuted">{message}</div> : null}
 
-        <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+        <div className="grid gap-4 xl:grid-cols-[280px_1fr_300px]">
           <Card className="p-3">
             <button type="button" onClick={() => { setSelected(null); setPreview(null); }} className="mb-3 w-full rounded-sm border border-border px-3 py-2 text-left text-sm hover:bg-surface2">
               New template
@@ -164,11 +279,11 @@ export default function MarketingTemplatesPage() {
             </div>
             <label className="grid gap-1 text-xs text-textMuted">
               HTML body
-              <textarea value={form.html_body} onChange={(e) => setForm({ ...form, html_body: e.target.value })} rows={10} className="rounded-sm border border-border bg-white p-3 text-sm text-textPrimary" />
+              <textarea ref={htmlRef} value={form.html_body} onFocus={() => setActiveBody("html_body")} onChange={(e) => setForm({ ...form, html_body: e.target.value })} rows={10} className="rounded-sm border border-border bg-white p-3 text-sm text-textPrimary" />
             </label>
             <label className="grid gap-1 text-xs text-textMuted">
               Text body
-              <textarea value={form.text_body} onChange={(e) => setForm({ ...form, text_body: e.target.value })} rows={6} className="rounded-sm border border-border bg-white p-3 text-sm text-textPrimary" />
+              <textarea ref={textRef} value={form.text_body} onFocus={() => setActiveBody("text_body")} onChange={(e) => setForm({ ...form, text_body: e.target.value })} rows={6} className="rounded-sm border border-border bg-white p-3 text-sm text-textPrimary" />
             </label>
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={save}>{selected ? "Save template" : "Create template"}</Button>
@@ -191,6 +306,32 @@ export default function MarketingTemplatesPage() {
                 />
               </div>
             ) : null}
+          </Card>
+
+          <Card className="h-fit p-4">
+            <div className="mb-3">
+              <div className="text-sm font-semibold text-textPrimary">Short codes</div>
+            </div>
+            <div className="grid gap-4">
+              {shortcodeGroups.map((group) => (
+                <div key={group.label} className="grid gap-2">
+                  <div className="text-xs font-semibold uppercase text-textMuted">{group.label}</div>
+                  <div className="grid gap-1">
+                    {group.items.map(([shortcode, label]) => (
+                      <button
+                        key={shortcode}
+                        type="button"
+                        onClick={() => insertShortcode(shortcode)}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-sm border border-border px-2 py-1.5 text-left text-xs hover:bg-surface2"
+                      >
+                        <span className="break-all font-mono text-textPrimary">{shortcode}</span>
+                        <span className="whitespace-nowrap text-textMuted">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
         </div>
       </div>

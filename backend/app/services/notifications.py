@@ -10,27 +10,37 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.marketing import OutboundMessage
 from app.models.email_subscription_group import EmailSubscriptionGroup
+from app.models.enums import BookingStatus
 from app.models.space_access_pass import SpaceAccessPass
 from app.models.user import User
 from app.services.access_passes import access_pass_url, decrypted_token, qr_png_base64
 from app.services.booking_email_delivery import (
     BOOKING_EMAIL_CANCELLED,
+    BOOKING_EMAIL_CARD_EXPIRING,
     BOOKING_EMAIL_CONFIRMED,
+    BOOKING_EMAIL_INVOICE_RECEIPT,
     BOOKING_EMAIL_OWNER_CONFIRMED,
     BOOKING_EMAIL_OWNER_CANCELLED,
     BOOKING_EMAIL_OWNER_PAYMENT_FAILED,
     BOOKING_EMAIL_OWNER_REQUEST,
     BOOKING_EMAIL_PAYMENT_FAILED,
+    BOOKING_EMAIL_REMINDER,
     BOOKING_EMAIL_REJECTED,
     BOOKING_EMAIL_REQUEST_CANCELLED,
     BOOKING_EMAIL_REQUEST_SUBMITTED,
+    BOOKING_EMAIL_WELCOME,
     now_utc,
 )
+from app.services.transactional_templates import render_transactional_email
 
 if TYPE_CHECKING:
     from app.models.booking import Booking
     from app.models.booking_request import BookingRequest
+    from app.models.invoice import Invoice
     from app.models.location import Location
+    from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
+    from app.models.organization import Organization
+    from app.models.payment import Payment
     from app.models.space import Space
 
 logger = logging.getLogger("notifications")
@@ -155,32 +165,64 @@ def send_booking_transactional_email(
     booking: "Booking | None" = None,
     space: "Space | None" = None,
     location: "Location | None" = None,
+    invoice: "Invoice | None" = None,
+    payment: "Payment | None" = None,
     notification_type: str,
     recipient_role: str,
     recipient_user_id: int | None = None,
     actor_user_id: int | None = None,
     resend: bool = False,
     resend_of_public_id: str | None = None,
+    organization_id: int | None = None,
+    tenant_id: int | None = None,
+    source: str = "booking",
+    extra_context: dict[str, Any] | None = None,
+    tracking_context: dict[str, Any] | None = None,
 ) -> OutboundMessage:
     user_id = recipient_user_id
     if user_id is None and to_email:
         user = db.query(User).filter(User.email == to_email).first()
         user_id = user.id if user else None
 
-    organization_id = None
-    tenant_id = None
+    resolved_organization_id = organization_id
+    resolved_tenant_id = tenant_id
     if location:
-        organization_id = location.organization_id
-        tenant_id = location.tenant_id
+        resolved_organization_id = resolved_organization_id or location.organization_id
+        resolved_tenant_id = resolved_tenant_id or location.tenant_id
     if space:
-        tenant_id = tenant_id or space.tenant_id
-        organization_id = organization_id or space.tenant_id
+        resolved_tenant_id = resolved_tenant_id or space.tenant_id
+        resolved_organization_id = resolved_organization_id or space.tenant_id
     if req:
-        tenant_id = tenant_id or req.tenant_id
+        resolved_tenant_id = resolved_tenant_id or req.tenant_id
     if booking:
-        tenant_id = tenant_id or booking.tenant_id
-    organization_id = organization_id or tenant_id or 0
-    tenant_id = tenant_id or organization_id
+        resolved_tenant_id = resolved_tenant_id or booking.tenant_id
+    if invoice:
+        resolved_tenant_id = resolved_tenant_id or invoice.tenant_id
+    if payment:
+        resolved_tenant_id = resolved_tenant_id or payment.tenant_id
+    organization_id = resolved_organization_id or resolved_tenant_id or 0
+    tenant_id = resolved_tenant_id or organization_id
+
+    rendered = render_transactional_email(
+        db,
+        organization_id=organization_id,
+        notification_type=notification_type,
+        default_subject=subject,
+        default_text_body=body,
+        default_html_body=html_body,
+        to_email=to_email,
+        user_id=user_id,
+        req=req,
+        booking=booking,
+        space=space,
+        location=location,
+        invoice=invoice,
+        payment=payment,
+        extra_context=extra_context,
+    )
+    subject = rendered.subject
+    body = rendered.text_body
+    html_body = rendered.html_body
 
     context = _booking_source_context(
         notification_type=notification_type,
@@ -192,6 +234,13 @@ def send_booking_transactional_email(
         resend_of_public_id=resend_of_public_id,
         attachments=attachments,
     )
+    if rendered.template:
+        context["template_public_id"] = rendered.template.public_id
+        context["template_classification"] = rendered.template.classification
+    if rendered.fallback_reason:
+        context["template_fallback_reason"] = rendered.fallback_reason
+    if tracking_context:
+        context.update(tracking_context)
     outbound = OutboundMessage(
         organization_id=organization_id,
         tenant_id=tenant_id,
@@ -205,8 +254,9 @@ def send_booking_transactional_email(
         from_name="Priddyspaces",
         provider="sendgrid",
         status="queued",
-        source="booking",
+        source=source,
         source_context=context,
+        template_id=rendered.template.id if rendered.template else None,
     )
     db.add(outbound)
     db.commit()
@@ -235,7 +285,7 @@ def send_booking_transactional_email(
         content.append({"type": "text/html", "value": html_body})
     custom_args = {
         "outbound_public_id": outbound.public_id,
-        "source": "booking",
+        "source": source,
         "notification_type": notification_type,
     }
     if req:
@@ -387,6 +437,162 @@ def _html_shell(title: str, lines: list[str], buttons: list[tuple[str, str, str]
     return (
         "<div style=\"font-family:Arial,sans-serif;line-height:1.45;color:#111827\">"
         f"<h2>{escape(title)}</h2>{escaped_lines}{button_html}</div>"
+    )
+
+
+def _already_sent_user_notification(db: Session, *, tenant_id: int, user_id: int, notification_type: str) -> bool:
+    rows = (
+        db.query(OutboundMessage)
+        .filter(
+            OutboundMessage.tenant_id == tenant_id,
+            OutboundMessage.user_id == user_id,
+            OutboundMessage.source.in_(["booking", "transactional"]),
+        )
+        .all()
+    )
+    return any((row.source_context or {}).get("notification_type") == notification_type for row in rows)
+
+
+def send_welcome_letter_if_first_booking(
+    db: Session,
+    req: "BookingRequest",
+    booking: "Booking | None",
+    space: "Space",
+    location: "Location",
+    *,
+    actor_user_id: int | None = None,
+) -> OutboundMessage | None:
+    if not booking or not req.user_id:
+        return None
+    if _already_sent_user_notification(
+        db,
+        tenant_id=booking.tenant_id,
+        user_id=req.user_id,
+        notification_type=BOOKING_EMAIL_WELCOME,
+    ):
+        return None
+
+    from app.models.booking import Booking
+
+    prior_confirmed = (
+        db.query(Booking)
+        .filter(
+            Booking.tenant_id == booking.tenant_id,
+            Booking.user_id == req.user_id,
+            Booking.status == BookingStatus.CONFIRMED,
+            Booking.id < booking.id,
+        )
+        .first()
+    )
+    if prior_confirmed:
+        return None
+
+    to_email = _requester_email(db, req)
+    if not to_email:
+        return None
+    name = _requester_name(db, req)
+    lines = [
+        f"Hi {name},",
+        f"Welcome to {location.name}. Your first reservation is confirmed.",
+        f"Space: {space.name}",
+        f"From: {booking.start_datetime}",
+        f"To: {booking.end_datetime}",
+    ]
+    return send_booking_transactional_email(
+        db=db,
+        to_email=to_email,
+        subject="Welcome aboard",
+        body="\n".join(lines),
+        html_body=_html_shell("Welcome aboard", lines),
+        req=req,
+        booking=booking,
+        space=space,
+        location=location,
+        notification_type=BOOKING_EMAIL_WELCOME,
+        recipient_role="member",
+        recipient_user_id=req.user_id,
+        actor_user_id=actor_user_id,
+    )
+
+
+def send_invoice_receipt_email(
+    db: Session,
+    *,
+    to_email: str,
+    subject: str,
+    body: str,
+    organization_id: int,
+    user_id: int | None = None,
+    req: "BookingRequest | None" = None,
+    booking: "Booking | None" = None,
+    invoice: "Invoice | None" = None,
+    payment: "Payment | None" = None,
+) -> OutboundMessage | None:
+    if not to_email:
+        return None
+    return send_booking_transactional_email(
+        db=db,
+        to_email=to_email,
+        subject=subject,
+        body=body,
+        html_body=_html_shell(subject, [body]),
+        req=req,
+        booking=booking,
+        invoice=invoice,
+        payment=payment,
+        notification_type=BOOKING_EMAIL_INVOICE_RECEIPT,
+        recipient_role="member",
+        recipient_user_id=user_id,
+        organization_id=organization_id,
+        tenant_id=organization_id,
+        source="transactional",
+    )
+
+
+def send_card_expiring_email(
+    db: Session,
+    *,
+    user: User,
+    organization: "Organization",
+    method: "MemberOwnerPaymentMethod",
+    expired: bool = False,
+) -> OutboundMessage | None:
+    if not user.email:
+        return None
+    exp_month = method.exp_month or ""
+    exp_year = method.exp_year or ""
+    expiry = f"{exp_month:02d}/{exp_year}" if isinstance(exp_month, int) and exp_year else str(exp_year or "")
+    state = "expired" if expired else "will expire soon"
+    lines = [
+        f"Hi {user.first_name or user.full_name or user.email},",
+        f"Your {method.brand or 'card'} ending in {method.last4 or 'unknown'} {state}.",
+        "Please update your payment method to avoid interrupted reservations or memberships.",
+    ]
+    return send_booking_transactional_email(
+        db=db,
+        to_email=user.email,
+        subject="Update your payment card",
+        body="\n".join(lines),
+        html_body=_html_shell("Update your payment card", lines),
+        notification_type=BOOKING_EMAIL_CARD_EXPIRING,
+        recipient_role="member",
+        recipient_user_id=user.id,
+        organization_id=organization.id,
+        tenant_id=organization.id,
+        source="transactional",
+        extra_context={
+            "card": {
+                "brand": method.brand or "card",
+                "last4": method.last4 or "",
+                "exp_month": str(exp_month),
+                "exp_year": str(exp_year),
+                "expiry": expiry,
+            }
+        },
+        tracking_context={
+            "member_owner_payment_method_public_id": method.public_id,
+            "card_expiry": expiry,
+        },
     )
 
 
@@ -621,6 +827,7 @@ def send_booking_confirmed_email(
         f"To: {req.end_datetime}",
     ]
     attachments = []
+    pass_url = ""
     if booking:
         access_pass = db.query(SpaceAccessPass).filter(SpaceAccessPass.booking_id == booking.id).first()
         if access_pass:
@@ -649,7 +856,7 @@ def send_booking_confirmed_email(
                 method="REQUEST",
             )
         )
-    return send_booking_transactional_email(
+    confirmation = send_booking_transactional_email(
         db=db,
         to_email=to_email,
         subject="Booking confirmed",
@@ -665,7 +872,14 @@ def send_booking_confirmed_email(
         recipient_user_id=req.user_id,
         actor_user_id=actor_user_id,
         resend=resend,
+        extra_context={
+            "booking": {"access_pass_link": pass_url},
+            "links": {"access_pass": pass_url},
+        },
     )
+    if booking and not resend:
+        send_welcome_letter_if_first_booking(db, req, booking, space, location, actor_user_id=actor_user_id)
+    return confirmation
 
 
 def send_booking_rejected_email(
@@ -758,6 +972,10 @@ def send_booking_payment_failed_email(
         recipient_user_id=req.user_id,
         actor_user_id=actor_user_id,
         resend=resend,
+        extra_context={
+            "payment": {"failure_reason": reason or "The payment processor declined the charge."},
+            "links": {"retry_payment": _frontend_url(f"/member/requests/{req.public_id}")},
+        },
     )
 
 

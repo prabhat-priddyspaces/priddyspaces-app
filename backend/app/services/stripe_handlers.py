@@ -13,10 +13,11 @@ from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
 from app.models.subscription import Subscription
 from app.models.user import User
+from app.services.booking_email_delivery import BOOKING_EMAIL_PAYMENT_FAILED
 from app.services.booking_payments import finalize_successful_booking_request_payment
 from app.services.invoices import generate_invoice_pdf
 from app.services.loyalty import record_earned_for_payment, reverse_for_payment_refund
-from app.services.notifications import send_email
+from app.services.notifications import send_booking_transactional_email, send_invoice_receipt_email
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.access_passes import ensure_access_pass_for_booking
 from app.services.storage import upload_invoice_pdf
@@ -202,11 +203,19 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
                 if customer:
                     customer_email = customer.email
             if customer_email:
-                send_email(
+                booking = db.query(Booking).filter(Booking.id == payment.booking_id).first() if payment.booking_id else None
+                invoice = db.query(Invoice).filter(Invoice.payment_id == payment.id).first()
+                send_invoice_receipt_email(
+                    db,
                     to_email=customer_email,
                     subject="Payment receipt",
                     body=f"Your payment for booking request {req.public_id} is confirmed.",
-                    db=db,
+                    organization_id=req.tenant_id,
+                    user_id=payment.user_id,
+                    req=req,
+                    booking=booking,
+                    invoice=invoice,
+                    payment=payment,
                 )
         return
 
@@ -268,11 +277,16 @@ def _handle_booking_payment_success(db: Session, data: dict[str, Any], tenant_id
     )
     record_earned_for_payment(db, payment, booking=booking)
     if customer_email:
-        send_email(
+        send_invoice_receipt_email(
+            db,
             to_email=customer_email,
             subject="Payment receipt",
             body=f"Your payment for booking {booking.public_id} is confirmed.",
-            db=db,
+            organization_id=booking.tenant_id,
+            user_id=payment.user_id,
+            booking=booking,
+            invoice=db.query(Invoice).filter(Invoice.payment_id == payment.id).first(),
+            payment=payment,
         )
 
 
@@ -328,18 +342,31 @@ def _handle_subscription_invoice_event(db: Session, event_type: str, data: dict[
         return
 
     if is_paid:
-        send_email(
+        send_invoice_receipt_email(
+            db,
             to_email=customer_email,
             subject="Membership payment received",
             body=f"Your membership payment was recorded. Invoice {invoice.public_id} is available.",
-            db=db,
+            organization_id=subscription.tenant_id,
+            user_id=subscription.user_id,
+            invoice=invoice,
+            payment=payment,
         )
     else:
-        send_email(
+        send_booking_transactional_email(
+            db=db,
             to_email=customer_email,
             subject="Membership payment failed",
             body="We could not process your membership payment. Please update your billing details.",
-            db=db,
+            html_body=None,
+            invoice=invoice,
+            payment=payment,
+            notification_type=BOOKING_EMAIL_PAYMENT_FAILED,
+            recipient_role="member",
+            recipient_user_id=subscription.user_id,
+            organization_id=subscription.tenant_id,
+            tenant_id=subscription.tenant_id,
+            source="transactional",
         )
 
 

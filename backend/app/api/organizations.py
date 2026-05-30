@@ -23,6 +23,7 @@ from app.services.organization_approval import (
     superadmin_approval_recipients,
 )
 from app.services.platform_auth import get_audit_actor_context
+from app.services.transactional_templates import ensure_default_transactional_templates
 
 router = APIRouter()
 
@@ -53,6 +54,7 @@ def create_org(
     )
     db.add(member)
     seed_default_amenities(db, org.id)
+    ensure_default_transactional_templates(db, org, actor_id=user.id)
     db.commit()
     send_organization_approval_request_email(db, org=org, requester=user)
     return org

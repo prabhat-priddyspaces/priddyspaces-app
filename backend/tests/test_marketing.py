@@ -1,11 +1,27 @@
 from datetime import datetime, timedelta, timezone
 
-from app.models.enums import UserAppRole, UserRole
-from app.models.marketing import MarketingVerifiedSender, OutboundMessage, WorkflowRun
+from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
+from app.models.enums import (
+    AvailabilityStatus,
+    BookingRequestStatus,
+    BookingStatus,
+    SpaceType,
+    SpaceVisibility,
+    UserAppRole,
+    UserRole,
+)
+from app.models.location import Location
+from app.models.marketing import MarketingTemplate, MarketingVerifiedSender, OutboundMessage, WorkflowRun
 from app.models.org_member_profile import OrgMemberProfile
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
+from app.models.space import Space
 from app.models.user import User
+from app.services import notifications
+from app.services.booking_email_delivery import BOOKING_EMAIL_CONFIRMED, BOOKING_EMAIL_INVOICE_RECEIPT, BOOKING_EMAIL_WELCOME
+from app.services.notifications import send_booking_confirmed_email, send_booking_transactional_email
+from app.services.transactional_templates import TRANSACTIONAL_TEMPLATE_CATEGORY
 
 
 def _user(db, email: str, sub: str, role: UserAppRole = UserAppRole.MEMBER) -> User:
@@ -85,6 +101,201 @@ def test_template_validation_rejects_unknown_variables(db_session, client_factor
 
     assert response.status_code == 400
     assert "member.password" in response.text
+
+
+def test_transactional_defaults_seed_for_owner_templates(db_session, client_factory):
+    owner = _user(db_session, "owner-defaults@example.com", "sub-owner-defaults", UserAppRole.OWNER)
+    org = _org(db_session, owner)
+    client = _client(client_factory, owner)
+
+    response = client.get(f"/api/marketing/templates?organization_public_id={org.public_id}")
+
+    assert response.status_code == 200
+    classifications = {
+        item["classification"]
+        for item in response.json()
+        if item["category"] == TRANSACTIONAL_TEMPLATE_CATEGORY
+    }
+    assert {
+        "welcome_letter",
+        "reservation_confirmation",
+        "reservation_reminder",
+        "invoice_receipt",
+        "payment_failed",
+        "card_expiring",
+    }.issubset(classifications)
+
+
+def test_template_validation_allows_transactional_shortcodes(db_session, client_factory):
+    owner = _user(db_session, "owner-shortcodes@example.com", "sub-owner-shortcodes", UserAppRole.OWNER)
+    org = _org(db_session, owner)
+    client = _client(client_factory, owner)
+
+    response = client.post(
+        "/api/marketing/templates",
+        json={
+            "organization_public_id": org.public_id,
+            "name": "Card notice",
+            "subject": "Card {{ card.last4 }} for {{ owner.email }}",
+            "text_body": "Retry: {{ links.retry_payment }} Amount: {{ payment.amount }}",
+            "category": "transactional",
+            "classification": "card_expiring",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "card.last4" in response.json()["variables"]
+    assert "owner.email" in response.json()["variables"]
+
+
+def test_transactional_template_overrides_booking_email(db_session):
+    owner = _user(db_session, "owner-render@example.com", "sub-owner-render", UserAppRole.OWNER)
+    owner.first_name = "Owner"
+    db_session.add(owner)
+    db_session.commit()
+    org = _org(db_session, owner)
+    member = _member(db_session, org, "member-render@example.com", "sub-member-render")
+    member.first_name = "Riley"
+    db_session.add(member)
+    template = MarketingTemplate(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Custom confirmation",
+        subject="Confirmed for {{ member.first_name }}",
+        text_body="Hi {{ member.first_name }} from {{ business.name }}",
+        html_body="<p>{{ owner.email }}</p>",
+        category=TRANSACTIONAL_TEMPLATE_CATEGORY,
+        classification="reservation_confirmation",
+        variables=["member.first_name", "business.name", "owner.email"],
+    )
+    db_session.add(template)
+    db_session.commit()
+
+    outbound = send_booking_transactional_email(
+        db_session,
+        to_email=member.email,
+        subject="Fallback subject",
+        body="Fallback body",
+        notification_type=BOOKING_EMAIL_CONFIRMED,
+        recipient_role="member",
+        recipient_user_id=member.id,
+        organization_id=org.id,
+        tenant_id=org.id,
+        source="transactional",
+    )
+
+    assert outbound.subject == "Confirmed for Riley"
+    assert outbound.text_body == "Hi Riley from Marketing Org"
+    assert outbound.template_id == template.id
+    assert outbound.source_context["template_public_id"] == template.public_id
+    assert outbound.source_context["template_classification"] == "reservation_confirmation"
+
+
+def test_transactional_template_falls_back_when_render_missing(db_session):
+    owner = _user(db_session, "owner-fallback@example.com", "sub-owner-fallback", UserAppRole.OWNER)
+    org = _org(db_session, owner)
+    member = _member(db_session, org, "member-fallback@example.com", "sub-member-fallback")
+    template = MarketingTemplate(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Broken invoice",
+        subject="Invoice",
+        text_body="{{ unknown.value }}",
+        category=TRANSACTIONAL_TEMPLATE_CATEGORY,
+        classification="invoice_receipt",
+        variables=[],
+    )
+    db_session.add(template)
+    db_session.commit()
+
+    outbound = send_booking_transactional_email(
+        db_session,
+        to_email=member.email,
+        subject="Fallback invoice",
+        body="Fallback invoice body",
+        notification_type=BOOKING_EMAIL_INVOICE_RECEIPT,
+        recipient_role="member",
+        recipient_user_id=member.id,
+        organization_id=org.id,
+        tenant_id=org.id,
+        source="transactional",
+    )
+
+    assert outbound.subject == "Fallback invoice"
+    assert outbound.text_body == "Fallback invoice body"
+    assert outbound.source_context["template_public_id"] == template.public_id
+    assert "template_fallback_reason" in outbound.source_context
+
+
+def test_booking_confirmation_sends_welcome_only_for_first_confirmed_booking(db_session, monkeypatch):
+    monkeypatch.setattr(notifications.settings, "SENDGRID_API_KEY", "")
+    monkeypatch.setattr(notifications.settings, "SENDGRID_FROM_EMAIL", "")
+
+    owner = _user(db_session, "owner-welcome@example.com", "sub-owner-welcome", UserAppRole.OWNER)
+    org = _org(db_session, owner)
+    member = _member(db_session, org, "member-welcome@example.com", "sub-member-welcome")
+    location = Location(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Welcome Location",
+        address="1 Welcome Way",
+        timezone="UTC",
+    )
+    db_session.add(location)
+    db_session.commit()
+    db_session.refresh(location)
+    space = Space(
+        location_id=location.id,
+        tenant_id=org.id,
+        name="Welcome Room",
+        space_type=SpaceType.CONFERENCE_ROOM,
+        capacity=4,
+        availability_status=AvailabilityStatus.AVAILABLE,
+        visibility=SpaceVisibility.PUBLIC,
+    )
+    db_session.add(space)
+    db_session.commit()
+    db_session.refresh(space)
+
+    def _confirmed_request(day: int) -> tuple[BookingRequest, Booking]:
+        booking = Booking(
+            user_id=member.id,
+            space_id=space.id,
+            tenant_id=org.id,
+            start_datetime=datetime(2026, 6, day, 10, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 6, day, 11, 0, tzinfo=timezone.utc),
+            status=BookingStatus.CONFIRMED,
+        )
+        db_session.add(booking)
+        db_session.flush()
+        req = BookingRequest(
+            tenant_id=org.id,
+            user_id=member.id,
+            space_id=space.id,
+            booking_id=booking.id,
+            start_datetime=booking.start_datetime,
+            end_datetime=booking.end_datetime,
+            status=BookingRequestStatus.APPROVED,
+        )
+        db_session.add(req)
+        db_session.commit()
+        db_session.refresh(booking)
+        db_session.refresh(req)
+        return req, booking
+
+    req_one, booking_one = _confirmed_request(1)
+    send_booking_confirmed_email(db_session, req_one, booking_one, space, location)
+    req_two, booking_two = _confirmed_request(2)
+    send_booking_confirmed_email(db_session, req_two, booking_two, space, location)
+
+    welcome_rows = db_session.query(OutboundMessage).filter(OutboundMessage.user_id == member.id).all()
+    welcome_rows = [
+        row
+        for row in welcome_rows
+        if (row.source_context or {}).get("notification_type") == BOOKING_EMAIL_WELCOME
+    ]
+    assert len(welcome_rows) == 1
+    assert welcome_rows[0].source_context["booking_public_id"] == booking_one.public_id
 
 
 def test_segment_preview_uses_only_org_crm_members(db_session, client_factory):

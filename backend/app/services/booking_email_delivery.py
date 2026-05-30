@@ -18,6 +18,10 @@ BOOKING_EMAIL_OWNER_PAYMENT_FAILED = "owner_payment_failed"
 BOOKING_EMAIL_CANCELLED = "booking_cancelled"
 BOOKING_EMAIL_REQUEST_CANCELLED = "booking_request_cancelled"
 BOOKING_EMAIL_OWNER_CANCELLED = "owner_booking_cancelled"
+BOOKING_EMAIL_WELCOME = "welcome_letter"
+BOOKING_EMAIL_REMINDER = "reservation_reminder"
+BOOKING_EMAIL_INVOICE_RECEIPT = "invoice_receipt"
+BOOKING_EMAIL_CARD_EXPIRING = "card_expiring"
 
 BOOKING_EMAIL_TYPES = {
     BOOKING_EMAIL_REQUEST_SUBMITTED,
@@ -30,6 +34,10 @@ BOOKING_EMAIL_TYPES = {
     BOOKING_EMAIL_CANCELLED,
     BOOKING_EMAIL_REQUEST_CANCELLED,
     BOOKING_EMAIL_OWNER_CANCELLED,
+    BOOKING_EMAIL_WELCOME,
+    BOOKING_EMAIL_REMINDER,
+    BOOKING_EMAIL_INVOICE_RECEIPT,
+    BOOKING_EMAIL_CARD_EXPIRING,
 }
 
 BOOKING_EMAIL_LABELS = {
@@ -43,6 +51,10 @@ BOOKING_EMAIL_LABELS = {
     BOOKING_EMAIL_CANCELLED: "Booking canceled",
     BOOKING_EMAIL_REQUEST_CANCELLED: "Request canceled",
     BOOKING_EMAIL_OWNER_CANCELLED: "Owner cancellation notice",
+    BOOKING_EMAIL_WELCOME: "Welcome letter",
+    BOOKING_EMAIL_REMINDER: "Reservation reminder",
+    BOOKING_EMAIL_INVOICE_RECEIPT: "Invoice or receipt",
+    BOOKING_EMAIL_CARD_EXPIRING: "Card expiring notice",
 }
 
 VISIBLE_STATUSES = {"queued", "sent", "delivered", "opened", "clicked", "bounced", "failed"}

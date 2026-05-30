@@ -54,6 +54,7 @@ from app.schemas.marketing import (
 )
 from app.services import marketing as marketing_service
 from app.services.auth_user import get_or_create_user
+from app.services.transactional_templates import ensure_default_transactional_templates
 
 router = APIRouter(prefix="/marketing", tags=["marketing"])
 
@@ -205,6 +206,7 @@ def list_templates(
 ):
     actor = _actor(db, token)
     org = _org_for_actor(db, actor, organization_public_id)
+    ensure_default_transactional_templates(db, org, actor_id=actor.id)
     query = db.query(MarketingTemplate).filter(MarketingTemplate.organization_id == org.id)
     if not include_archived:
         query = query.filter(MarketingTemplate.is_archived.is_(False))

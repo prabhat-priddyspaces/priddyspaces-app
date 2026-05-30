@@ -10,15 +10,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import httpx
-import bleach
 from fastapi import HTTPException
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.serialization import load_der_public_key, load_pem_public_key
-from jinja2 import StrictUndefined, meta, nodes
-from jinja2.exceptions import TemplateError, UndefinedError
-from jinja2.sandbox import SandboxedEnvironment
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -48,52 +44,19 @@ from app.models.user import User
 from app.services.authz import list_org_members
 from app.services.notifications import send_email
 from app.services.org_member_stats import MemberStats, compute_member_stats, interacted_user_ids
+from app.services.template_rendering import (
+    ALLOWED_MARKETING_HTML_ATTRIBUTES,
+    ALLOWED_MARKETING_HTML_TAGS,
+    ALLOWED_TEMPLATE_FIELDS,
+    ensure_template_allowed,
+    render_template_sources,
+)
 from app.utils.uuid import new_public_id
 
 logger = logging.getLogger("marketing")
 
 OWNER_MARKETING_ROLES = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
 SENDER_LANES = {"shared", "verified_sender"}
-
-ALLOWED_MARKETING_HTML_TAGS = [
-    "a",
-    "b",
-    "br",
-    "div",
-    "em",
-    "h1",
-    "h2",
-    "h3",
-    "li",
-    "ol",
-    "p",
-    "span",
-    "strong",
-    "table",
-    "tbody",
-    "td",
-    "th",
-    "thead",
-    "tr",
-    "ul",
-]
-ALLOWED_MARKETING_HTML_ATTRIBUTES = {
-    "a": ["href", "title"],
-    "table": ["cellpadding", "cellspacing", "role"],
-    "td": ["align", "colspan"],
-    "th": ["align", "colspan"],
-}
-
-ALLOWED_TEMPLATE_FIELDS: dict[str, set[str]] = {
-    "member": {"first_name", "last_name", "full_name", "email", "phone"},
-    "booking": {"number", "start_date", "end_date", "space_name", "location_name", "link"},
-    "space": {"name", "type", "capacity", "location_name"},
-    "membership": {"name", "status", "renewal_date", "expiry_date"},
-    "invoice": {"number", "amount", "balance_due", "due_date", "link"},
-    "business": {"name", "support_email", "phone"},
-    "links": {"unsubscribe", "view_in_browser"},
-}
-
 
 @dataclass
 class AudienceMember:
@@ -150,88 +113,16 @@ def resolve_marketing_org(
     return orgs[0]
 
 
-def ensure_template_allowed(subject: str, html_body: str | None, text_body: str | None) -> list[str]:
-    if not subject or not subject.strip():
-        raise HTTPException(status_code=400, detail="Template subject is required")
-    if not (html_body and html_body.strip()) and not (text_body and text_body.strip()):
-        raise HTTPException(status_code=400, detail="Template body is required")
-
-    variables: set[str] = set()
-    for source in [subject, html_body or "", text_body or ""]:
-        variables.update(_validate_template_source(source))
-    return sorted(variables)
-
-
-def _validate_template_source(source: str) -> set[str]:
-    env = SandboxedEnvironment()
-    try:
-        parsed = env.parse(source)
-    except TemplateError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid template syntax: {exc}") from exc
-
-    undeclared = meta.find_undeclared_variables(parsed)
-    unknown = sorted(name for name in undeclared if name not in ALLOWED_TEMPLATE_FIELDS)
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Unknown template variable(s): {', '.join(unknown)}")
-
-    if list(parsed.find_all(nodes.Call)):
-        raise HTTPException(status_code=400, detail="Template function calls are not allowed")
-    if list(parsed.find_all(nodes.Getitem)):
-        raise HTTPException(status_code=400, detail="Template item access is not allowed; use dotted fields")
-
-    variables: set[str] = set()
-    for attr in parsed.find_all(nodes.Getattr):
-        root = _root_name(attr)
-        if not root:
-            continue
-        if root not in ALLOWED_TEMPLATE_FIELDS:
-            raise HTTPException(status_code=400, detail=f"Unknown template variable: {root}")
-        if attr.attr not in ALLOWED_TEMPLATE_FIELDS[root]:
-            raise HTTPException(status_code=400, detail=f"Unknown template field: {root}.{attr.attr}")
-        variables.add(f"{root}.{attr.attr}")
-    for name in parsed.find_all(nodes.Name):
-        if name.name in ALLOWED_TEMPLATE_FIELDS:
-            variables.add(name.name)
-    return variables
-
-
-def _root_name(node: nodes.Node) -> str | None:
-    current = node
-    while isinstance(current, nodes.Getattr):
-        current = current.node
-    if isinstance(current, nodes.Name):
-        return current.name
-    return None
-
-
 def render_marketing_template(
     template: MarketingTemplate,
     context: dict[str, Any],
 ) -> tuple[str, str | None, str | None, list[str]]:
-    env = SandboxedEnvironment(undefined=StrictUndefined)
-    missing: list[str] = []
-
-    def _render(source: str | None) -> str | None:
-        if source is None:
-            return None
-        try:
-            return env.from_string(source).render(**context)
-        except UndefinedError as exc:
-            missing.append(str(exc))
-            return source
-
-    subject = _render(template.subject) or template.subject
-    html = _render(template.html_body)
-    text = _render(template.text_body)
-    if html is not None:
-        html = bleach.clean(
-            html,
-            tags=ALLOWED_MARKETING_HTML_TAGS,
-            attributes=ALLOWED_MARKETING_HTML_ATTRIBUTES,
-            protocols=["http", "https", "mailto"],
-            strip=True,
-        )
-    return subject, html, text, sorted(set(missing))
+    return render_template_sources(
+        subject=template.subject,
+        html_body=template.html_body,
+        text_body=template.text_body,
+        context=context,
+    )
 
 
 def get_or_create_sender_settings(db: Session, org: Organization) -> BusinessMarketingSenderSetting:
@@ -508,7 +399,12 @@ def member_context(
         "full_name": (user.full_name or f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email) if user else "",
         "email": user.email if user else "",
         "phone": member_phone or "",
+        "company": record.company_name if record and record.company_name else "",
     }
+    owner = db.query(User).filter(User.id == org.owner_id).first()
+    owner_first = owner.first_name if owner else ""
+    owner_last = owner.last_name if owner else ""
+    owner_full = (owner.full_name or f"{owner_first or ''} {owner_last or ''}".strip() or owner.email) if owner else ""
 
     latest_subscription = None
     if user:
@@ -532,6 +428,11 @@ def member_context(
     links = {
         "unsubscribe": f"{settings.BACKEND_URL}/api/marketing/unsubscribe/{make_link_token({'org': org.public_id, 'email': email})}",
         "view_in_browser": "#",
+        "booking": "",
+        "invoice": latest_invoice.pdf_url if latest_invoice and latest_invoice.pdf_url else "",
+        "retry_payment": "",
+        "update_payment_method": f"{settings.FRONTEND_URL.rstrip('/')}/member/payments",
+        "access_pass": "",
     }
     if outbound:
         links["view_in_browser"] = f"{settings.BACKEND_URL}/api/marketing/messages/{make_link_token({'message': outbound.public_id})}/view"
@@ -540,11 +441,15 @@ def member_context(
         "member": member,
         "booking": {
             "number": "",
+            "request_number": "",
             "start_date": "",
             "end_date": "",
+            "start_time": "",
+            "end_time": "",
             "space_name": "",
             "location_name": location.name if location else "",
             "link": "",
+            "access_pass_link": "",
         },
         "space": {
             "name": "",
@@ -564,11 +469,47 @@ def member_context(
             "balance_due": latest_invoice.amount if latest_invoice and latest_invoice.status != "paid" else 0,
             "due_date": "",
             "link": latest_invoice.pdf_url if latest_invoice else "",
+            "status": latest_invoice.status if latest_invoice else "",
         },
         "business": {
             "name": org.name,
             "support_email": location.public_email if location and location.public_email else settings.SENDGRID_FROM_EMAIL,
             "phone": location.public_phone if location and location.public_phone else "",
+            "address": location.address if location else "",
+            "city": location.city if location and location.city else "",
+            "state": location.state if location and location.state else "",
+            "postal_code": location.postal_code if location and location.postal_code else "",
+            "website": org.website or "",
+        },
+        "owner": {
+            "first_name": owner_first,
+            "last_name": owner_last,
+            "full_name": owner_full,
+            "email": owner.email if owner else "",
+            "phone": owner.phone if owner and owner.phone else "",
+        },
+        "location": {
+            "name": location.name if location else "",
+            "address": location.address if location else "",
+            "city": location.city if location and location.city else "",
+            "state": location.state if location and location.state else "",
+            "postal_code": location.postal_code if location and location.postal_code else "",
+            "phone": location.public_phone if location and location.public_phone else "",
+            "email": location.public_email if location and location.public_email else settings.SENDGRID_FROM_EMAIL,
+            "timezone": location.timezone if location else "",
+        },
+        "payment": {
+            "amount": latest_invoice.amount if latest_invoice else "",
+            "status": "",
+            "failure_reason": "The payment processor declined the charge.",
+            "provider": "",
+        },
+        "card": {
+            "brand": "",
+            "last4": "",
+            "exp_month": "",
+            "exp_year": "",
+            "expiry": "",
         },
         "links": links,
     }
