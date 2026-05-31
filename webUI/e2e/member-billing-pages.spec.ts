@@ -125,7 +125,7 @@ test("member invoices show booking context and download a PDF", async ({ page })
   await expect(page.getByText("Payment pay_board_room_1 via stripe, succeeded")).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download PDF" }).click();
+  await page.getByRole("button", { name: "Download invoice PDF" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("invoice-inv_board_room_1.pdf");
 });

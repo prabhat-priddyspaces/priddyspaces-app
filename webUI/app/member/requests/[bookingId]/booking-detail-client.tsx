@@ -523,7 +523,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                       disabled={downloadingInvoice}
                     >
                       <Download size={14} />
-                      {downloadingInvoice ? "Preparing..." : "Download PDF"}
+                      {downloadingInvoice ? "Preparing invoice..." : "Download invoice PDF"}
                     </Button>
                   </div>
                 </>
