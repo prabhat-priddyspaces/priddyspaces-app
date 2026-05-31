@@ -88,7 +88,7 @@ test("member can see payment and invoice status for an approved booking request"
 
   await page.goto("/member/requests/req_paid_1");
 
-  await expect(page.getByText("Request details")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Request details" })).toBeVisible();
   await expect(page.getByText("Name: Training Room East")).toBeVisible();
   await expect(page.getByText("Location: North Loop")).toBeVisible();
   await expect(page.getByText("Jordan Lee · Admin")).toBeVisible();
