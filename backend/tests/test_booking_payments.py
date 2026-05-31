@@ -155,6 +155,28 @@ def _make_request(db, member: User, space: Space, setting: OwnerPaymentSetting, 
     return req
 
 
+def _attach_pending_hold(db, req: BookingRequest) -> Booking:
+    booking = Booking(
+        user_id=req.user_id,
+        space_id=req.space_id,
+        tenant_id=req.tenant_id,
+        start_datetime=req.start_datetime,
+        end_datetime=req.end_datetime,
+        inventory_start_datetime=req.start_datetime,
+        inventory_end_datetime=req.end_datetime,
+        booking_request_id=req.id,
+        status=BookingStatus.PENDING,
+    )
+    db.add(booking)
+    db.flush()
+    req.booking_id = booking.id
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    db.refresh(booking)
+    return booking
+
+
 # --------------------- retry / idempotency ---------------------
 
 
@@ -218,6 +240,72 @@ def test_charge_failure_logs_structured_sanitized_context(db_session, monkeypatc
     assert "attempt=1" in caplog.text
     assert f"payment_method_public_id={method.public_id}" in caplog.text
     assert "failure_reason=declined provider trace" in caplog.text
+
+
+def test_inactive_payment_method_failure_records_payment_and_recovery_hold(db_session, monkeypatch):
+    class UnexpectedProvider:
+        def charge_saved_method(self, **kwargs):
+            raise AssertionError("inactive payment methods must fail before provider charge")
+
+    monkeypatch.setattr(
+        "app.services.booking_payments.PaymentProviderFactory.get",
+        lambda setting: UnexpectedProvider(),
+    )
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method)
+    booking = _attach_pending_hold(db_session, req)
+    method.status = "inactive"
+    db_session.add(method)
+    db_session.commit()
+
+    req, held_booking, payment = charge_booking_request(db_session, req, operator_notes="owner approved")
+
+    assert req.status == BookingRequestStatus.PAYMENT_FAILED
+    assert req.payment_status == "failed"
+    assert req.payment_failed_at is not None
+    assert req.payment_hold_expires_at is not None
+    assert req.payment_attempt_count == 1
+    assert held_booking is not None and held_booking.id == booking.id
+    db_session.refresh(booking)
+    assert booking.status == BookingStatus.PENDING
+    assert payment is not None
+    assert payment.status == PaymentStatus.FAILED
+    assert payment.payment_method_id == method.id
+    assert payment.attempt_number == 1
+    assert payment.failure_reason == "Member payment method is no longer active. Please update the card and retry."
+    assert payment.raw_response == {"error": payment.failure_reason}
+
+
+def test_disabled_owner_payment_setting_failure_cancels_hold_when_configured(db_session, monkeypatch):
+    class UnexpectedProvider:
+        def charge_saved_method(self, **kwargs):
+            raise AssertionError("disabled payment settings must fail before provider charge")
+
+    monkeypatch.setattr(
+        "app.services.booking_payments.PaymentProviderFactory.get",
+        lambda setting: UnexpectedProvider(),
+    )
+    _, member, space, setting, method = _seed(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).one()
+    org.payment_failure_hold_minutes = 0
+    setting.is_enabled = False
+    db_session.add_all([org, setting])
+    db_session.commit()
+    req = _make_request(db_session, member, space, setting, method)
+    booking = _attach_pending_hold(db_session, req)
+
+    req, held_booking, payment = charge_booking_request(db_session, req)
+
+    assert req.status == BookingRequestStatus.CANCELLED
+    assert req.payment_status == "failed"
+    assert req.payment_failed_at is not None
+    assert req.payment_hold_expires_at is not None
+    assert held_booking is None
+    db_session.refresh(booking)
+    assert booking.status == BookingStatus.CANCELED
+    assert payment is not None
+    assert payment.status == PaymentStatus.FAILED
+    assert payment.failure_reason == "Owner payment provider is unavailable. Please contact the space owner."
 
 
 def test_double_charge_short_circuits_after_success(db_session, monkeypatch):

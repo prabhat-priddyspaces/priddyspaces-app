@@ -421,6 +421,73 @@ def _sanitized_failure_reason(reason: str | None) -> str:
     return normalize_payment_failure_reason(reason)
 
 
+def _fail_booking_request_payment(
+    db: Session,
+    *,
+    req: BookingRequest,
+    payment: Payment,
+    setting: OwnerPaymentSetting | None,
+    method: MemberOwnerPaymentMethod | None,
+    attempt: int,
+    operator_notes: str | None,
+    failure_reason: str,
+    raw_response: dict | None = None,
+    provider_payment_id: str | None = None,
+    provider_reference_id: str | None = None,
+) -> tuple[BookingRequest, Booking | None, Payment]:
+    failure_reason = _sanitized_failure_reason(failure_reason)
+    payment.status = PaymentStatus.FAILED
+    payment.failure_reason = failure_reason
+    payment.raw_response = raw_response if raw_response is not None else {"error": failure_reason}
+    payment.provider_payment_id = provider_payment_id or payment.provider_payment_id
+    payment.provider_reference_id = provider_reference_id or payment.provider_reference_id
+
+    req.payment_attempt_count = attempt
+    req.operator_notes = operator_notes
+    now = datetime.now(timezone.utc)
+    hold_minutes = _payment_failure_hold_minutes(db, req)
+    booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+    keep_hold = bool(hold_minutes > 0 and booking and booking.status != BookingStatus.CANCELED)
+    req.payment_failed_at = now
+    req.payment_status = "failed"
+    if keep_hold:
+        req.status = BookingRequestStatus.PAYMENT_FAILED
+        req.payment_hold_expires_at = now + timedelta(minutes=hold_minutes)
+    else:
+        if hold_minutes == 0:
+            cancel_payment_hold_for_request(db, req, reason="payment_failed_cancel_immediately", now=now)
+        else:
+            req.status = BookingRequestStatus.PAYMENT_FAILED
+            req.payment_hold_expires_at = None
+            if booking:
+                booking.status = BookingStatus.CANCELED
+                db.add(booking)
+            if req.booking_series_id:
+                db.query(Booking).filter(
+                    Booking.booking_series_id == req.booking_series_id,
+                    Booking.status == BookingStatus.PENDING,
+                ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
+            release_redemption_for_request(db, req, reason="released")
+    logger.warning(
+        "booking_payment_failed request_public_id=%s payment_public_id=%s provider=%s attempt=%s payment_method_public_id=%s hold_minutes=%s hold_expires_at=%s final_status=%s failure_reason=%s",
+        req.public_id,
+        payment.public_id,
+        setting.provider if setting else None,
+        attempt,
+        method.public_id if method else None,
+        hold_minutes,
+        req.payment_hold_expires_at.isoformat() if req.payment_hold_expires_at else None,
+        getattr(req.status, "value", req.status),
+        failure_reason,
+    )
+    db.add(payment)
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    db.refresh(payment)
+    return req, booking if keep_hold else None, payment
+
+
 def charge_booking_request(
     db: Session,
     req: BookingRequest,
@@ -473,14 +540,6 @@ def charge_booking_request(
             .filter(MemberOwnerPaymentMethod.id == req.member_owner_payment_method_id)
             .first()
         )
-        if not setting or not method or method.status != "active":
-            req.status = BookingRequestStatus.PAYMENT_FAILED
-            req.payment_status = "failed"
-            req.operator_notes = operator_notes
-            db.add(req)
-            db.commit()
-            db.refresh(req)
-            return req, None, None
     amount = amount_cents // 100
     attempt = (req.payment_attempt_count or 0) + 1
     idempotency_key = f"booking_{req.public_id}_attempt_{attempt}"
@@ -496,7 +555,7 @@ def charge_booking_request(
             discount_cents=(payment_snapshot.get("discount_cents") or 0) + loyalty_discount_cents,
             tax_cents=payment_snapshot.get("tax_cents"),
             currency="usd",
-            provider=setting.provider if setting else "points",
+            provider=setting.provider if setting else (req.payment_provider or "points"),
             payment_method_id=method.id if method else None,
             status=PaymentStatus.REQUIRES_PAYMENT if amount_cents > 0 else PaymentStatus.SUCCEEDED,
             attempt_number=attempt,
@@ -508,6 +567,30 @@ def charge_booking_request(
         db.add(payment)
         db.commit()
         db.refresh(payment)
+
+    if amount_cents > 0:
+        if not setting or not setting.is_enabled:
+            return _fail_booking_request_payment(
+                db,
+                req=req,
+                payment=payment,
+                setting=setting,
+                method=method,
+                attempt=attempt,
+                operator_notes=operator_notes,
+                failure_reason="Owner payment provider is unavailable. Please contact the space owner.",
+            )
+        if not method or method.status != "active":
+            return _fail_booking_request_payment(
+                db,
+                req=req,
+                payment=payment,
+                setting=setting,
+                method=method,
+                attempt=attempt,
+                operator_notes=operator_notes,
+                failure_reason="Member payment method is no longer active. Please update the card and retry.",
+            )
 
     if amount_cents == 0:
         payment.status = PaymentStatus.SUCCEEDED
@@ -595,55 +678,19 @@ def charge_booking_request(
             payment_snapshot=payment_snapshot,
         )
 
-    failure_reason = _sanitized_failure_reason(result.failure_reason if result else failure_reason)
-    payment.status = PaymentStatus.FAILED
-    payment.failure_reason = failure_reason
-    payment.raw_response = result.raw_response if result else {"error": failure_reason}
-    if result:
-        payment.provider_payment_id = result.provider_payment_id
-        payment.provider_reference_id = result.provider_reference_id
-    now = datetime.now(timezone.utc)
-    hold_minutes = _payment_failure_hold_minutes(db, req)
-    booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
-    keep_hold = bool(hold_minutes > 0 and booking and booking.status != BookingStatus.CANCELED)
-    req.payment_failed_at = now
-    req.payment_status = "failed"
-    if keep_hold:
-        req.status = BookingRequestStatus.PAYMENT_FAILED
-        req.payment_hold_expires_at = now + timedelta(minutes=hold_minutes)
-    else:
-        if hold_minutes == 0:
-            cancel_payment_hold_for_request(db, req, reason="payment_failed_cancel_immediately", now=now)
-        else:
-            req.status = BookingRequestStatus.PAYMENT_FAILED
-            req.payment_hold_expires_at = None
-            if booking:
-                booking.status = BookingStatus.CANCELED
-                db.add(booking)
-            if req.booking_series_id:
-                db.query(Booking).filter(
-                    Booking.booking_series_id == req.booking_series_id,
-                    Booking.status == BookingStatus.PENDING,
-                ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
-            release_redemption_for_request(db, req, reason="released")
-    logger.warning(
-        "booking_payment_failed request_public_id=%s payment_public_id=%s provider=%s attempt=%s payment_method_public_id=%s hold_minutes=%s hold_expires_at=%s final_status=%s failure_reason=%s",
-        req.public_id,
-        payment.public_id,
-        setting.provider if setting else None,
-        attempt,
-        method.public_id if method else None,
-        hold_minutes,
-        req.payment_hold_expires_at.isoformat() if req.payment_hold_expires_at else None,
-        getattr(req.status, "value", req.status),
-        failure_reason,
+    return _fail_booking_request_payment(
+        db,
+        req=req,
+        payment=payment,
+        setting=setting,
+        method=method,
+        attempt=attempt,
+        operator_notes=operator_notes,
+        failure_reason=result.failure_reason if result else failure_reason,
+        raw_response=result.raw_response if result else None,
+        provider_payment_id=result.provider_payment_id if result else None,
+        provider_reference_id=result.provider_reference_id if result else None,
     )
-    db.add(payment)
-    db.add(req)
-    db.commit()
-    db.refresh(req)
-    db.refresh(payment)
-    return req, booking if keep_hold else None, payment
 
 
 def _refund_snapshot(req: BookingRequest | None, payment: Payment | None) -> dict:
