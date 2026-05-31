@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from datetime import datetime, timezone
+import json
 
 from app.core.auth import get_current_user
 from app.core.config import settings
@@ -25,7 +26,13 @@ from app.schemas.payment import (
     PaymentOut,
     OwnerPayoutSummaryOut,
 )
-from app.models.enums import UserAppRole, UserRole, PaymentStatus, BookingStatus
+from app.models.enums import (
+    BookingRequestKind,
+    BookingStatus,
+    PaymentStatus,
+    UserAppRole,
+    UserRole,
+)
 from app.models.pricing_rule import PricingRule
 from app.models.tax_config import TaxConfig
 from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
@@ -141,10 +148,60 @@ def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
     )
 
 
+def _booking_request_for_booking(db: Session, booking: Booking) -> BookingRequest | None:
+    if booking.booking_request_id:
+        return (
+            db.query(BookingRequest)
+            .filter(BookingRequest.id == booking.booking_request_id)
+            .first()
+        )
+    return (
+        db.query(BookingRequest)
+        .filter(BookingRequest.booking_id == booking.id)
+        .order_by(BookingRequest.created_at.desc())
+        .first()
+    )
+
+
+def _snapshot_amount_cents(req: BookingRequest | None) -> int | None:
+    if not req or not req.pricing_snapshot:
+        return None
+    try:
+        snapshot = json.loads(req.pricing_snapshot)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(snapshot, dict):
+        return None
+    for key in ("total_cents", "total_amount_cents"):
+        value = snapshot.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            amount = int(value)
+        except (TypeError, ValueError):
+            continue
+        if amount >= 0:
+            return amount
+    return None
+
+
 def _booking_charge_amount(db: Session, booking: Booking) -> int:
     space = db.query(Space).filter(Space.id == booking.space_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
+
+    req = _booking_request_for_booking(db, booking)
+    snapshot_amount = _snapshot_amount_cents(req)
+    if snapshot_amount is not None:
+        return snapshot_amount
+
+    booking_mode = None
+    full_day = False
+    if req and req.request_kind == BookingRequestKind.HOURLY_BOOKING.value:
+        booking_mode = "hourly"
+    elif req and req.request_kind == BookingRequestKind.DAILY_BOOKING.value:
+        booking_mode = "day_pass"
+        full_day = True
 
     rule = _get_active_pricing_rule(db, space.id)
     tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
@@ -156,6 +213,9 @@ def _booking_charge_amount(db: Session, booking: Booking) -> int:
         rate_type=rule.rate_type if rule else None,
         rate_amount=rule.rate_amount if rule else None,
         tax_rate_percent=tax.rate_percent if tax else None,
+        price_hourly=space.price_hourly,
+        booking_mode=booking_mode,
+        full_day=full_day,
     )
     if amount is None:
         raise HTTPException(status_code=400, detail="Unable to calculate booking amount")
@@ -242,23 +302,21 @@ def create_intent(
     user = get_or_create_user(db, token)
     require_verified_email_for_payments(user)
 
-    amount = payload.amount
     booking_tenant_id = None
     booking_id = None
-    if payload.booking_public_id:
-        booking = db.query(Booking).filter(Booking.public_id == payload.booking_public_id).first()
-        if not booking:
-            raise HTTPException(status_code=404, detail="Booking not found")
-        if booking.user_id != user.id:
-            raise HTTPException(status_code=403, detail="Not authorized for this booking")
-        if booking.status != BookingStatus.PENDING:
-            raise HTTPException(status_code=400, detail="Booking is not payable")
-        amount = _booking_charge_amount(db, booking)
-        booking_tenant_id = booking.tenant_id
-        booking_id = booking.id
+    if not payload.booking_public_id:
+        raise HTTPException(status_code=400, detail="Booking is required for payment")
 
-    if amount is None:
-        raise HTTPException(status_code=400, detail="Amount is required")
+    booking = db.query(Booking).filter(Booking.public_id == payload.booking_public_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized for this booking")
+    if booking.status != BookingStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Booking is not payable")
+    amount = _booking_charge_amount(db, booking)
+    booking_tenant_id = booking.tenant_id
+    booking_id = booking.id
 
     intent = create_payment_intent(
         amount=amount,
