@@ -40,6 +40,7 @@ from app.services.owner_payments import (
     resolve_payment_provider,
     set_default_payment_method,
     stripe_setting_matches_platform,
+    validate_owner_payment_setting_ready,
 )
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
 
@@ -164,6 +165,8 @@ def upsert_owner_payment_setting(
         setting.cardpointe_password_encrypted = _reencrypt_legacy_secret(setting.cardpointe_password_encrypted)
     setting.cardpointe_site = payload.cardpointe_site.rstrip("/") if payload.cardpointe_site else None
     setting.cardpointe_tokenizer_url = payload.cardpointe_tokenizer_url.strip() if payload.cardpointe_tokenizer_url else None
+    if setting.is_enabled:
+        validate_owner_payment_setting_ready(setting)
 
     db.add(setting)
     db.commit()
@@ -219,6 +222,7 @@ def enable_owner_payment_setting(
     user = get_or_create_user(db, token)
     member = get_org_member(db, org.id, user.id)
     require_owner_or_admin(member)
+    validate_owner_payment_setting_ready(setting)
     setting.is_enabled = True
     db.add(setting)
     db.commit()

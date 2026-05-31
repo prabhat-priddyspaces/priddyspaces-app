@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -67,19 +67,20 @@ export default function OwnerPaymentSettingsPage() {
     [settings, form.provider]
   );
 
-  async function loadSettings(nextOrgId = orgId) {
-    if (!nextOrgId) {
+  const loadSettings = useCallback(async (nextOrgId?: string) => {
+    const targetOrgId = nextOrgId ?? orgId;
+    if (!targetOrgId) {
       setSettings([]);
       return;
     }
     const token = getAccessToken() ?? undefined;
     const list = await apiFetch<OwnerPaymentSetting[]>(
-      `/api/owner/payment-settings?organization_public_id=${encodeURIComponent(nextOrgId)}`,
+      `/api/owner/payment-settings?organization_public_id=${encodeURIComponent(targetOrgId)}`,
       { method: "GET" },
       token
     );
     setSettings(list);
-  }
+  }, [orgId]);
 
   useEffect(() => {
     async function load() {
@@ -113,7 +114,7 @@ export default function OwnerPaymentSettingsPage() {
         setLocationId(locationList[0]?.public_id || "");
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payment settings"));
-  }, [orgId]);
+  }, [orgId, loadSettings]);
 
   useEffect(() => {
     if (!selected) {
@@ -138,16 +139,21 @@ export default function OwnerPaymentSettingsPage() {
   async function saveSettings() {
     if (!orgId) return;
     const token = getAccessToken() ?? undefined;
-    await apiFetch(
-      `/api/owner/payment-settings?organization_public_id=${encodeURIComponent(orgId)}`,
-      {
-        method: "POST",
-        body: JSON.stringify(form),
-      },
-      token
-    );
-    setMessage("Payment settings saved");
-    await loadSettings();
+    try {
+      await apiFetch(
+        `/api/owner/payment-settings?organization_public_id=${encodeURIComponent(orgId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify(form),
+        },
+        token
+      );
+      setMessage("Payment settings saved");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to save payment settings");
+    } finally {
+      await loadSettings();
+    }
   }
 
   async function testSetting(publicId: string) {
@@ -164,9 +170,14 @@ export default function OwnerPaymentSettingsPage() {
 
   async function toggleSetting(publicId: string, enabled: boolean) {
     const token = getAccessToken() ?? undefined;
-    await apiFetch(`/api/owner/payment-settings/${publicId}/${enabled ? "enable" : "disable"}`, { method: "POST" }, token);
-    setMessage(enabled ? "Provider enabled" : "Provider disabled");
-    await loadSettings();
+    try {
+      await apiFetch(`/api/owner/payment-settings/${publicId}/${enabled ? "enable" : "disable"}`, { method: "POST" }, token);
+      setMessage(enabled ? "Provider enabled" : "Provider disabled");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to update provider status");
+    } finally {
+      await loadSettings();
+    }
   }
 
   async function saveOrgOverride() {

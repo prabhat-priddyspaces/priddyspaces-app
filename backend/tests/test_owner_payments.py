@@ -82,6 +82,58 @@ def _stripe_setting(db, org: Organization, secret: str = "sk_test_owner") -> Own
     return setting
 
 
+def test_owner_cannot_enable_incomplete_stripe_payment_setting(db_session, client_factory):
+    owner, org, _space = _owner_space(db_session)
+    setting = OwnerPaymentSetting(
+        organization_id=org.id,
+        tenant_id=org.id,
+        provider="stripe",
+        is_enabled=False,
+        stripe_publishable_key="pk_test_owner",
+    )
+    db_session.add(setting)
+    db_session.commit()
+    db_session.refresh(setting)
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    response = owner_client.post(f"/api/owner/payment-settings/{setting.public_id}/enable")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Payment provider setup incomplete: Stripe secret key"
+    db_session.refresh(setting)
+    assert setting.is_enabled is False
+
+
+def test_owner_cannot_save_enabled_cardpointe_setting_with_missing_credentials(db_session, client_factory):
+    owner, org, _space = _owner_space(db_session)
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    response = owner_client.post(
+        f"/api/owner/payment-settings?organization_public_id={org.public_id}",
+        json={
+            "provider": "cardpointe",
+            "is_enabled": True,
+            "is_test_mode": True,
+            "cardpointe_merchant_id": "merchant_123",
+            "cardpointe_tokenizer_url": "https://tokenizer.test",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Payment provider setup incomplete: CardPointe username, "
+        "CardPointe password, CardPointe gateway site"
+    )
+
+
 def test_owner_payment_settings_and_member_method_scope(db_session, client_factory):
     owner, org, space = _owner_space(db_session)
     member = _user(db_session, "pay-member@example.com", "sub-pay-member", UserAppRole.MEMBER)

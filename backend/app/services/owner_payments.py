@@ -37,6 +37,39 @@ OPEN_BOOKING_STATUSES = {
 SUPPORTED_PAYMENT_PROVIDERS = {"stripe", "cardpointe"}
 
 
+def _has_secret(value: str | None) -> bool:
+    try:
+        return bool((decrypt_secret(value) or "").strip())
+    except ValueError:
+        return False
+
+
+def validate_owner_payment_setting_ready(setting: OwnerPaymentSetting) -> None:
+    missing: list[str] = []
+    provider = normalize_provider(setting.provider)
+    if provider == "stripe":
+        if not (setting.stripe_publishable_key or "").strip():
+            missing.append("Stripe publishable key")
+        if not _has_secret(setting.stripe_secret_key_encrypted):
+            missing.append("Stripe secret key")
+    elif provider == "cardpointe":
+        if not (setting.cardpointe_merchant_id or "").strip():
+            missing.append("CardPointe merchant ID")
+        if not _has_secret(setting.cardpointe_username_encrypted):
+            missing.append("CardPointe username")
+        if not _has_secret(setting.cardpointe_password_encrypted):
+            missing.append("CardPointe password")
+        if not (setting.cardpointe_site or "").strip():
+            missing.append("CardPointe gateway site")
+        if not (setting.cardpointe_tokenizer_url or "").strip():
+            missing.append("CardPointe tokenizer URL")
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment provider setup incomplete: " + ", ".join(missing),
+        )
+
+
 def normalize_provider(provider: str | None) -> str:
     normalized = (provider or settings.DEFAULT_PAYMENT_PROVIDER or "stripe").strip().lower()
     if normalized not in SUPPORTED_PAYMENT_PROVIDERS:
