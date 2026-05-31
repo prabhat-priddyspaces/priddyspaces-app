@@ -460,3 +460,38 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await expect(page).toHaveURL(/route=meeting-rooms/);
   await expect(page.getByRole("heading", { name: "Harbor Rooms" })).toBeVisible();
 });
+
+test("public marketplace shows no meeting rooms when the selected slot is unavailable", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/marketplace/locations") {
+      const category = url.searchParams.get("category");
+      const hasRequestedSlot =
+        url.searchParams.get("date") === "2026-04-15" &&
+        url.searchParams.get("start_time") === "10:00" &&
+        url.searchParams.get("end_time") === "11:00";
+      await json(
+        route,
+        category === "meeting_room" && hasRequestedSlot
+          ? { meta: { total_locations: 0, page: 1, page_size: 20 }, results: [] }
+          : meetingRoomResults,
+      );
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/meeting-rooms");
+  await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
+
+  await page.locator('input[type="date"]').fill("2026-04-15");
+  await page.locator('input[type="time"]').nth(0).fill("10:00");
+  await page.locator('input[type="time"]').nth(1).fill("11:00");
+  await page.getByRole("button", { name: "Search" }).click();
+
+  await expect(page.getByText("No locations matched this search. Try widening the price cap or removing a date or capacity filter.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Conference 14-B" })).not.toBeVisible();
+});

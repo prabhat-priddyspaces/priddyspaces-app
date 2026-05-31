@@ -22,6 +22,7 @@ from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.schemas.working_hours import effective_public_working_hours
 from app.services.amenities import get_location_amenities_map
+from app.services.booking_inventory import expand_occurrences, resolve_tz, validate_occurrences_available
 from app.services.booking_products import booking_products_for_space
 from app.services.money import CENT, to_money_decimal
 
@@ -241,6 +242,43 @@ def _space_matches_time_window(
     if space.availability_start_time and requested_start < space.availability_start_time:
         return False
     if space.availability_end_time and requested_end > space.availability_end_time:
+        return False
+    return True
+
+
+def _space_available_for_requested_window(
+    db: Session,
+    *,
+    space: Space,
+    location: Location,
+    category: str,
+    requested_date: date | None,
+    requested_start: time | None,
+    requested_end: time | None,
+) -> bool:
+    if category != "meeting_room" or requested_date is None or requested_start is None or requested_end is None:
+        return True
+
+    tz = resolve_tz(location.timezone)
+    start_datetime = datetime.combine(requested_date, requested_start, tzinfo=tz)
+    end_datetime = datetime.combine(requested_date, requested_end, tzinfo=tz)
+    try:
+        occurrences = expand_occurrences(
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            location=location,
+            space=space,
+        )
+        validate_occurrences_available(
+            db,
+            space=space,
+            location=location,
+            occurrences=occurrences,
+            booking_mode="hourly",
+            full_day=False,
+            seats_requested=1,
+        )
+    except HTTPException:
         return False
     return True
 
@@ -532,7 +570,7 @@ def _public_inventory_rows(
 
 
 def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters) -> dict[str, object]:
-    _, parsed_start, parsed_end = _validate_filters(filters)
+    parsed_date, parsed_start, parsed_end = _validate_filters(filters)
     query = _clean_query(filters.q)
     rows = _public_inventory_rows(db, category=filters.category, require_coordinates=False)
     if not rows:
@@ -604,6 +642,16 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
         if not _space_matches_time_window(
             space,
             category=filters.category,
+            requested_start=parsed_start,
+            requested_end=parsed_end,
+        ):
+            continue
+        if not _space_available_for_requested_window(
+            db,
+            space=space,
+            location=location,
+            category=filters.category,
+            requested_date=parsed_date,
             requested_start=parsed_start,
             requested_end=parsed_end,
         ):
@@ -700,7 +748,7 @@ def get_public_location_detail(
     location_public_id: str,
     filters: PublicMarketplaceSearchFilters,
 ) -> dict[str, object]:
-    _, parsed_start, parsed_end = _validate_filters(filters)
+    parsed_date, parsed_start, parsed_end = _validate_filters(filters)
     query = _clean_query(filters.q)
     rows = _public_inventory_rows(db, category=filters.category, require_coordinates=False)
     filtered_rows = [
@@ -766,6 +814,16 @@ def get_public_location_detail(
         if not _space_matches_time_window(
             space,
             category=filters.category,
+            requested_start=parsed_start,
+            requested_end=parsed_end,
+        ):
+            continue
+        if not _space_available_for_requested_window(
+            db,
+            space=space,
+            location=location,
+            category=filters.category,
+            requested_date=parsed_date,
             requested_start=parsed_start,
             requested_end=parsed_end,
         ):

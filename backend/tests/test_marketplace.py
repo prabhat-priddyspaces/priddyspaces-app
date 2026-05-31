@@ -7,6 +7,7 @@ from app.main import app
 from app.models.enums import (
     AvailabilityStatus,
     BillingCycle,
+    BookingRequestStatus,
     LocationStatus,
     OrganizationReviewStatus,
     PlatformTeamRole,
@@ -17,6 +18,7 @@ from app.models.enums import (
     BookingStatus,
 )
 from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
 from app.models.user import User
 from app.models.location_amenity import LocationAmenity
@@ -673,6 +675,64 @@ def test_public_location_detail_supports_meeting_room_filters_and_time_validatio
         "?category=meeting_room&start_time=07:00&end_time=08:00"
     )
     assert outside_hours.status_code == 404
+
+
+def test_public_meeting_room_search_excludes_confirmed_booking_conflicts(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_room = seeded["meeting_room"]
+    owner = db_session.query(User).filter(User.email == "owner-public@example.com").one()
+    db_session.add(
+        Booking(
+            user_id=owner.id,
+            space_id=meeting_room.id,
+            tenant_id=meeting_room.tenant_id,
+            start_datetime=datetime(2026, 4, 15, 14, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 15, 15, 0, tzinfo=timezone.utc),
+            inventory_start_datetime=datetime(2026, 4, 15, 14, 0, tzinfo=timezone.utc),
+            inventory_end_datetime=datetime(2026, 4, 15, 15, 0, tzinfo=timezone.utc),
+            status=BookingStatus.CONFIRMED,
+        )
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    search = client.get(
+        "/api/marketplace/locations?category=meeting_room&date=2026-04-15&start_time=10:00&end_time=11:00"
+    )
+    assert search.status_code == 200
+    assert search.json()["meta"]["total_locations"] == 0
+
+    detail = client.get(
+        f"/api/marketplace/locations/{seeded['meeting_location'].public_id}"
+        "?category=meeting_room&date=2026-04-15&start_time=10:00&end_time=11:00"
+    )
+    assert detail.status_code == 404
+
+
+def test_public_meeting_room_search_excludes_pending_booking_requests(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_room = seeded["meeting_room"]
+    owner = db_session.query(User).filter(User.email == "owner-public@example.com").one()
+    db_session.add(
+        BookingRequest(
+            tenant_id=meeting_room.tenant_id,
+            user_id=owner.id,
+            space_id=meeting_room.id,
+            start_datetime=datetime(2026, 4, 15, 14, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 15, 15, 0, tzinfo=timezone.utc),
+            status=BookingRequestStatus.REQUESTED,
+            request_kind="hourly_booking",
+        )
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get(
+        "/api/marketplace/locations?category=meeting_room&date=2026-04-15&start_time=10:00&end_time=11:00"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["meta"]["total_locations"] == 0
 
 
 def test_public_marketplace_space_detail_returns_listing_content(db_session, client_factory):
