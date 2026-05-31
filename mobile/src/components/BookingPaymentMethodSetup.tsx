@@ -231,7 +231,7 @@ export function BookingPaymentMethodSetup({
     }
   }
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 12 }} />;
+  if (loading) return <ActivityIndicator style={{ marginTop: 12 }} accessibilityLabel="Loading booking payment cards" />;
 
   return (
     <View style={styles.container}>
@@ -289,7 +289,7 @@ export function BookingPaymentMethodSetup({
             onPress={saveStripeCard}
             disabled={!consent || !cardComplete || saving}
           >
-            <Text style={styles.primaryButtonText}>{saving ? "Saving..." : "Save booking card"}</Text>
+            <Text style={styles.primaryButtonText}>{saving ? "Saving booking card..." : "Save booking card"}</Text>
           </TouchableOpacity>
         </>
       ) : null}
@@ -310,7 +310,7 @@ export function BookingPaymentMethodSetup({
             onPress={saveCardPointeCard}
             disabled={!consent || !cardToken || !last4 || !expiration || saving}
           >
-            <Text style={styles.primaryButtonText}>{saving ? "Saving..." : "Save booking card"}</Text>
+            <Text style={styles.primaryButtonText}>{saving ? "Saving booking card..." : "Save booking card"}</Text>
           </TouchableOpacity>
         </>
       ) : null}

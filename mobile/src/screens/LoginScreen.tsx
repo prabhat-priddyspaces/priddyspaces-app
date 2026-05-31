@@ -28,7 +28,7 @@ export function LoginScreen() {
     try {
       await signIn(email, password);
     } catch (err) {
-      Alert.alert("Login failed", err instanceof Error ? err.message : "Try again.");
+      Alert.alert("Login failed", err instanceof Error ? err.message : "Check your credentials and try again.");
     }
   }
 
@@ -39,14 +39,14 @@ export function LoginScreen() {
         await setActive({ session: createdSessionId });
       }
     } catch (err) {
-      Alert.alert("Sign-in failed", err instanceof Error ? err.message : "Try again.");
+      Alert.alert("Sign-in failed", err instanceof Error ? err.message : "Check your identity provider and try again.");
     }
   }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome back</Text>
-      <Text style={styles.subtitle}>Sign in to continue</Text>
+      <Text style={styles.subtitle}>Sign in to browse, book, and manage Priddyspaces workspaces.</Text>
 
       <TextInput
         style={styles.input}

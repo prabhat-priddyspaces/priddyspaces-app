@@ -72,34 +72,34 @@ export function OwnerDashboardScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Owner Dashboard</Text>
-      <Text style={styles.subtitle}>Revenue and occupancy snapshots.</Text>
+      <Text style={styles.title}>Owner overview</Text>
+      <Text style={styles.subtitle}>Booking requests, owner revenue, invoices, and team access.</Text>
       {loading ? (
         <ActivityIndicator style={{ marginTop: 12 }} />
       ) : (
         <View style={styles.stats}>
           <StatCard
-            label="Total bookings"
+            label="Booking requests"
             value={total.toString()}
             onPress={() => navigation.navigate("Bookings")}
           />
           <StatCard
-            label="Pending"
+            label="Pending requests"
             value={pending.toString()}
             onPress={() => navigation.navigate("Bookings")}
           />
           <StatCard
-            label="Payments"
+            label="Payment volume"
             value={`$${paymentsTotal}`}
             onPress={() => navigation.navigate("Payments")}
           />
           <StatCard
-            label="Invoices"
+            label="Invoice count"
             value={invoicesTotal.toString()}
             onPress={() => navigation.navigate("Invoices")}
           />
           <StatCard
-            label="Team"
+            label="Team members"
             value={membersTotal.toString()}
             onPress={() => navigation.navigate("OwnerTeam")}
           />

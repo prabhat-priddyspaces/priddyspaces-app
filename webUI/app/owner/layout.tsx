@@ -32,7 +32,7 @@ function ClerkOwnerLayout({ children }: { children: React.ReactNode }) {
   if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
-        Loading...
+        Loading owner workspace...
       </div>
     );
   }
@@ -46,7 +46,7 @@ function BypassOwnerLayout({ children }: { children: React.ReactNode }) {
   if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
-        Loading...
+        Loading owner workspace...
       </div>
     );
   }

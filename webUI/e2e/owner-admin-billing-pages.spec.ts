@@ -101,7 +101,7 @@ test("owner invoices show member, space, payment context and download a PDF", as
   await expect(page.getByText("Payment pay_board_room_1 via stripe, succeeded")).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download PDF" }).click();
+  await page.getByRole("button", { name: "Download invoice PDF" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("invoice-inv_owner_board_room_1.pdf");
 });

@@ -53,7 +53,7 @@ export function HomeScreen() {
       const list = await apiFetch<MarketplaceSpace[]>(path, { method: "GET" }, token);
       setSpaces(list);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed to load locations");
+      setMessage(err instanceof Error ? err.message : "Failed to load marketplace spaces");
       setSpaces([]);
     } finally {
       setLoading(false);
@@ -63,7 +63,7 @@ export function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Marketplace</Text>
-      <Text style={styles.subtitle}>Search and discover spaces.</Text>
+      <Text style={styles.subtitle}>Search rooms, desks, and offices by city, capacity, or price.</Text>
       <TextInput
         style={styles.input}
         placeholder="City (optional)"
@@ -73,19 +73,19 @@ export function HomeScreen() {
       <View style={styles.geoRow}>
         <TextInput
           style={[styles.input, styles.geoInput]}
-          placeholder="Lat"
+          placeholder="Latitude"
           value={lat}
           onChangeText={setLat}
         />
         <TextInput
           style={[styles.input, styles.geoInput]}
-          placeholder="Lng"
+          placeholder="Longitude"
           value={lng}
           onChangeText={setLng}
         />
         <TextInput
           style={[styles.input, styles.geoInput]}
-          placeholder="Km"
+          placeholder="Radius km"
           value={radiusKm}
           onChangeText={setRadiusKm}
         />
@@ -93,30 +93,30 @@ export function HomeScreen() {
       <View style={styles.geoRow}>
         <TextInput
           style={[styles.input, styles.geoInput]}
-          placeholder="Type"
+          placeholder="Space type"
           value={spaceType}
           onChangeText={setSpaceType}
         />
         <TextInput
           style={[styles.input, styles.geoInput]}
-          placeholder="Min cap"
+          placeholder="Min seats"
           value={minCapacity}
           onChangeText={setMinCapacity}
         />
         <TextInput
           style={[styles.input, styles.geoInput]}
-          placeholder="Max $"
+          placeholder="Max daily $"
           value={maxPrice}
           onChangeText={setMaxPrice}
         />
       </View>
       <TouchableOpacity style={styles.primaryButton} onPress={handleSearch} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Search</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Search spaces</Text>}
       </TouchableOpacity>
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {spaces.length === 0 && !loading ? (
-          <Text style={styles.empty}>No spaces yet.</Text>
+          <Text style={styles.empty}>No marketplace spaces match these filters.</Text>
         ) : (
           spaces.map((space) => (
             <TouchableOpacity

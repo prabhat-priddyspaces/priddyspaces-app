@@ -102,7 +102,7 @@ export default function AdminOwnerUsersPage() {
                     href={`/admin/owner-users/${encodeURIComponent(row.user_public_id)}`}
                     className="rounded-sm border border-line px-3 py-2 text-sm text-text-2 hover:bg-surface-2"
                   >
-                    View details
+                    View owner-user details
                   </Link>
                   <Button type="button" onClick={() => impersonateOwner(row.user_public_id).catch((err) => setMessage(String(err)))}>
                     Impersonate

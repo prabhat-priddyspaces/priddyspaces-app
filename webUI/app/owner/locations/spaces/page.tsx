@@ -71,7 +71,7 @@ function LocationSpacesContent() {
           </>
         ) : locations.length === 0 ? (
           <Card className="p-6">
-            <div className="text-sm text-textMuted">No locations yet. Create one to begin adding rooms.</div>
+            <div className="text-sm text-textMuted">No owner locations are ready for inventory yet. Create one to begin adding rooms.</div>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">

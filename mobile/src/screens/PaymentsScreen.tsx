@@ -22,19 +22,19 @@ export function PaymentsScreen() {
     setLoading(true);
     apiFetch<Payment[]>("/api/payments", { method: "GET" }, token)
       .then(setPayments)
-      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payments"))
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payment history"))
       .finally(() => setLoading(false));
   }, [token]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Payments</Text>
-      <Text style={styles.subtitle}>Track incoming payments.</Text>
+      <Text style={styles.title}>Payment history</Text>
+      <Text style={styles.subtitle}>Track booking and membership charges.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {payments.length === 0 && !loading ? (
-          <Text style={styles.empty}>No payments yet.</Text>
+          <Text style={styles.empty}>No booking or membership payments yet.</Text>
         ) : (
           payments.map((payment) => (
             <View key={payment.public_id} style={styles.card}>

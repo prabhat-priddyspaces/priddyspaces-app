@@ -22,19 +22,19 @@ export function InvoicesScreen() {
     setLoading(true);
     apiFetch<Invoice[]>("/api/invoices", { method: "GET" }, token)
       .then(setInvoices)
-      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load invoices"))
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load invoice history"))
       .finally(() => setLoading(false));
   }, [token]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Invoices</Text>
-      <Text style={styles.subtitle}>Receipts for your bookings.</Text>
+      <Text style={styles.subtitle}>Receipts for booking requests and memberships.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {invoices.length === 0 && !loading ? (
-          <Text style={styles.empty}>No invoices yet.</Text>
+          <Text style={styles.empty}>No booking receipts or membership invoices yet.</Text>
         ) : (
           invoices.map((invoice) => (
             <View key={invoice.public_id} style={styles.card}>
@@ -42,10 +42,10 @@ export function InvoicesScreen() {
               <Text style={styles.cardMuted}>${invoice.amount} • {invoice.status}</Text>
               {invoice.pdf_url ? (
                 <TouchableOpacity onPress={() => Linking.openURL(invoice.pdf_url || "")}>
-                  <Text style={styles.link}>Open PDF</Text>
+                  <Text style={styles.link}>Open invoice PDF</Text>
                 </TouchableOpacity>
               ) : (
-                <Text style={styles.cardMuted}>PDF pending</Text>
+                <Text style={styles.cardMuted}>Invoice PDF pending</Text>
               )}
             </View>
           ))

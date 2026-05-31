@@ -289,9 +289,9 @@ export default function OwnerPaymentsPage() {
 
         <Card className="p-4">
           {loading ? (
-            <div className="text-sm text-textMuted">Loading payments...</div>
+            <div className="text-sm text-textMuted">Loading owner payment ledger...</div>
           ) : payments.length === 0 ? (
-            <div className="text-sm text-textMuted">No payments yet.</div>
+            <div className="text-sm text-textMuted">No booking or membership payments recorded yet.</div>
           ) : (
             <div className="grid gap-3">
               {payments.map((payment) => {
@@ -357,7 +357,7 @@ export default function OwnerPaymentsPage() {
                           {invoice ? (
                             <Link href="/owner/invoices">
                               <Button size="sm" variant="secondary">
-                                View invoice
+                                Open invoice record
                               </Button>
                             </Link>
                           ) : null}

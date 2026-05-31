@@ -89,7 +89,7 @@ export default function OwnerAccountPage() {
       );
       updateMeCache(updated, token ?? null);
       setLoadedPublicId(updated.public_id);
-      setMessage("Profile saved.");
+      setMessage("Owner profile saved.");
       setMessageTone("success");
       refresh();
     } catch (err) {
@@ -114,7 +114,7 @@ export default function OwnerAccountPage() {
               Account
             </h2>
             <p className="mt-1 text-[13px] text-text-3">
-              Manage your owner profile and sign-in details.
+              Manage the owner profile and sign-in settings used across booking operations.
             </p>
           </div>
           {me ? (
@@ -213,7 +213,7 @@ export default function OwnerAccountPage() {
                   disabled={saving}
                 >
                   <Save size={15} />
-                  {saving ? "Saving..." : "Save profile"}
+                  {saving ? "Saving owner profile..." : "Save owner profile"}
                 </Button>
               </div>
             </Card>
@@ -250,7 +250,7 @@ export default function OwnerAccountPage() {
                 </Field>
                 <Button type="button" onClick={openSecuritySettings}>
                   <KeyRound size={15} />
-                  Manage email and password
+                  Manage sign-in settings
                 </Button>
               </div>
             </Card>

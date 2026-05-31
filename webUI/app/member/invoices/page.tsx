@@ -173,7 +173,7 @@ export default function MemberInvoicesPage() {
           {loading ? (
             <div className="text-sm text-textMuted">Loading invoices...</div>
           ) : invoices.length === 0 ? (
-            <div className="text-sm text-textMuted">No invoices yet.</div>
+            <div className="text-sm text-textMuted">No booking receipts or membership invoices yet.</div>
           ) : (
             <div className="grid gap-3">
               {invoices.map((invoice) => (
@@ -216,7 +216,7 @@ export default function MemberInvoicesPage() {
                         disabled={downloading === invoice.public_id}
                       >
                         <Download size={14} />
-                        {downloading === invoice.public_id ? "Preparing..." : "Download PDF"}
+                        {downloading === invoice.public_id ? "Preparing invoice..." : "Download invoice PDF"}
                       </Button>
                       {invoice.status === "payment_failed" ? (
                         <Link href="/member/subscriptions">

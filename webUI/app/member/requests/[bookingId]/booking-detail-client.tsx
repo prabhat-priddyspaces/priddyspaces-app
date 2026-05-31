@@ -310,7 +310,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
         </Link>
         <h1 className="mt-6 text-2xl font-semibold text-textPrimary">Request details</h1>
         {loading ? (
-          <div className="mt-6 text-sm text-textMuted">Loading...</div>
+          <div className="mt-6 text-sm text-textMuted">Loading booking request details...</div>
         ) : error ? (
           <div className="mt-6 text-sm text-error">{error}</div>
         ) : booking ? (
@@ -523,7 +523,7 @@ export default function BookingDetailClient({ bookingId }: { bookingId: string }
                       disabled={downloadingInvoice}
                     >
                       <Download size={14} />
-                      {downloadingInvoice ? "Preparing..." : "Download PDF"}
+                      {downloadingInvoice ? "Preparing invoice..." : "Download invoice PDF"}
                     </Button>
                   </div>
                 </>

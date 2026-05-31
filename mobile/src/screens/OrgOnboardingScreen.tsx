@@ -47,11 +47,11 @@ export function OrgOnboardingScreen() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Organization creation failed");
+        throw new Error(data.detail || "Workspace organization setup failed");
       }
       // AuthContext will refresh state on next render cycle
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Please try again.");
+      Alert.alert("Organization setup failed", err instanceof Error ? err.message : "Check the organization details and try again.");
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,7 @@ export function OrgOnboardingScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Set up your organization</Text>
-      <Text style={styles.subtitle}>Tell us about your space business.</Text>
+      <Text style={styles.subtitle}>Tell us about the business that hosts your rooms, desks, and memberships.</Text>
 
       <Text style={styles.label}>Organization name *</Text>
       <TextInput
@@ -112,7 +112,7 @@ export function OrgOnboardingScreen() {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryButtonText}>Continue</Text>
+          <Text style={styles.primaryButtonText}>Create organization</Text>
         )}
       </TouchableOpacity>
     </ScrollView>

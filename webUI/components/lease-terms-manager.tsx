@@ -270,10 +270,10 @@ export function LeaseTermsManager({ spacePublicId, spaceType, spaceCapacity }: L
       </div>
 
       {loading ? (
-        <div className="text-sm text-textMuted">Loading…</div>
+        <div className="text-sm text-textMuted">Loading lease terms...</div>
       ) : plans.length === 0 ? (
         <div className="rounded-md border border-dashed border-border p-4 text-sm text-textSecondary">
-          No terms yet. Add one to publish pricing on the public listing.
+          No lease terms yet. Add one to publish monthly pricing on the public listing.
         </div>
       ) : (
         <div className="grid gap-2">

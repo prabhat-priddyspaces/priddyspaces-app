@@ -244,7 +244,7 @@ export default function NewSpacePage() {
               </select>
               {!loadingLocations && locations.length === 0 ? (
                 <div className="text-xs text-textMuted">
-                  No locations yet. Create one first from{" "}
+                  No owner locations are ready for inventory yet. Create one first from{" "}
                   <Link href="/owner/locations/new" className="text-accent hover:underline">
                     the location setup page
                   </Link>

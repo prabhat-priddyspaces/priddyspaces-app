@@ -220,7 +220,7 @@ test("member can submit a booking request from a space detail page", async ({ pa
   await expect(page.getByText(/Request sent:/)).toBeVisible();
   await expect(page.getByText("Status: approved")).toBeVisible();
 
-  await page.getByRole("link", { name: "View details" }).click();
+  await page.getByRole("link", { name: "View booking request" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests\/req_1$/);
   await expect(page.getByText("Request details")).toBeVisible();

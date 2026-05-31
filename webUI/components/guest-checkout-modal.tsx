@@ -88,7 +88,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn }: GuestCheckout
       setResult(data);
       setStep("success");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setError(err instanceof Error ? err.message : "Unable to submit this guest booking request.");
     } finally {
       setSubmitting(false);
     }
@@ -264,7 +264,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn }: GuestCheckout
 
             <div className="mt-6">
               <Button type="submit" disabled={submitting} className="w-full">
-                {submitting ? "Submitting request…" : "Submit booking request"}
+                {submitting ? "Submitting booking request..." : "Submit booking request"}
               </Button>
               <p className="mt-3 text-center text-xs text-text-4">
                 No payment required now. The owner will review your request and contact you.
@@ -303,7 +303,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn }: GuestCheckout
                 Create a free account to track your booking
               </Button>
               <Button variant="secondary" onClick={onClose} className="w-full">
-                Done
+                Close booking request
               </Button>
             </div>
           </div>

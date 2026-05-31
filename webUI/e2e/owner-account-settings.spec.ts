@@ -107,9 +107,9 @@ test("owner can update account profile and access email/password management", as
   await expect(page.getByLabel("Email")).toHaveValue("owner.nyc@mailinator.com");
   await page.getByLabel("First name").fill("Riley");
   await page.getByLabel("Phone").fill("555-0199");
-  await page.getByRole("button", { name: "Save profile" }).click();
+  await page.getByRole("button", { name: "Save owner profile" }).click();
 
-  await expect(page.getByText("Profile saved.")).toBeVisible();
+  await expect(page.getByText("Owner profile saved.")).toBeVisible();
   expect(api.getPatchPayload()).toEqual({
     first_name: "Riley",
     last_name: "NYC",
@@ -117,7 +117,7 @@ test("owner can update account profile and access email/password management", as
     company_name: "Skyline Works NYC",
   });
 
-  await page.getByRole("button", { name: "Manage email and password" }).click();
+  await page.getByRole("button", { name: "Manage sign-in settings" }).click();
   await expect(page.getByText("Email and password settings open in Clerk account management.")).toBeVisible();
 });
 

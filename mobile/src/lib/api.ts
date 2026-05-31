@@ -11,7 +11,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, token
   const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || "Request failed");
+    throw new Error(text || "Priddyspaces API request failed");
   }
   return res.json() as Promise<T>;
 }

@@ -119,9 +119,9 @@ export default function OwnerMembersPage() {
         {error ? <div className="text-sm text-error">{error}</div> : null}
 
         {loading ? (
-          <div className="text-sm text-textMuted">Loading…</div>
+          <div className="text-sm text-textMuted">Loading owner members...</div>
         ) : members.length === 0 ? (
-          <Card className="p-6 text-center text-sm text-textMuted">No members yet.</Card>
+          <Card className="p-6 text-center text-sm text-textMuted">No members have been added to this organization yet.</Card>
         ) : (
           <div className="overflow-hidden rounded-md border border-border bg-surface">
             <table className="w-full text-sm">

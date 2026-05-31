@@ -35,7 +35,7 @@ describe("OwnerTeamScreen notification toggles", () => {
   it("updates team member start reminder preferences", async () => {
     const screen = render(<OwnerTeamScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText("Organization public id"), "org_1");
+    fireEvent.changeText(screen.getByPlaceholderText("Organization public ID"), "org_1");
     expect(await screen.findByText("ops@example.com")).toBeTruthy();
     fireEvent(screen.getByTestId("team-start-push-om_1"), "valueChange", false);
 

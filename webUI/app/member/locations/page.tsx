@@ -80,7 +80,7 @@ export default function MemberLocationsPage() {
         setLocation(loc);
         setSpaces(sp);
       })
-      .catch((err) => setError(err?.message || "Failed to load"))
+      .catch((err) => setError(err?.message || "Unable to load location spaces"))
       .finally(() => setLoading(false));
   }, [locationId]);
 
@@ -107,7 +107,7 @@ export default function MemberLocationsPage() {
       setEndDatetime("");
       router.push("/member/requests");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      setError(err instanceof Error ? err.message : "Unable to send booking request");
     } finally {
       setRequesting(null);
     }
@@ -131,7 +131,7 @@ export default function MemberLocationsPage() {
     const token = getAccessToken() ?? undefined;
     if (!token) return;
     if (!authorizationConsent) {
-      setError("Authorize payment on approval before requesting.");
+      setError("Authorize the booking charge before sending this request.");
       return;
     }
     setRequesting(spacePublicId);
@@ -157,7 +157,7 @@ export default function MemberLocationsPage() {
       }
       await submitRequest(payload, resolved.payment_method_public_id);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      setError(err instanceof Error ? err.message : "Unable to send booking request");
     } finally {
       setRequesting(null);
     }
@@ -179,7 +179,7 @@ export default function MemberLocationsPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-background px-6 py-8">
-        <div className="mx-auto max-w-5xl text-sm text-textMuted">Loading...</div>
+        <div className="mx-auto max-w-5xl text-sm text-textMuted">Loading location spaces...</div>
       </main>
     );
   }
@@ -267,7 +267,7 @@ export default function MemberLocationsPage() {
                             onClick={() => handleRequest(space.public_id)}
                             disabled={!!requesting}
                           >
-                            {requesting === space.public_id ? "Sending..." : actionLabel(space)}
+                            {requesting === space.public_id ? "Sending booking request..." : actionLabel(space)}
                           </Button>
                           <Button
                             size="sm"
@@ -293,7 +293,7 @@ export default function MemberLocationsPage() {
                         </Button>
                         <Link href={`/member/spaces/${space.public_id}`}>
                           <Button size="sm" variant="secondary">
-                            View details
+                            Open space details
                           </Button>
                         </Link>
                       </div>

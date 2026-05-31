@@ -78,7 +78,7 @@ export default function MemberSubscriptionsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-textPrimary">Memberships</h1>
             <p className="mt-1 text-textSecondary">
-              Manage your active workspace memberships.
+              Manage active workspace memberships, billing status, and cancellation timing.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -112,7 +112,7 @@ export default function MemberSubscriptionsPage() {
           <div className="mt-6 text-sm text-textMuted">Loading memberships...</div>
         ) : subscriptions.length === 0 ? (
           <Card className="mt-6 p-6">
-            <div className="text-sm text-textMuted">No memberships yet.</div>
+            <div className="text-sm text-textMuted">No active workspace memberships yet.</div>
             <Link href="/member" className="mt-4 inline-flex">
               <Button size="sm">Browse available spaces</Button>
             </Link>
@@ -140,7 +140,7 @@ export default function MemberSubscriptionsPage() {
                     {subscription.space_public_id ? (
                       <Link href={`/member/spaces/${subscription.space_public_id}`}>
                         <Button size="sm" variant="secondary">
-                          View space
+                          Open membership space
                         </Button>
                       </Link>
                     ) : null}

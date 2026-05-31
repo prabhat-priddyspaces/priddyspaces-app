@@ -172,9 +172,9 @@ export default function OwnerInvoicesPage() {
 
         <Card className="p-4">
           {loading ? (
-            <div className="text-sm text-textMuted">Loading invoices...</div>
+            <div className="text-sm text-textMuted">Loading owner invoices...</div>
           ) : invoices.length === 0 ? (
-            <div className="text-sm text-textMuted">No invoices yet.</div>
+            <div className="text-sm text-textMuted">No booking receipts or membership invoices have been issued yet.</div>
           ) : (
             <div className="grid gap-3">
               {invoices.map((invoice) => (
@@ -224,7 +224,7 @@ export default function OwnerInvoicesPage() {
                         disabled={downloading === invoice.public_id}
                       >
                         <Download size={14} />
-                        {downloading === invoice.public_id ? "Preparing..." : "Download PDF"}
+                        {downloading === invoice.public_id ? "Preparing invoice..." : "Download invoice PDF"}
                       </Button>
                     </div>
                   </div>

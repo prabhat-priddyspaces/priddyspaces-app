@@ -102,7 +102,7 @@ test("member can see payment and invoice status for an approved booking request"
   await expect(page.getByText("Created: Not available")).toBeVisible();
   await expect(page.getByText("12/31/1969")).not.toBeVisible();
   await expect(page.getByRole("button", { name: "View all invoices" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download PDF" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download invoice PDF" })).toBeVisible();
 });
 
 test("member can update a failed instant booking card and retry", async ({ page }) => {

@@ -71,7 +71,7 @@ export default function MemberInsightsPage() {
                 {data.favourite_space.space_name || "—"}
               </div>
               <div className="text-sm text-textMuted">
-                {data.favourite_space.location_name || "No bookings yet"}
+                {data.favourite_space.location_name || "No completed bookings yet"}
               </div>
             </Card>
             <Card className="p-4">

@@ -32,7 +32,7 @@ function ClerkAdminLayout({ children }: { children: React.ReactNode }) {
   if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
-        Loading...
+        Loading platform console...
       </div>
     );
   }
@@ -46,7 +46,7 @@ function BypassAdminLayout({ children }: { children: React.ReactNode }) {
   if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
-        Loading...
+        Loading platform console...
       </div>
     );
   }

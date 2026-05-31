@@ -94,14 +94,14 @@ export function OwnerTeamScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Team</Text>
-      <Text style={styles.subtitle}>Manage staff access.</Text>
+      <Text style={styles.subtitle}>Manage staff roles, pricing override access, and booking reminders.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
-      <TextInput style={styles.input} placeholder="Organization public id" value={orgId} onChangeText={setOrgId} />
+      <TextInput style={styles.input} placeholder="Organization public ID" value={orgId} onChangeText={setOrgId} />
       <TextInput
         style={styles.input}
-        placeholder="User public id"
+        placeholder="Team user public ID"
         value={form.user_public_id}
         onChangeText={(value) => setForm({ ...form, user_public_id: value })}
       />
@@ -145,12 +145,12 @@ export function OwnerTeamScreen() {
         />
       </View>
       <TouchableOpacity style={styles.primaryButton} onPress={addMember}>
-        <Text style={styles.primaryButtonText}>Add member</Text>
+        <Text style={styles.primaryButtonText}>Add team member</Text>
       </TouchableOpacity>
 
       <View style={styles.list}>
         {members.length === 0 && !loading ? (
-          <Text style={styles.empty}>No members yet.</Text>
+          <Text style={styles.empty}>No team members assigned yet.</Text>
         ) : (
           members.map((member) => (
             <View key={member.public_id} style={styles.card}>
