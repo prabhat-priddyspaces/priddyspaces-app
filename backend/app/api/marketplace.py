@@ -12,6 +12,7 @@ from app.models.organization_amenity import OrganizationAmenity
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.enums import (
+    AvailabilityStatus,
     BookingGranularity,
     OrganizationReviewStatus,
     SpaceVisibility,
@@ -97,6 +98,7 @@ def search_marketplace(
 
     query = query.filter(
         Space.visibility == SpaceVisibility.PUBLIC,
+        Space.availability_status == AvailabilityStatus.AVAILABLE,
         Location.status == LocationStatus.ACTIVE,
         Organization.review_status == OrganizationReviewStatus.APPROVED,
     )
@@ -333,6 +335,7 @@ def get_marketplace_space_availability(
     space, location, organization = row
     if (
         space.visibility != SpaceVisibility.PUBLIC
+        or space.availability_status != AvailabilityStatus.AVAILABLE
         or location.status != LocationStatus.ACTIVE
         or organization.review_status != OrganizationReviewStatus.APPROVED
     ):

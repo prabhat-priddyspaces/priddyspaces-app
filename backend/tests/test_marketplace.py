@@ -439,6 +439,19 @@ def test_marketplace_filters_visibility_and_active_location(db_session, client_f
     assert len(amenity_search.json()) == 1
 
 
+def test_marketplace_search_hides_unavailable_inventory(db_session, client_factory):
+    public_space = _seed_spaces(db_session)
+    public_space.availability_status = AvailabilityStatus.MAINTENANCE
+    db_session.add(public_space)
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner", "email": "owner@example.com", "email_verified": True})
+
+    response = client.get("/api/marketplace/search")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_public_space_detail_and_media_are_accessible_without_login(db_session):
     public_space = _seed_spaces(db_session)
     image = SpaceImage(
@@ -781,6 +794,32 @@ def test_public_marketplace_space_detail_returns_listing_content(db_session, cli
         {"name": "Denis Khakovsky", "title": "Owner"},
         {"name": "Brian Mina", "title": "Admin"},
     ]
+
+
+def test_public_marketplace_hides_unavailable_inventory(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_room = seeded["meeting_room"]
+    meeting_room.availability_status = AvailabilityStatus.OCCUPIED
+    db_session.add(meeting_room)
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    search = client.get("/api/marketplace/locations?category=meeting_room&q=harbor")
+    assert search.status_code == 200
+    assert search.json()["meta"]["total_locations"] == 0
+
+    location_detail = client.get(
+        f"/api/marketplace/locations/{seeded['meeting_location'].public_id}?category=meeting_room"
+    )
+    assert location_detail.status_code == 404
+
+    space_detail = client.get(f"/api/marketplace/spaces/{meeting_room.public_id}")
+    assert space_detail.status_code == 404
+
+    availability = client.get(
+        f"/api/marketplace/spaces/{meeting_room.public_id}/availability?from=2026-04-16&to=2026-04-16"
+    )
+    assert availability.status_code == 404
 
 
 def test_public_space_availability_marks_day_fully_blocked_by_bookings(db_session, client_factory):

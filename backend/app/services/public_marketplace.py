@@ -180,6 +180,7 @@ def _split_lines(value: str | None) -> list[str]:
 def _space_publicly_visible(space: Space, location: Location) -> bool:
     return bool(
         location.status == LocationStatus.ACTIVE
+        and space.availability_status == AvailabilityStatus.AVAILABLE
         and space.visibility != SpaceVisibility.PRIVATE
     )
 
@@ -559,6 +560,7 @@ def _public_inventory_rows(
         .outerjoin(SpaceImage, (SpaceImage.space_id == Space.id) & (SpaceImage.is_primary.is_(True)))
         .filter(
             Space.visibility == SpaceVisibility.PUBLIC,
+            Space.availability_status == AvailabilityStatus.AVAILABLE,
             Space.space_type == CATEGORY_SPACE_TYPES[category],
             Location.status == LocationStatus.ACTIVE,
             Organization.review_status == OrganizationReviewStatus.APPROVED,
