@@ -16,7 +16,9 @@ from app.models.enums import (
     BookingRequestKind,
     BookingRequestStatus,
     BookingStatus,
+    LocationStatus,
     SpaceType,
+    SpaceVisibility,
     SubscriptionStatusEnum,
     UserAppRole,
     UserRole,
@@ -114,7 +116,7 @@ from app.services.notifications import (
     send_owner_booking_request_notification,
 )
 from app.services.audit import write_audit_log
-from app.services.platform_auth import get_audit_actor_context
+from app.services.platform_auth import get_audit_actor_context, organization_is_publicly_visible
 from app.services.access_passes import (
     ensure_access_passes_for_booking_request,
     ensure_guest_user_for_request,
@@ -166,6 +168,26 @@ def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
         .order_by(PricingRule.created_at.desc())
         .first()
     )
+
+
+def _require_public_booking_space(
+    db: Session,
+    space: Space,
+    location: Location,
+    *,
+    allow_unlisted: bool,
+) -> Organization:
+    organization = db.query(Organization).filter(Organization.id == location.organization_id).first()
+    allowed_visibility = {SpaceVisibility.PUBLIC}
+    if allow_unlisted:
+        allowed_visibility.add(SpaceVisibility.UNLISTED)
+    if (
+        space.visibility not in allowed_visibility
+        or location.status != LocationStatus.ACTIVE
+        or not organization_is_publicly_visible(organization)
+    ):
+        raise HTTPException(status_code=404, detail="Space not found")
+    return organization
 
 
 def _instant_booking_enabled(db: Session, space: Space) -> bool:
@@ -616,6 +638,10 @@ def _create_membership_purchase_request(
     space = db.query(Space).filter(Space.id == plan.space_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    _require_public_booking_space(db, space, location, allow_unlisted=True)
 
     mode_row = (
         db.query(SpaceBookingMode)
@@ -1103,13 +1129,10 @@ def create_guest_booking_request(
     if payload.redemption_lock_public_id:
         raise HTTPException(status_code=400, detail="Rewards redemption requires a member account")
 
-    from app.models.enums import SpaceVisibility
-    if space.visibility != SpaceVisibility.PUBLIC:
-        raise HTTPException(status_code=404, detail="Space not found")
-
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         raise HTTPException(status_code=404, detail="Space not found")
+    _require_public_booking_space(db, space, location, allow_unlisted=False)
 
     start_dt = _as_utc(payload.start_datetime)
     end_dt = _as_utc(payload.end_datetime)
@@ -1226,6 +1249,13 @@ def preview_booking_request_price(
         )
         if not plan:
             raise HTTPException(status_code=404, detail="Membership plan not found")
+        space = db.query(Space).filter(Space.id == plan.space_id).first()
+        if not space:
+            raise HTTPException(status_code=404, detail="Space not found")
+        location = db.query(Location).filter(Location.id == space.location_id).first()
+        if not location:
+            raise HTTPException(status_code=404, detail="Location not found")
+        _require_public_booking_space(db, space, location, allow_unlisted=True)
         return BookingPricePreviewOut(
             base_amount_cents=plan.price_cents,
             total_amount_cents=plan.price_cents,
@@ -1245,6 +1275,7 @@ def preview_booking_request_price(
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
+    _require_public_booking_space(db, space, location, allow_unlisted=True)
 
     start_dt = _as_utc(payload.start_datetime)
     end_dt = _as_utc(payload.end_datetime)
@@ -1333,11 +1364,11 @@ def create_booking_request(
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
+    organization = _require_public_booking_space(db, space, location, allow_unlisted=True)
 
     owner_payment_setting = None
     payment_method = None
     consent_at = None
-    organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
     is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
     validate_direct_booking_product(
         space,

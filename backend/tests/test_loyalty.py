@@ -1,7 +1,15 @@
 from datetime import datetime, timezone
 
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
-from app.models.enums import AvailabilityStatus, BookingRequestStatus, PaymentStatus, SpaceType, UserAppRole, UserRole
+from app.models.enums import (
+    AvailabilityStatus,
+    BookingRequestStatus,
+    OrganizationReviewStatus,
+    PaymentStatus,
+    SpaceType,
+    UserAppRole,
+    UserRole,
+)
 from app.models.location import Location
 from app.models.loyalty import LoyaltyWallet, PriddyPointsLedgerEntry, PriddyPointsWallet
 from app.models.organization import Organization
@@ -34,7 +42,11 @@ def _seed(db, *, space_type=SpaceType.CONFERENCE_ROOM):
     db.refresh(owner)
     db.refresh(customer)
 
-    org = Organization(name="Loyalty Org", owner_id=owner.id)
+    org = Organization(
+        name="Loyalty Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)

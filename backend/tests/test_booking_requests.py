@@ -2,7 +2,17 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from app.core.config import settings
-from app.models.enums import UserAppRole, UserRole, SpaceType, AvailabilityStatus, BookingRequestStatus, BookingStatus
+from app.models.enums import (
+    AvailabilityStatus,
+    BookingRequestStatus,
+    BookingStatus,
+    LocationStatus,
+    OrganizationReviewStatus,
+    SpaceType,
+    SpaceVisibility,
+    UserAppRole,
+    UserRole,
+)
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
@@ -33,7 +43,11 @@ def _seed_owner_space(db):
     db.commit()
     db.refresh(owner)
 
-    org = Organization(name="Owner Org", owner_id=owner.id)
+    org = Organization(
+        name="Owner Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -207,6 +221,29 @@ def test_conference_day_rate_preview_uses_day_rate_label(db_session, client_fact
     assert response.json()["line_items"][0]["label"] == "Day Rate"
 
 
+def test_booking_preview_hides_pending_owner_inventory(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).one()
+    org.review_status = OrganizationReviewStatus.PENDING
+    db_session.add(org)
+    db_session.commit()
+    client = client_factory({})
+
+    response = client.post(
+        "/api/booking-requests/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 3, 11, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 3, 11, 10, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Space not found"
+
+
 def test_booking_request_create_and_list(db_session, client_factory):
     owner, space = _seed_owner_space(db_session)
     location = db_session.query(Location).filter(Location.id == space.location_id).first()
@@ -282,6 +319,60 @@ def test_booking_request_create_and_list(db_session, client_factory):
     assert owner_request["member_email"] == "member@example.com"
     assert owner_request["space_public_id"] == space.public_id
     assert owner_request["location_name"] == "Main"
+
+
+def test_booking_request_create_hides_pending_owner_inventory(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).one()
+    org.review_status = OrganizationReviewStatus.PENDING
+    db_session.add(org)
+    db_session.commit()
+    member = User(
+        email="pending-member@example.com",
+        auth_subject="sub-pending-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    response = member_client.post("/api/booking-requests", json=_request_payload(space, None, day=18))
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Space not found"
+    assert db_session.query(BookingRequest).filter(BookingRequest.space_id == space.id).count() == 0
+
+
+def test_booking_request_create_hides_private_inventory(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    space.visibility = SpaceVisibility.PRIVATE
+    db_session.add(space)
+    db_session.commit()
+    member = User(
+        email="private-member@example.com",
+        auth_subject="sub-private-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    response = member_client.post("/api/booking-requests", json=_request_payload(space, None, day=19))
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Space not found"
 
 
 def test_shared_desk_rejects_hourly_booking(db_session, client_factory):
@@ -761,6 +852,34 @@ def test_guest_booking_request_rejects_rewards_redemption(db_session, client_fac
 
     assert resp.status_code == 400
     assert resp.json()["detail"] == "Rewards redemption requires a member account"
+
+
+def test_guest_booking_request_hides_inactive_location_and_pending_owner(db_session, client_factory):
+    _owner, space = _seed_owner_space(db_session)
+    location = db_session.query(Location).filter(Location.id == space.location_id).one()
+    org = db_session.query(Organization).filter(Organization.id == space.tenant_id).one()
+    location.status = LocationStatus.INACTIVE
+    org.review_status = OrganizationReviewStatus.PENDING
+    db_session.add_all([location, org])
+    db_session.commit()
+    client = client_factory({})
+
+    response = client.post(
+        "/api/guest/booking-requests",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 5, 16, 13, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 5, 16, 14, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+            "guest_full_name": "Test User",
+            "guest_email": "testi@mailinator.com",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Space not found"
+    assert db_session.query(BookingRequest).filter(BookingRequest.space_id == space.id).count() == 0
 
 
 def test_guest_booking_request_rejects_buffered_booking_conflict(db_session, client_factory):

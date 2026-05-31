@@ -17,6 +17,7 @@ from app.models.enums import (
     BookingRequestKind,
     BookingRequestStatus,
     LedgerEntryType,
+    OrganizationReviewStatus,
     SpaceType,
     SubscriptionStatusEnum,
     UserAppRole,
@@ -59,7 +60,11 @@ def _seed(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFICE):
     db.refresh(owner)
     db.refresh(member)
 
-    org = Organization(name="MP Org", owner_id=owner.id)
+    org = Organization(
+        name="MP Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)

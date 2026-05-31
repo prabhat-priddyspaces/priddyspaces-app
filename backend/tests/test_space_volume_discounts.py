@@ -5,6 +5,7 @@ from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import (
     AvailabilityStatus,
     BookingRequestStatus,
+    OrganizationReviewStatus,
     SpaceType,
     UserAppRole,
     UserRole,
@@ -29,7 +30,11 @@ def _seed(db, *, space_type=SpaceType.CONFERENCE_ROOM) -> tuple[User, Space]:
     db.add(owner)
     db.commit()
     db.refresh(owner)
-    org = Organization(name="VD Org", owner_id=owner.id)
+    org = Organization(
+        name="VD Org",
+        owner_id=owner.id,
+        review_status=OrganizationReviewStatus.APPROVED,
+    )
     db.add(org)
     db.commit()
     db.refresh(org)
