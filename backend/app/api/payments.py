@@ -14,7 +14,7 @@ from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.subscription import Subscription
 from app.models.space import Space
 from app.models.user import User
-from app.models.enums import AvailabilityStatus
+from app.models.enums import AvailabilityStatus, LocationStatus, SpaceVisibility
 from app.models.organization import Organization
 from app.schemas.payment import (
     PaymentIntentCreate,
@@ -30,6 +30,7 @@ from app.models.pricing_rule import PricingRule
 from app.models.tax_config import TaxConfig
 from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import accessible_location_ids, get_org_member, list_org_members, require_owner_or_admin
+from app.services.platform_auth import organization_is_publicly_visible
 from app.services.pricing import estimate_booking_amount
 from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.stripe_payments import (
@@ -161,6 +162,21 @@ def _booking_charge_amount(db: Session, booking: Booking) -> int:
     return amount
 
 
+def _require_public_subscription_space(db: Session, space: Space) -> tuple[Location, Organization]:
+    location = db.query(Location).filter(Location.id == space.location_id).first()
+    organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
+    if (
+        not location
+        or location.status != LocationStatus.ACTIVE
+        or not organization_is_publicly_visible(organization)
+        or space.visibility == SpaceVisibility.PRIVATE
+    ):
+        raise HTTPException(status_code=404, detail="Space not found")
+    if space.availability_status != AvailabilityStatus.AVAILABLE:
+        raise HTTPException(status_code=400, detail="Space not available")
+    return location, organization
+
+
 def _payment_visible_to_member(db: Session, user_id: int, payment: Payment) -> bool:
     members = list_org_members(db, user_id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
     if not members:
@@ -250,8 +266,7 @@ def create_subscription_purchase(
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
     if not space:
         raise HTTPException(status_code=404, detail="Space not found")
-    if space.availability_status != AvailabilityStatus.AVAILABLE:
-        raise HTTPException(status_code=400, detail="Space not available")
+    _require_public_subscription_space(db, space)
 
     stripe_price_id = payload.stripe_price_id
     if payload.subscription_plan_public_id:
