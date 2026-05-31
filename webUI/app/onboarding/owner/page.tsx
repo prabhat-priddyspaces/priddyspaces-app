@@ -24,7 +24,6 @@ interface BusinessForm {
   website: string;
   business_email: string;
   business_phone: string;
-  industry: string;
   description: string;
 }
 
@@ -34,7 +33,6 @@ const emptyBusinessForm: BusinessForm = {
   website: "",
   business_email: "",
   business_phone: "",
-  industry: "",
   description: "",
 };
 
@@ -71,6 +69,14 @@ export default function OnboardingOwnerPage() {
       setError("Business name is required.");
       return;
     }
+    if (!profile.phone.trim()) {
+      setError("Phone is required.");
+      return;
+    }
+    if (!business.business_phone.trim()) {
+      setError("Business phone is required.");
+      return;
+    }
     setLoading(true);
     try {
       const token = await getToken({ skipCache: true });
@@ -97,8 +103,7 @@ export default function OnboardingOwnerPage() {
           display_name: business.display_name.trim() || undefined,
           website: business.website.trim() || undefined,
           business_email: business.business_email.trim() || undefined,
-          business_phone: business.business_phone.trim() || undefined,
-          industry: business.industry.trim() || undefined,
+          business_phone: business.business_phone.trim(),
           description: business.description.trim() || undefined,
         }),
       }, orgToken ?? token ?? undefined);
@@ -134,8 +139,7 @@ export default function OnboardingOwnerPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <section className="space-y-4">
             <h2 className="text-sm font-semibold text-textPrimary">Your profile</h2>
-            <ProfileFields form={profile} onChange={setProfile} />
-            <TermsCheckbox form={profile} onChange={setProfile} />
+            <ProfileFields form={profile} onChange={setProfile} phoneRequired />
           </section>
 
           <section className="space-y-4">
@@ -166,16 +170,6 @@ export default function OnboardingOwnerPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="industry">Industry (optional)</Label>
-                <Input
-                  id="industry"
-                  value={business.industry}
-                  onChange={(e) => setBusiness({ ...business, industry: e.target.value })}
-                  placeholder="Coworking, real estate, hospitality"
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="business-email">Business email (optional)</Label>
                 <Input
                   id="business-email"
@@ -188,13 +182,16 @@ export default function OnboardingOwnerPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="business-phone">Business phone (optional)</Label>
+                <Label htmlFor="business-phone">
+                  Business phone <span className="text-error">*</span>
+                </Label>
                 <Input
                   id="business-phone"
                   type="tel"
                   value={business.business_phone}
                   onChange={(e) => setBusiness({ ...business, business_phone: e.target.value })}
                   placeholder="+1 555 000 0000"
+                  required
                 />
               </div>
 
@@ -224,8 +221,10 @@ export default function OnboardingOwnerPage() {
 
           {error ? <p className="text-sm text-error">{error}</p> : null}
 
+          <TermsCheckbox form={profile} onChange={setProfile} />
+
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating owner account..." : "Create owner account"}
+            {loading ? "Saving..." : "Save"}
           </Button>
         </form>
       </div>

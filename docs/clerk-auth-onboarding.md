@@ -84,7 +84,7 @@ Two endpoints under `/api/onboarding/` (all require a valid Clerk JWT):
 
 **`POST /api/onboarding/organization`**
 - Owner-only (returns 403 for members)
-- Body: `name` (required), `display_name`, `industry`, `business_email`, `business_phone`, `description`, `website`; legacy `size` is accepted but no longer collected
+- Body: `name` (required), `display_name`, `business_email`, `business_phone` (required), `description`, `website`; legacy `industry` and `size` are accepted but no longer collected
 - Creates `Organization`, an owner `OrganizationMember`, and seeds default amenities
 - Idempotent: if owner already has an org, updates it in place
 - Sets `onboarding_completed = True`
@@ -119,7 +119,7 @@ Two endpoints under `/api/onboarding/` (all require a valid Clerk JWT):
 1. Owner selects owner registration from the public Get started menu or visits `/owners/sign-up`
 2. Clerk `<SignUp />` handles account creation + email verification
 3. Clerk redirects to `/onboarding/owner`, which sends `role: "owner"` and business details
-4. Owner fills profile and business approval details → `POST /api/onboarding/profile`, then `POST /api/onboarding/organization`
+4. Owner fills required profile phone and business phone plus business approval details → `POST /api/onboarding/profile`, then `POST /api/onboarding/organization`
 5. Redirected to `/owner`
 
 ### Superadmin owner invitation
