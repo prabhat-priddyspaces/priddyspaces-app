@@ -36,9 +36,10 @@ export function detectTimezone(): string {
 interface ProfileFieldsProps {
   form: OnboardingProfileForm;
   onChange: (form: OnboardingProfileForm) => void;
+  phoneRequired?: boolean;
 }
 
-export function ProfileFields({ form, onChange }: ProfileFieldsProps) {
+export function ProfileFields({ form, onChange, phoneRequired = false }: ProfileFieldsProps) {
   return (
     <>
       <div className="space-y-2">
@@ -54,7 +55,9 @@ export function ProfileFields({ form, onChange }: ProfileFieldsProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="phone">Phone (optional)</Label>
+        <Label htmlFor="phone">
+          Phone {phoneRequired ? <span className="text-error">*</span> : "(optional)"}
+        </Label>
         <Input
           id="phone"
           type="tel"
@@ -62,6 +65,7 @@ export function ProfileFields({ form, onChange }: ProfileFieldsProps) {
           onChange={(e) => onChange({ ...form, phone: e.target.value })}
           placeholder="+1 555 000 0000"
           autoComplete="tel"
+          required={phoneRequired}
         />
       </div>
 

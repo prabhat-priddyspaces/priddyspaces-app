@@ -425,12 +425,30 @@ class TestOnboardingProfile:
         with patch("app.api.onboarding._update_clerk_metadata"):
             resp = client_factory({"sub": "user_ownr"}).post(
                 "/api/onboarding/profile",
-                json={"role": "owner", "full_name": "Bob Builder", "terms_accepted": True},
+                json={
+                    "role": "owner",
+                    "full_name": "Bob Builder",
+                    "phone": "+1 555 000 0100",
+                    "terms_accepted": True,
+                },
             )
 
         assert resp.status_code == 200
         assert resp.json()["role"] == "owner"
         assert resp.json()["default_route"] == "/onboarding/owner"
+
+    def test_owner_profile_requires_phone(self, client_factory, db_session):
+        user = User(email="owner-nophone@example.com", auth_subject="user_owner_nophone")
+        db_session.add(user)
+        db_session.commit()
+
+        with patch("app.api.onboarding._update_clerk_metadata"):
+            resp = client_factory({"sub": "user_owner_nophone"}).post(
+                "/api/onboarding/profile",
+                json={"role": "owner", "full_name": "No Phone", "terms_accepted": True},
+            )
+
+        assert resp.status_code == 422
 
     def test_blank_full_name_returns_422(self, client_factory, db_session):
         user = User(email="blank@example.com", auth_subject="user_blank")
@@ -506,9 +524,18 @@ class TestOnboardingOrganization:
         _, token = self._owner(db_session, "sz")
         resp = client_factory(token).post(
             "/api/onboarding/organization",
-            json={"name": "Org", "size": "5000"},
+            json={"name": "Org", "business_phone": "+1 555 000 0100", "size": "5000"},
         )
         assert resp.status_code == 422
+
+    def test_business_phone_required(self, client_factory, db_session):
+        _, token = self._owner(db_session, "phone")
+        resp = client_factory(token).post(
+            "/api/onboarding/organization",
+            json={"name": "Org"},
+        )
+        assert resp.status_code == 422
+        assert resp.json()["detail"] == "business_phone is required"
 
     def test_valid_org_created_with_onboarding_complete(self, client_factory, db_session, monkeypatch):
         user, token = self._owner(db_session)
@@ -557,13 +584,17 @@ class TestOnboardingOrganization:
         user, token = self._owner(db_session, "dup")
 
         with patch("app.services.amenities.seed_default_amenities"):
-            client_factory(token).post("/api/onboarding/organization", json={"name": "First"})
+            client_factory(token).post(
+                "/api/onboarding/organization",
+                json={"name": "First", "business_phone": "+1 555 0100"},
+            )
             resp = client_factory(token).post(
                 "/api/onboarding/organization",
                 json={
                     "name": "Updated",
                     "display_name": "Updated Public",
                     "business_email": "updates@example.com",
+                    "business_phone": "+1 555 0101",
                     "description": "Updated review detail",
                 },
             )
@@ -574,6 +605,7 @@ class TestOnboardingOrganization:
         assert org.name == "Updated"
         assert org.display_name == "Updated Public"
         assert org.business_email == "updates@example.com"
+        assert org.business_phone == "+1 555 0101"
         assert org.description == "Updated review detail"
 
     def test_response_has_organization_true_after_creation(self, client_factory, db_session):
@@ -581,7 +613,8 @@ class TestOnboardingOrganization:
 
         with patch("app.services.amenities.seed_default_amenities"):
             resp = client_factory(token).post(
-                "/api/onboarding/organization", json={"name": "My Space"}
+                "/api/onboarding/organization",
+                json={"name": "My Space", "business_phone": "+1 555 0100"},
             )
 
         assert resp.status_code == 200
@@ -768,7 +801,7 @@ class TestOrgWebsiteValidation:
         with patch("app.services.amenities.seed_default_amenities"):
             resp = client_factory(token).post(
                 "/api/onboarding/organization",
-                json={"name": "My Org", "website": "https://example.com"},
+                json={"name": "My Org", "business_phone": "+1 555 0100", "website": "https://example.com"},
             )
         assert resp.status_code == 200
 
@@ -777,7 +810,7 @@ class TestOrgWebsiteValidation:
         with patch("app.services.amenities.seed_default_amenities"):
             resp = client_factory(token).post(
                 "/api/onboarding/organization",
-                json={"name": "My Org 2", "website": "http://example.com"},
+                json={"name": "My Org 2", "business_phone": "+1 555 0100", "website": "http://example.com"},
             )
         assert resp.status_code == 200
 
@@ -785,7 +818,7 @@ class TestOrgWebsiteValidation:
         _, token = self._owner_token(db_session, "wbad")
         resp = client_factory(token).post(
             "/api/onboarding/organization",
-            json={"name": "My Org 3", "website": "not-a-url"},
+            json={"name": "My Org 3", "business_phone": "+1 555 0100", "website": "not-a-url"},
         )
         assert resp.status_code == 422
 
@@ -793,6 +826,6 @@ class TestOrgWebsiteValidation:
         _, token = self._owner_token(db_session, "wftp")
         resp = client_factory(token).post(
             "/api/onboarding/organization",
-            json={"name": "My Org 4", "website": "ftp://files.example.com"},
+            json={"name": "My Org 4", "business_phone": "+1 555 0100", "website": "ftp://files.example.com"},
         )
         assert resp.status_code == 422
