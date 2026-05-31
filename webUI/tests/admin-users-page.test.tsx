@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
 import AdminUsersPage from "../app/admin/users/page";
@@ -68,6 +68,16 @@ vi.mock("../lib/api", () => ({
         page_size: 25,
       });
     }
+    if (path === "/api/admin/owner-invites") {
+      return Promise.resolve({
+        public_id: "owner_invited",
+        email: "invited@example.com",
+        name: "Invited Owner",
+        role: "owner",
+        is_active: true,
+        email_verified: false,
+      });
+    }
     return Promise.reject(new Error(`Unexpected API path ${path}`));
   }),
 }));
@@ -93,5 +103,46 @@ describe("AdminUsersPage", () => {
       "href",
       "/admin/owner-users/owner_1"
     );
+  });
+
+  it("lets superadmins send owner invites from basic account info", async () => {
+    const { apiFetch } = await import("../lib/api");
+
+    render(<AdminUsersPage />);
+
+    fireEvent.change(await screen.findByLabelText("Owner email"), {
+      target: { value: "invited@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Owner first name"), {
+      target: { value: "Invited" },
+    });
+    fireEvent.change(screen.getByLabelText("Owner last name"), {
+      target: { value: "Owner" },
+    });
+    fireEvent.change(screen.getByLabelText("Owner phone"), {
+      target: { value: "+1 555 111 2222" },
+    });
+    fireEvent.change(screen.getByLabelText("Owner business name"), {
+      target: { value: "Invited Works" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send owner invite" }));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/admin/owner-invites",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            email: "invited@example.com",
+            first_name: "Invited",
+            last_name: "Owner",
+            phone: "+1 555 111 2222",
+            company_name: "Invited Works",
+          }),
+        }),
+        "token"
+      );
+    });
+    expect(await screen.findByText("Owner invite sent.")).toBeInTheDocument();
   });
 });

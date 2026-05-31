@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import type { MeResponse } from "@/lib/me";
 
 type RoleFilter = "all" | "member" | "owner" | "platform" | "unassigned";
 type StatusFilter = "" | "active" | "inactive";
@@ -40,8 +41,24 @@ interface UsersResponse {
   page_size: number;
 }
 
+interface OwnerInviteForm {
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  company_name: string;
+}
+
 const selectClass =
   "h-9 rounded-xl border border-line-strong bg-surface px-3 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring";
+
+const emptyOwnerInviteForm: OwnerInviteForm = {
+  email: "",
+  first_name: "",
+  last_name: "",
+  phone: "",
+  company_name: "",
+};
 
 function detailHref(user: AdminUser): string | null {
   if (user.app_role === "member") {
@@ -60,6 +77,7 @@ function roleLabel(user: AdminUser): string {
 }
 
 export default function AdminUsersPage() {
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [data, setData] = useState<UsersResponse | null>(null);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -68,6 +86,11 @@ export default function AdminUsersPage() {
   const [emailVerified, setEmailVerified] = useState<EmailVerifiedFilter>("");
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
+  const [inviteForm, setInviteForm] = useState<OwnerInviteForm>(emptyOwnerInviteForm);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  const isSuperadmin = me?.platform_role === "superadmin";
 
   const loadUsers = useCallback(async () => {
     const token = getAccessToken() ?? undefined;
@@ -93,6 +116,11 @@ export default function AdminUsersPage() {
   }, [emailVerified, page, role, status, submittedQuery]);
 
   useEffect(() => {
+    const token = getAccessToken() ?? undefined;
+    apiFetch<MeResponse>("/api/me", { method: "GET" }, token).then(setMe).catch(() => null);
+  }, []);
+
+  useEffect(() => {
     loadUsers();
   }, [loadUsers]);
 
@@ -104,6 +132,42 @@ export default function AdminUsersPage() {
   function applySearch() {
     setPage(1);
     setSubmittedQuery(query.trim());
+  }
+
+  async function inviteOwner(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setInviteMessage("");
+    setInviteLoading(true);
+    try {
+      const token = getAccessToken() ?? undefined;
+      await apiFetch(
+        "/api/admin/owner-invites",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email: inviteForm.email,
+            first_name: inviteForm.first_name || undefined,
+            last_name: inviteForm.last_name || undefined,
+            phone: inviteForm.phone || undefined,
+            company_name: inviteForm.company_name || undefined,
+          }),
+        },
+        token
+      );
+      setInviteForm(emptyOwnerInviteForm);
+      setInviteMessage("Owner invite sent.");
+      setPage(1);
+      setRole("owner");
+      await loadUsers();
+    } catch (err) {
+      setInviteMessage(err instanceof Error ? err.message : "Failed to send owner invite");
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
+  function updateInviteField(field: keyof OwnerInviteForm, value: string) {
+    setInviteForm((current) => ({ ...current, [field]: value }));
   }
 
   return (
@@ -180,6 +244,60 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </Card>
+
+        {isSuperadmin ? (
+          <Card className="p-4">
+            <form onSubmit={inviteOwner} className="grid gap-3">
+              <div className="text-sm font-semibold text-text">Invite owner</div>
+              <div className="grid gap-3 md:grid-cols-5">
+                <Input
+                  type="email"
+                  value={inviteForm.email}
+                  onChange={(event) => updateInviteField("email", event.target.value)}
+                  placeholder="owner@example.com"
+                  aria-label="Owner email"
+                  required
+                />
+                <Input
+                  value={inviteForm.first_name}
+                  onChange={(event) => updateInviteField("first_name", event.target.value)}
+                  placeholder="First name"
+                  aria-label="Owner first name"
+                />
+                <Input
+                  value={inviteForm.last_name}
+                  onChange={(event) => updateInviteField("last_name", event.target.value)}
+                  placeholder="Last name"
+                  aria-label="Owner last name"
+                />
+                <Input
+                  value={inviteForm.phone}
+                  onChange={(event) => updateInviteField("phone", event.target.value)}
+                  placeholder="Phone"
+                  aria-label="Owner phone"
+                />
+                <Input
+                  value={inviteForm.company_name}
+                  onChange={(event) => updateInviteField("company_name", event.target.value)}
+                  placeholder="Business name"
+                  aria-label="Owner business name"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="submit" disabled={inviteLoading}>
+                  {inviteLoading ? "Sending..." : "Send owner invite"}
+                </Button>
+                {inviteMessage ? (
+                  <span
+                    className={`text-sm ${inviteMessage.endsWith("sent.") ? "text-success" : "text-danger"}`}
+                  >
+                    {inviteMessage}
+                  </span>
+                ) : null}
+              </div>
+            </form>
+          </Card>
+        ) : null}
 
         {message ? <div className="text-sm text-danger">{message}</div> : null}
 

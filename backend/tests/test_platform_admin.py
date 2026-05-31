@@ -267,6 +267,71 @@ def test_superadmin_can_invite_platform_team_member_but_admin_cannot(db_session,
     assert forbidden.status_code == 403
 
 
+def test_superadmin_can_invite_owner_account(db_session, client_factory, monkeypatch):
+    sent = []
+
+    def fake_send_email(to_email, subject, body, **_kwargs):
+        sent.append({"to_email": to_email, "subject": subject, "body": body})
+
+    monkeypatch.setattr("app.api.admin.send_email", fake_send_email)
+    superadmin = _create_platform_member(db_session, email="owner-invite-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    client = client_factory({
+        "sub": str(superadmin.public_id),
+        "email": superadmin.email,
+        "email_verified": True,
+    })
+
+    response = client.post(
+        "/api/admin/owner-invites",
+        json={
+            "email": "  NewOwner@Example.COM ",
+            "first_name": "Nina",
+            "last_name": "Owner",
+            "phone": "+1 555 000 1111",
+            "company_name": "Nina Works",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "newowner@example.com"
+    assert data["role"] == "owner"
+    owner = db_session.query(User).filter(User.email == "newowner@example.com").one()
+    assert owner.role == UserAppRole.OWNER
+    assert owner.full_name == "Nina Owner"
+    assert owner.phone == "+1 555 000 1111"
+    assert owner.company_name == "Nina Works"
+    assert owner.password_hash is None
+    assert sent[0]["to_email"] == "newowner@example.com"
+    assert "/owners/sign-up?email=newowner%40example.com&invite=owner" in sent[0]["body"]
+    assert "/sign-in?redirect_url=%2Fonboarding%2Fowner" in sent[0]["body"]
+
+
+def test_owner_invite_rejects_non_superadmin_and_existing_members(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr("app.api.admin.send_email", lambda *args, **kwargs: None)
+    admin = _create_platform_member(db_session, email="owner-invite-regular-admin@example.com", role=PlatformTeamRole.ADMIN)
+    admin_client = client_factory({
+        "sub": str(admin.public_id),
+        "email": admin.email,
+        "email_verified": True,
+    })
+
+    forbidden = admin_client.post("/api/admin/owner-invites", json={"email": "owner@example.com"})
+    assert forbidden.status_code == 403
+
+    superadmin = _create_platform_member(db_session, email="owner-invite-superadmin@example.com", role=PlatformTeamRole.SUPERADMIN)
+    member = _create_user(db_session, email="existing-member@example.com", role=UserAppRole.MEMBER)
+    client = client_factory({
+        "sub": str(superadmin.public_id),
+        "email": superadmin.email,
+        "email_verified": True,
+    })
+
+    conflict = client.post("/api/admin/owner-invites", json={"email": member.email})
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "Existing member accounts cannot be invited as owners"
+
+
 def test_superadmin_can_update_settings_profile_and_password(db_session, client_factory):
     superadmin = _create_platform_member(db_session, email="settings-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
     client = client_factory({

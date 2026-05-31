@@ -115,12 +115,19 @@ Two endpoints under `/api/onboarding/` (all require a valid Clerk JWT):
 4. `POST /api/onboarding/profile` sends `role: "member"` → sets `users.role`, syncs `publicMetadata.role` to Clerk
 5. Response includes `default_route: "/spaces"`
 
-### Hidden owner sign-up (web)
-1. Owner visits `/owners/sign-up` directly; this URL is not linked from public navigation
+### Owner sign-up (web)
+1. Owner selects owner registration from the public Get started menu or visits `/owners/sign-up`
 2. Clerk `<SignUp />` handles account creation + email verification
 3. Clerk redirects to `/onboarding/owner`, which sends `role: "owner"` and business details
 4. Owner fills profile and business approval details → `POST /api/onboarding/profile`, then `POST /api/onboarding/organization`
 5. Redirected to `/owner`
+
+### Superadmin owner invitation
+1. Superadmin opens `/admin/users` and submits basic owner info through Invite owner
+2. `POST /api/admin/owner-invites` creates or updates a local owner shell record
+3. The owner receives an email link to `/owners/sign-up?email=...&invite=owner`
+4. Clerk owns password creation and sign-in; existing members are not silently converted to owners
+5. When Clerk creates the user, the webhook links the Clerk identity to the existing local user by email
 
 ### Social OAuth sign-up (web)
 Same role behavior — `/sign-up` creates members, `/owners/sign-up` creates owners. Clerk handles OAuth callback natively; users land on the matching onboarding page.
@@ -336,7 +343,7 @@ Run: `cd webUI && npx vitest run tests/me-default-route.test.ts`
 | `webUI/app/dashboard/page.tsx` | **New** — redirect hub after sign-in |
 | `webUI/app/owner/layout.tsx` | Clerk `useAuth()` role guard |
 | `webUI/app/member/layout.tsx` | Clerk `useAuth()` role guard |
-| `webUI/app/owners/sign-up/[[...sign-up]]/page.tsx` | Hidden owner registration URL |
+| `webUI/app/owners/sign-up/[[...sign-up]]/page.tsx` | Owner registration URL |
 | `webUI/app/admin/layout.tsx` | Clerk `useAuth()` platform_role guard |
 | `webUI/lib/me.ts` | `has_organization`; updated `getDefaultRoute` |
 | `webUI/.env.local.example` | **New** — local dev Clerk vars |

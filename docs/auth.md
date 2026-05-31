@@ -79,5 +79,7 @@ Social sign-in should be configured in Clerk.
 - New member sign-up completes `/api/onboarding/profile` from `/onboarding/member`.
 - Owner sign-up completes `/api/onboarding/organization` and creates a pending
   organization review record from `/onboarding/owner`.
+- Superadmin owner invitations send owners through Clerk owner sign-up; the
+  backend does not issue temporary local passwords for Clerk-owned accounts.
 - Platform admin/superadmin roles are present in Clerk public metadata before
   go-live support operations begin.

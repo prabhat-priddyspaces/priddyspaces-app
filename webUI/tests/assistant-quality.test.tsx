@@ -56,8 +56,8 @@ describe("AssistantQualityPage", () => {
     render(<AssistantQualityPage />);
 
     expect(await screen.findByText("Reliability Events")).toBeInTheDocument();
-    expect(screen.getByText("context_mismatch")).toBeInTheDocument();
+    expect(await screen.findByText("context_mismatch")).toBeInTheDocument();
     expect(screen.getByText("Recent Reliability Events")).toBeInTheDocument();
-    expect(screen.getByText("missing_required_slot")).toBeInTheDocument();
+    expect(await screen.findByText("missing_required_slot")).toBeInTheDocument();
   });
 });

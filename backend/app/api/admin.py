@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
@@ -34,6 +35,7 @@ from app.models.subscription import Subscription
 from app.models.user import User
 from app.schemas.admin import (
     ImpersonationStartIn,
+    OwnerInviteIn,
     OrganizationAdminUpdate,
     PlatformPasswordUpdateIn,
     PlatformProfileUpdateIn,
@@ -48,6 +50,7 @@ from app.services.notifications import send_email
 from app.services.platform_auth import (
     build_default_route,
     ensure_not_platform_target,
+    get_active_platform_member,
     get_audit_actor_context,
     get_effective_user,
     get_or_create_platform_settings,
@@ -85,6 +88,14 @@ def _humanize_label(value: str | None) -> str:
         return "Unknown"
     cleaned = value.replace("_", " ").replace("-", " ").strip().lower()
     return cleaned[:1].upper() + cleaned[1:] if cleaned else "Unknown"
+
+
+def _frontend_url(path: str, query: dict[str, str] | None = None) -> str:
+    base = (settings.FRONTEND_URL or "http://localhost:3000").rstrip("/")
+    suffix = path if path.startswith("/") else f"/{path}"
+    if not query:
+        return f"{base}{suffix}"
+    return f"{base}{suffix}?{urlencode(query)}"
 
 
 def _active_superadmin_count(db: Session) -> int:
@@ -542,6 +553,99 @@ def list_admin_users(
         "total": total,
         "page": page,
         "page_size": page_size,
+    }
+
+
+@router.post("/admin/owner-invites")
+def invite_owner_account(
+    payload: OwnerInviteIn,
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    actor, _member = require_superadmin(db, token)
+    email = normalize_email(payload.email)
+    user = get_user_by_normalized_email(db, email)
+    created = user is None
+    before = None
+
+    if user:
+        platform_member = get_active_platform_member(db, user.id)
+        if platform_member:
+            raise HTTPException(status_code=409, detail="Platform team accounts cannot be invited as owners")
+        if user.role not in {None, UserAppRole.OWNER}:
+            raise HTTPException(status_code=409, detail="Existing member accounts cannot be invited as owners")
+        before = {
+            "role": user.role.value if user.role else None,
+            "is_active": user.is_active,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "company_name": user.company_name,
+        }
+        user.role = UserAppRole.OWNER
+        user.is_active = True
+    else:
+        user = User(
+            email=email,
+            role=UserAppRole.OWNER,
+            email_verified=False,
+            is_active=True,
+        )
+
+    if payload.first_name is not None:
+        user.first_name = payload.first_name
+    if payload.last_name is not None:
+        user.last_name = payload.last_name
+    if payload.first_name is not None or payload.last_name is not None:
+        user.full_name = " ".join(part for part in [user.first_name, user.last_name] if part).strip() or None
+    if payload.phone is not None:
+        user.phone = payload.phone
+    if payload.company_name is not None:
+        user.company_name = payload.company_name
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    signup_url = _frontend_url("/owners/sign-up", {"email": user.email, "invite": "owner"})
+    signin_url = _frontend_url("/sign-in", {"redirect_url": "/onboarding/owner"})
+    send_email(
+        user.email,
+        "Complete your Priddyspaces owner account",
+        (
+            f"{_user_label(actor)} invited you to register your business on Priddyspaces.\n\n"
+            f"Create your owner account and set your password here:\n{signup_url}\n\n"
+            f"If you already have a Priddyspaces account, sign in here:\n{signin_url}"
+        ),
+    )
+    write_audit_log(
+        db=db,
+        actor_id=actor.id,
+        action="owner_invite_created" if created else "owner_invite_updated",
+        entity_type="user",
+        entity_public_id=user.public_id,
+        before_state=before,
+        after_state={
+            "email": user.email,
+            "role": user.role.value if user.role else None,
+            "is_active": user.is_active,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone": user.phone,
+            "company_name": user.company_name,
+        },
+    )
+    return {
+        "public_id": user.public_id,
+        "email": user.email,
+        "name": _user_label(user),
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "phone": user.phone,
+        "company_name": user.company_name,
+        "role": user.role.value if user.role else None,
+        "is_active": user.is_active,
+        "email_verified": user.email_verified,
     }
 
 

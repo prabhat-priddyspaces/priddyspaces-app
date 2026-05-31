@@ -16,7 +16,9 @@ export default function SignUpPage() {
       <Suspense fallback={null}>
         <AuthNextStash />
       </Suspense>
-      <ClerkSignUpCard />
+      <Suspense fallback={null}>
+        <ClerkSignUpCard />
+      </Suspense>
     </div>
   );
 }

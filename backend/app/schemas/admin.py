@@ -31,6 +31,30 @@ class PlatformTeamInviteIn(BaseModel):
         return cleaned
 
 
+class OwnerInviteIn(BaseModel):
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    company_name: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        cleaned = value.lower().strip()
+        if "@" not in cleaned:
+            raise ValueError("Invalid email address")
+        return cleaned
+
+    @field_validator("first_name", "last_name", "phone", "company_name")
+    @classmethod
+    def optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
+
+
 class PlatformTeamUpdateIn(BaseModel):
     role: PlatformTeamRole | None = None
     is_active: bool | None = None
