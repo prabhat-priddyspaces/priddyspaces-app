@@ -138,6 +138,15 @@ Same role behavior — `/sign-up` creates members, `/owners/sign-up` creates own
    - `me.role === "owner" && !me.has_organization` → `OrgOnboardingScreen`
    - else → tabs
 
+### Mobile member sign-up
+1. `RegisterScreen` creates a Clerk member sign-up with email/password.
+2. If Clerk requires email verification, the app sends an email-code challenge
+   and keeps the member on an in-app verification form.
+3. The member enters the code; `AuthContext.verifyEmailCode()` activates the
+   Clerk session.
+4. `AppNavigator.MainApp` routes the new member into onboarding to set profile
+   metadata and accept terms.
+
 ### Admin login
 Admins are created manually in the Clerk dashboard:
 1. Create user in Clerk dashboard

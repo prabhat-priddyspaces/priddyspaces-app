@@ -4,20 +4,72 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity
 import { useAuth } from "../context/AuthContext";
 
 export function RegisterScreen() {
-  const { signUp, loading } = useAuth();
+  const { signUp, verifyEmailCode, loading } = useAuth();
   const [form, setForm] = useState({
     email: "",
     password: "",
     first_name: "",
     last_name: "",
   });
+  const [verificationPending, setVerificationPending] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
 
   async function handleRegister() {
     try {
-      await signUp(form);
+      const result = await signUp(form);
+      if (result.status === "needs_verification") {
+        setVerificationPending(true);
+        Alert.alert("Check your email", "Enter the verification code to finish creating your account.");
+      }
     } catch (err) {
       Alert.alert("Registration failed", err instanceof Error ? err.message : "Check your member account details and try again.");
     }
+  }
+
+  async function handleVerifyEmail() {
+    if (!verificationCode.trim()) {
+      Alert.alert("Verification code required", "Enter the code from your email to continue.");
+      return;
+    }
+    try {
+      await verifyEmailCode(verificationCode.trim());
+    } catch (err) {
+      Alert.alert("Verification failed", err instanceof Error ? err.message : "Check the code and try again.");
+    }
+  }
+
+  if (verificationPending) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Verify your email</Text>
+        <Text style={styles.subtitle}>Enter the verification code sent to {form.email}.</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Verification code"
+          autoCapitalize="none"
+          keyboardType="number-pad"
+          value={verificationCode}
+          onChangeText={setVerificationCode}
+        />
+        <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyEmail} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Verify email</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => {
+            setVerificationPending(false);
+            setVerificationCode("");
+          }}
+          disabled={loading}
+        >
+          <Text style={styles.secondaryButtonText}>Use a different email</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
@@ -96,6 +148,15 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#FFFFFF",
+    fontWeight: "600"
+  },
+  secondaryButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: "center"
+  },
+  secondaryButtonText: {
+    color: "#374151",
     fontWeight: "600"
   }
 });

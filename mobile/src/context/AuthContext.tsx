@@ -18,14 +18,19 @@ type AuthState = {
   loading: boolean;
 };
 
+type SignUpPayload = {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+};
+
+type SignUpResult = { status: "complete" } | { status: "needs_verification" };
+
 type AuthContextValue = AuthState & {
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (payload: {
-    email: string;
-    password: string;
-    first_name: string;
-    last_name: string;
-  }) => Promise<void>;
+  signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
+  verifyEmailCode: (code: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Fetch a fresh Clerk JWT for API calls */
   getToken: () => Promise<string | null>;
@@ -63,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             lastName: string;
           }) => Promise<any>;
           prepareEmailAddressVerification: (payload: { strategy: "email_code" }) => Promise<void>;
+          attemptEmailAddressVerification: (payload: { code: string }) => Promise<any>;
         }
       | null;
     setActive: (payload: { session: string | null }) => Promise<void>;
@@ -132,12 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signUp = useCallback(
-    async (payload: {
-      email: string;
-      password: string;
-      first_name: string;
-      last_name: string;
-    }) => {
+    async (payload: SignUpPayload): Promise<SignUpResult> => {
       if (!signUpLoaded || !clerkSignUp) throw new Error("Auth not ready");
       setState((prev) => ({ ...prev, loading: true }));
       try {
@@ -149,12 +150,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         if (result.status === "complete") {
           await setSignUpActive({ session: result.createdSessionId });
-          // Role will be set during onboarding
-        } else {
-          // Email verification required
-          await clerkSignUp.prepareEmailAddressVerification({ strategy: "email_code" });
-          throw new Error("verify_email");
+          return { status: "complete" };
         }
+        await clerkSignUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        setState((prev) => ({ ...prev, loading: false }));
+        return { status: "needs_verification" };
+      } catch (err) {
+        setState((prev) => ({ ...prev, loading: false }));
+        throw err;
+      }
+    },
+    [signUpLoaded, clerkSignUp, setSignUpActive]
+  );
+
+  const verifyEmailCode = useCallback(
+    async (code: string) => {
+      if (!signUpLoaded || !clerkSignUp) throw new Error("Auth not ready");
+      setState((prev) => ({ ...prev, loading: true }));
+      try {
+        const result = await clerkSignUp.attemptEmailAddressVerification({ code });
+        if (result.status !== "complete") {
+          throw new Error("Email verification incomplete: " + result.status);
+        }
+        await setSignUpActive({ session: result.createdSessionId });
       } catch (err) {
         setState((prev) => ({ ...prev, loading: false }));
         throw err;
@@ -171,8 +189,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getToken = useCallback(() => clerkGetToken(), [clerkGetToken]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, signIn, signUp, signOut, getToken }),
-    [state, signIn, signUp, signOut, getToken]
+    () => ({ ...state, signIn, signUp, verifyEmailCode, signOut, getToken }),
+    [state, signIn, signUp, verifyEmailCode, signOut, getToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
