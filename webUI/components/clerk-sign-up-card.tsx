@@ -1,26 +1,26 @@
 "use client";
 
 import { SignUp } from "@clerk/nextjs";
-import { useEffect } from "react";
-
-const SIGNUP_ROLE_KEY = "priddyspaces_signup_role";
+import { useSearchParams } from "next/navigation";
 
 interface ClerkSignUpCardProps {
   owner?: boolean;
 }
 
 export function ClerkSignUpCard({ owner = false }: ClerkSignUpCardProps) {
-  useEffect(() => {
-    if (owner) {
-      window.sessionStorage.setItem(SIGNUP_ROLE_KEY, "owner");
-    } else {
-      window.sessionStorage.removeItem(SIGNUP_ROLE_KEY);
-    }
-  }, [owner]);
+  const searchParams = useSearchParams();
+  const role = owner ? "owner" : "member";
+  const onboardingUrl = owner ? "/onboarding/owner" : "/onboarding/member";
+  const email = searchParams.get("email")?.trim().toLowerCase();
+  const initialValues = email && email.includes("@") ? { emailAddress: email } : undefined;
 
   return (
     <SignUp
       routing="hash"
+      forceRedirectUrl={onboardingUrl}
+      fallbackRedirectUrl={onboardingUrl}
+      unsafeMetadata={{ signup_role: role }}
+      initialValues={initialValues}
       appearance={{
         variables: {
           colorPrimary: "#111827",

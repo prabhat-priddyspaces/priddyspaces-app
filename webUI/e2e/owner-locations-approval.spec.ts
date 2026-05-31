@@ -37,6 +37,12 @@ test("owner sees company review status on locations and can request approval", a
         {
           public_id: "org_1",
           name: "Boca Raton Workspace",
+          display_name: "Boca Workspace",
+          industry: "Coworking",
+          website: "https://boca.example",
+          business_email: "owner@test.com",
+          business_phone: "+1 555 0100",
+          description: "Workspace review detail.",
           review_status: "pending",
         },
       ]);

@@ -495,3 +495,24 @@ test("public marketplace shows no meeting rooms when the selected slot is unavai
   await expect(page.getByText("No locations matched this search. Try widening the price cap or removing a date or capacity filter.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).not.toBeVisible();
 });
+
+test("public get started menu exposes member and owner registration", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/marketplace/locations") {
+      await json(route, coworkingResults);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/spaces");
+  await page.getByRole("button", { name: /Get started/ }).click();
+
+  await expect(page.getByRole("menu", { name: "Registration options" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Member registration" })).toHaveAttribute("href", "/sign-up");
+  await expect(page.getByRole("menuitem", { name: "Owner registration" })).toHaveAttribute("href", "/owners/sign-up");
+});

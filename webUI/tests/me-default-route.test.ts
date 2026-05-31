@@ -12,7 +12,7 @@ function makeMe(overrides: Partial<MeResponse> = {}): MeResponse {
     app_role: null,
     platform_role: null,
     has_organization: false,
-    default_route: "/onboarding/personal",
+    default_route: "/onboarding/member",
     impersonation: {
       is_impersonating: false,
       actor_public_id: null,
@@ -27,14 +27,14 @@ function makeMe(overrides: Partial<MeResponse> = {}): MeResponse {
 }
 
 describe("getDefaultRoute", () => {
-  it("routes new user (no role) to personal onboarding", () => {
-    expect(getDefaultRoute(makeMe())).toBe("/onboarding/personal");
+  it("routes new user (no role) to member onboarding", () => {
+    expect(getDefaultRoute(makeMe())).toBe("/onboarding/member");
   });
 
-  it("routes owner without org to org onboarding", () => {
+  it("routes owner without org to owner onboarding", () => {
     expect(
       getDefaultRoute(makeMe({ app_role: "owner", has_organization: false }))
-    ).toBe("/onboarding/organization");
+    ).toBe("/onboarding/owner");
   });
 
   it("routes owner with org to owner dashboard", () => {
@@ -100,9 +100,9 @@ describe("getDefaultRoute", () => {
     ).toBe("/legacy");
   });
 
-  it("falls back to /onboarding/personal when default_route is empty and role is unknown", () => {
+  it("falls back to /onboarding/member when default_route is empty and role is unknown", () => {
     expect(
       getDefaultRoute(makeMe({ app_role: "mystery", default_route: "" }))
-    ).toBe("/onboarding/personal");
+    ).toBe("/onboarding/member");
   });
 });

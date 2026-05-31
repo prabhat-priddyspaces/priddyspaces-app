@@ -430,6 +430,7 @@ class TestOnboardingProfile:
 
         assert resp.status_code == 200
         assert resp.json()["role"] == "owner"
+        assert resp.json()["default_route"] == "/onboarding/owner"
 
     def test_blank_full_name_returns_422(self, client_factory, db_session):
         user = User(email="blank@example.com", auth_subject="user_blank")
@@ -525,15 +526,30 @@ class TestOnboardingOrganization:
         with patch("app.services.amenities.seed_default_amenities"):
             resp = client_factory(token).post(
                 "/api/onboarding/organization",
-                json={"name": "Acme Spaces", "industry": "Coworking", "size": "1-10"},
+                json={
+                    "name": "Acme Spaces LLC",
+                    "display_name": "Acme Spaces",
+                    "industry": "Coworking",
+                    "website": "https://acme.example",
+                    "business_email": "HELLO@ACME.EXAMPLE",
+                    "business_phone": "+1 555 0100",
+                    "description": "Flexible workspace for local teams.",
+                    "size": "1-10",
+                },
             )
 
         assert resp.status_code == 200
         org = db_session.query(Organization).filter(Organization.owner_id == user.id).first()
         assert org is not None
-        assert org.name == "Acme Spaces"
+        assert org.name == "Acme Spaces LLC"
         assert org.onboarding_completed is True
+        assert org.display_name == "Acme Spaces"
         assert org.industry == "Coworking"
+        assert org.website == "https://acme.example"
+        assert org.business_email == "hello@acme.example"
+        assert org.business_phone == "+1 555 0100"
+        assert org.description == "Flexible workspace for local teams."
+        assert org.size == "1-10"
         assert org.review_status == OrganizationReviewStatus.PENDING
         assert sent == [(org.public_id, user.email)]
 
@@ -542,11 +558,23 @@ class TestOnboardingOrganization:
 
         with patch("app.services.amenities.seed_default_amenities"):
             client_factory(token).post("/api/onboarding/organization", json={"name": "First"})
-            resp = client_factory(token).post("/api/onboarding/organization", json={"name": "Updated"})
+            resp = client_factory(token).post(
+                "/api/onboarding/organization",
+                json={
+                    "name": "Updated",
+                    "display_name": "Updated Public",
+                    "business_email": "updates@example.com",
+                    "description": "Updated review detail",
+                },
+            )
 
         assert resp.status_code == 200
+        org = db_session.query(Organization).filter(Organization.owner_id == user.id).first()
         assert db_session.query(Organization).filter(Organization.owner_id == user.id).count() == 1
-        assert db_session.query(Organization).filter(Organization.owner_id == user.id).first().name == "Updated"
+        assert org.name == "Updated"
+        assert org.display_name == "Updated Public"
+        assert org.business_email == "updates@example.com"
+        assert org.description == "Updated review detail"
 
     def test_response_has_organization_true_after_creation(self, client_factory, db_session):
         user, token = self._owner(db_session, "hasorg")

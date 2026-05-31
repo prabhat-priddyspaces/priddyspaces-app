@@ -15,6 +15,12 @@ import type { MeResponse } from "@/lib/me";
 interface OwnerCompany {
   public_id: string;
   name: string;
+  display_name: string | null;
+  industry: string | null;
+  website: string | null;
+  business_email: string | null;
+  business_phone: string | null;
+  description: string | null;
   review_status: string;
   review_notes: string | null;
   commission_override_pct: number | null;
@@ -142,6 +148,43 @@ export default function AdminOwnerCompaniesPage() {
                   <div className="font-semibold text-text">{company.name}</div>
                   <div className="text-sm text-text-3">
                     {company.owner.name || company.owner.email} • {formatAdminLabel(company.review_status)} • {company.locations} locations • {company.listings} listings
+                  </div>
+                </div>
+                <div className="grid gap-2 rounded-md border border-line bg-surface-2/40 p-3 text-sm md:grid-cols-2">
+                  <div>
+                    <span className="font-medium text-text">Display name: </span>
+                    <span className="text-text-2">{company.display_name || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-text">Industry: </span>
+                    <span className="text-text-2">{company.industry || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-text">Business email: </span>
+                    <span className="text-text-2">{company.business_email || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-text">Business phone: </span>
+                    <span className="text-text-2">{company.business_phone || "—"}</span>
+                  </div>
+                  <div className="md:col-span-2">
+                    <span className="font-medium text-text">Website: </span>
+                    {company.website ? (
+                      <a
+                        href={company.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-brand hover:underline"
+                      >
+                        {company.website}
+                      </a>
+                    ) : (
+                      <span className="text-text-2">—</span>
+                    )}
+                  </div>
+                  <div className="md:col-span-2">
+                    <span className="font-medium text-text">Description: </span>
+                    <span className="text-text-2">{company.description || "—"}</span>
                   </div>
                 </div>
                 {linkedCompanyId === company.public_id && linkedAction === "approve" ? (

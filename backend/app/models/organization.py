@@ -17,6 +17,10 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
     industry = Column(String(128), nullable=True)
     size = Column(String(32), nullable=True)
     website = Column(String(512), nullable=True)
+    display_name = Column(String(255), nullable=True)
+    business_email = Column(String(255), nullable=True)
+    business_phone = Column(String(64), nullable=True)
+    description = Column(String(2048), nullable=True)
     stripe_account_id = Column(String(255), nullable=True)
     payment_provider = Column(String(32), nullable=True)
     review_status = Column(

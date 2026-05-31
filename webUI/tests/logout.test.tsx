@@ -73,6 +73,23 @@ describe("logout flows", () => {
     });
   });
 
+  it("shows member and owner registration links from public get started menu", async () => {
+    getAccessTokenMock.mockReturnValue(null);
+
+    render(<PublicTopbar />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /get started/i }));
+
+    expect(screen.getByRole("menuitem", { name: "Member registration" })).toHaveAttribute(
+      "href",
+      "/sign-up"
+    );
+    expect(screen.getByRole("menuitem", { name: "Owner registration" })).toHaveAttribute(
+      "href",
+      "/owners/sign-up"
+    );
+  });
+
   it("routes protected shell logout buttons through shared app sign out", () => {
     appSignOutMock.mockResolvedValue(undefined);
 
