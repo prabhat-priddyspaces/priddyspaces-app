@@ -72,7 +72,7 @@ export default function MarketingSettingsPage() {
       setMessage("Verified sender requested");
       await loadSettings();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Request failed");
+      setMessage(err instanceof Error ? err.message : "Unable to request verified sender");
     }
   }
 

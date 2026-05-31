@@ -16,13 +16,13 @@ export function RegisterScreen() {
     try {
       await signUp(form);
     } catch (err) {
-      Alert.alert("Registration failed", err instanceof Error ? err.message : "Try again.");
+      Alert.alert("Registration failed", err instanceof Error ? err.message : "Check your member account details and try again.");
     }
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Create account</Text>
+      <Text style={styles.title}>Create member account</Text>
       <Text style={styles.subtitle}>Create a member account to book spaces and manage memberships.</Text>
       <TextInput
         style={styles.input}

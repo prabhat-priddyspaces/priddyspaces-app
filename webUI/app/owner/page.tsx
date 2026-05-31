@@ -699,7 +699,7 @@ export default function OwnerDashboard() {
                 right={
                   <Link href="/owner/locations">
                     <Button variant="ghost" size="sm">
-                      Manage
+                      Manage locations
                       <ArrowRight size={12} />
                     </Button>
                   </Link>

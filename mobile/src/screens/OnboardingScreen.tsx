@@ -52,11 +52,11 @@ export function OnboardingScreen() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Profile update failed");
+        throw new Error(data.detail || "Member profile setup failed");
       }
       // AuthContext will refresh state on next render cycle
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Please try again.");
+      Alert.alert("Profile setup failed", err instanceof Error ? err.message : "Check your profile details and try again.");
     } finally {
       setLoading(false);
     }
@@ -115,7 +115,7 @@ export function OnboardingScreen() {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryButtonText}>Continue</Text>
+          <Text style={styles.primaryButtonText}>Save member profile</Text>
         )}
       </TouchableOpacity>
     </ScrollView>

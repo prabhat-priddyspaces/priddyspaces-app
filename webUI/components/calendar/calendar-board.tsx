@@ -170,7 +170,7 @@ export function CalendarBoard({
 
       {!data ? (
         <div className="rounded-md border border-border bg-surface p-8 text-center text-sm text-textMuted">
-          {loading ? "Loading calendar…" : "No data yet."}
+          {loading ? "Loading calendar…" : "No bookings or memberships match this calendar view."}
         </div>
       ) : view === "month" ? (
         <MonthGrid windowStart={anchor} events={filteredEvents} onEventClick={setSelected} />

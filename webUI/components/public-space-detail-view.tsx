@@ -689,7 +689,7 @@ export function PublicSpaceDetailView({
       const stillAvailable = await ensureAvailabilityCurrent();
       if (!stillAvailable) return;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not refresh availability. Try again.");
+      setError(err instanceof Error ? err.message : "Could not refresh this space's availability window.");
       return;
     }
 

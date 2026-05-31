@@ -89,7 +89,7 @@ export default function OnboardingPersonalPage() {
       const next = consumeOauthNext();
       router.replace(next ?? me.default_route);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Update failed");
+      setError(err instanceof Error ? err.message : "Unable to save profile setup");
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function OnboardingPersonalPage() {
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
-        Loading...
+        Loading your Priddyspaces profile...
       </div>
     );
   }
@@ -227,7 +227,7 @@ export default function OnboardingPersonalPage() {
           {error ? <p className="text-sm text-error">{error}</p> : null}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Saving..." : "Continue"}
+            {loading ? "Saving profile..." : "Continue profile setup"}
           </Button>
         </form>
       </div>

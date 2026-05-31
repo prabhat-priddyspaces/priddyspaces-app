@@ -125,7 +125,7 @@ function ClerkMemberLayout({ children }: { children: React.ReactNode }) {
   if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-text-3">
-        Loading...
+        Loading member workspace...
       </div>
     );
   }
@@ -143,7 +143,7 @@ function BypassMemberLayout({ children }: { children: React.ReactNode }) {
   if (loading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-text-3">
-        Loading...
+        Loading member workspace...
       </div>
     );
   }

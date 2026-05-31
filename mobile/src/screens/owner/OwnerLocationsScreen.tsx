@@ -30,12 +30,12 @@ export function OwnerLocationsScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Locations</Text>
-      <Text style={styles.subtitle}>Manage locations and spaces.</Text>
+      <Text style={styles.subtitle}>Manage marketplace locations and the rooms available at each site.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {locations.length === 0 && !loading ? (
-          <Text style={styles.empty}>No locations yet.</Text>
+          <Text style={styles.empty}>No owner locations configured yet.</Text>
         ) : (
           locations.map((loc) => (
             <View key={loc.public_id} style={styles.card}>

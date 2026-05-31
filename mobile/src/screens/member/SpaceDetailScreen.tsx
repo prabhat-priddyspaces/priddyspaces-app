@@ -332,7 +332,7 @@ export function SpaceDetailScreen() {
       }
       await submitBooking(payload, resolved.payment_method_public_id);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Request failed");
+      setMessage(err instanceof Error ? err.message : "Unable to send booking request");
     } finally {
       setSubmitting(false);
     }
@@ -354,7 +354,7 @@ export function SpaceDetailScreen() {
       },
       token
     );
-    setMessage("Request submitted for owner review.");
+    setMessage("Membership request submitted for owner review.");
   }
 
   async function handleSubscribe(plan: MembershipPlan) {
@@ -516,7 +516,7 @@ export function SpaceDetailScreen() {
           {isConferenceRoom || isSharedDesk ? (
             <TouchableOpacity style={styles.primaryButton} onPress={handleRequest} disabled={submitting}>
               <Text style={styles.primaryButtonText}>
-                {submitting ? "Submitting..." : actionLabel}
+                {submitting ? "Sending booking request..." : actionLabel}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -539,7 +539,7 @@ export function SpaceDetailScreen() {
                   setPendingReservation(null);
                   setSubmitting(true);
                   submitBooking(reservation, paymentMethodPublicId)
-                    .catch((err) => setMessage(err instanceof Error ? err.message : "Request failed"))
+                    .catch((err) => setMessage(err instanceof Error ? err.message : "Unable to send booking request"))
                     .finally(() => setSubmitting(false));
                 }
               }}
@@ -566,7 +566,7 @@ export function SpaceDetailScreen() {
                     disabled={subscribing}
                   >
                     <Text style={styles.secondaryButtonText}>
-                      {subscribing ? "Processing..." : "Request membership"}
+                      {subscribing ? "Sending membership request..." : "Request membership"}
                     </Text>
                   </TouchableOpacity>
                 </View>

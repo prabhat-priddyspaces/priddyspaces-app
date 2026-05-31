@@ -39,8 +39,8 @@ interface MarketplaceBrowserProps {
 
 export function MarketplaceBrowser({
   detailHrefBase,
-  title = "Find a space",
-  subtitle = "Search locations by city and browse available spaces.",
+  title = "Find a workspace",
+  subtitle = "Search by city, capacity, and price to compare available rooms and desks.",
   showMemberActions = false,
   showAuthActions = false,
 }: MarketplaceBrowserProps) {
@@ -75,7 +75,7 @@ export function MarketplaceBrowser({
       const list = await apiFetch<MarketplaceSpace[]>(url, { method: "GET" });
       setSpaces(list);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load locations");
+      setError(err instanceof Error ? err.message : "Unable to load marketplace spaces");
       setSpaces([]);
     } finally {
       setLoading(false);
@@ -190,7 +190,7 @@ export function MarketplaceBrowser({
         {error ? <p className="mt-4 text-sm text-error">{error}</p> : null}
         {searched && !loading ? (
           spaces.length === 0 ? (
-            <p className="mt-6 text-sm text-textMuted">No spaces found.</p>
+            <p className="mt-6 text-sm text-textMuted">No rooms or desks match these search filters.</p>
           ) : (
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {spaces.map((space) => (
@@ -225,7 +225,7 @@ export function MarketplaceBrowser({
                   </div>
                   <div className="mt-4">
                     <Link href={`${detailHrefBase}/${space.space_public_id}`}>
-                      <Button size="sm">View details</Button>
+                      <Button size="sm">Open space details</Button>
                     </Link>
                   </div>
                 </Card>

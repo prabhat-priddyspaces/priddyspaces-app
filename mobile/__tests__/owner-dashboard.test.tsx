@@ -46,16 +46,16 @@ describe("OwnerDashboardScreen", () => {
 
     await waitFor(() => expect(getByText("$120")).toBeTruthy());
 
-    fireEvent.press(getByLabelText("Open Total bookings"));
+    fireEvent.press(getByLabelText("Open Booking requests"));
     expect(mockNavigate).toHaveBeenCalledWith("Bookings");
 
-    fireEvent.press(getByLabelText("Open Payments"));
+    fireEvent.press(getByLabelText("Open Payment volume"));
     expect(mockNavigate).toHaveBeenCalledWith("Payments");
 
-    fireEvent.press(getByLabelText("Open Invoices"));
+    fireEvent.press(getByLabelText("Open Invoice count"));
     expect(mockNavigate).toHaveBeenCalledWith("Invoices");
 
-    fireEvent.press(getByLabelText("Open Team"));
+    fireEvent.press(getByLabelText("Open Team members"));
     expect(mockNavigate).toHaveBeenCalledWith("OwnerTeam");
   });
 });

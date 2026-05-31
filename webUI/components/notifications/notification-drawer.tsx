@@ -114,10 +114,10 @@ export function NotificationDrawer({ open, onClose, onUnreadCountChange }: Notif
           </Button>
           {message ? <div className="mt-2 text-xs text-text-3">{message}</div> : null}
         </div>
-        {loading && rows.length === 0 ? <div className="mt-4 text-sm text-text-3">Loading...</div> : null}
+        {loading && rows.length === 0 ? <div className="mt-4 text-sm text-text-3">Loading notifications...</div> : null}
         {!loading && rows.length === 0 ? (
           <div className="mt-4 rounded-xl border border-line bg-surface p-4 text-sm text-text-3">
-            No notifications yet.
+            No booking or account notifications yet.
           </div>
         ) : null}
         <div className="mt-4 grid gap-2">

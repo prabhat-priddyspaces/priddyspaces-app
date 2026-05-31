@@ -324,7 +324,7 @@ export default function OwnerTeamPage() {
 
         <Card className="p-4">
           {members.length === 0 ? (
-            <div className="text-sm text-textMuted">No team members yet.</div>
+            <div className="text-sm text-textMuted">No team members have owner access yet.</div>
           ) : (
             <div className="grid gap-3">
               {!hasBookingEmailRecipient ? (

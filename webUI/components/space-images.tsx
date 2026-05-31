@@ -126,7 +126,7 @@ export function SpaceImages({ spacePublicId }: { spacePublicId: string }) {
       </Card>
       <div className="grid gap-3 md:grid-cols-2">
         {images.length === 0 ? (
-          <div className="text-sm text-textMuted">No images yet.</div>
+          <div className="text-sm text-textMuted">No photos uploaded for this space yet.</div>
         ) : (
           images.map((img) => (
             <Card key={img.public_id} className="overflow-hidden">

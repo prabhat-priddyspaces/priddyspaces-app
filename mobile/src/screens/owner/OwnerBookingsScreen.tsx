@@ -27,19 +27,19 @@ export function OwnerBookingsScreen() {
     setLoading(true);
     apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token)
       .then((rows) => setBookings(rows.filter((row) => row.status === "requested" || row.status === "payment_failed")))
-      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load bookings"))
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load booking requests"))
       .finally(() => setLoading(false));
   }, [token]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Booking Requests</Text>
-      <Text style={styles.subtitle}>Approve or reject requests.</Text>
+      <Text style={styles.subtitle}>Approve booking requests or follow up on failed payment holds.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {bookings.length === 0 && !loading ? (
-          <Text style={styles.empty}>No bookings yet.</Text>
+          <Text style={styles.empty}>No pending booking requests.</Text>
         ) : (
           bookings.map((booking) => (
             <TouchableOpacity

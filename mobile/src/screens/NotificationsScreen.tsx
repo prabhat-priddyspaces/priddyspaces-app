@@ -129,7 +129,7 @@ export function NotificationsScreen() {
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptyTitle}>No booking notifications yet</Text>
               <Text style={styles.muted}>Booking reminders will appear here.</Text>
             </View>
           ) : null

@@ -81,7 +81,7 @@ describe("OwnerAccountPage", () => {
     fireEvent.change(screen.getByLabelText("Phone"), {
       target: { value: "555-0199" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save profile/i }));
+    fireEvent.click(screen.getByRole("button", { name: /save owner profile/i }));
 
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith(
@@ -107,6 +107,6 @@ describe("OwnerAccountPage", () => {
       "token"
     );
     expect(refreshMock).toHaveBeenCalled();
-    expect(await screen.findByText("Profile saved.")).toBeInTheDocument();
+    expect(await screen.findByText("Owner profile saved.")).toBeInTheDocument();
   });
 });

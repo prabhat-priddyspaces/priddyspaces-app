@@ -173,7 +173,7 @@ export function EditLocationClient() {
   if (loading) {
     return (
       <AppShell>
-        <div className="text-sm text-textMuted">Loading...</div>
+        <div className="text-sm text-textMuted">Loading location editor...</div>
       </AppShell>
     );
   }

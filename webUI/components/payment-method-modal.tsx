@@ -432,7 +432,7 @@ export function PaymentMethodModal({
         </div>
 
         {message ? <div className="mb-3 text-sm text-error">{message}</div> : null}
-        {!methodsLoaded ? <div className="text-sm text-textMuted">Loading...</div> : null}
+        {!methodsLoaded ? <div className="text-sm text-textMuted">Loading saved booking cards...</div> : null}
 
         {methodsLoaded && mode === "select" && savedMethods.length > 0 ? (
           <div className="grid gap-3">

@@ -159,7 +159,7 @@ export default function MemberRequestsPage() {
         const list = await apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token);
         setBookings(list);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Failed to load requests");
+        setError(err instanceof Error ? err.message : "Unable to load booking requests");
       } finally {
         setLoading(false);
       }
@@ -235,25 +235,25 @@ export default function MemberRequestsPage() {
       <div className="mx-auto max-w-5xl">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-textPrimary">My requests</h1>
+            <h1 className="text-2xl font-semibold text-textPrimary">My booking requests</h1>
             <p className="mt-1 text-textSecondary">
-              View status of your booking requests.
+              Track approvals, payment holds, cancellations, and host contact details.
             </p>
           </div>
           <Link href="/member">
-            <Button variant="secondary">Find a space</Button>
+            <Button variant="secondary">Find a workspace</Button>
           </Link>
         </div>
         {error ? (
           <p className="mt-4 text-sm text-error">{error}</p>
         ) : null}
         {loading ? (
-          <p className="mt-6 text-sm text-textMuted">Loading...</p>
+          <p className="mt-6 text-sm text-textMuted">Loading booking requests...</p>
         ) : bookings.length === 0 ? (
           <Card className="mt-6 p-6">
-            <p className="text-center text-sm text-textMuted">No bookings yet.</p>
+            <p className="text-center text-sm text-textMuted">No booking requests yet.</p>
             <Link href="/member" className="mt-4 flex justify-center">
-              <Button size="sm">Find a space</Button>
+              <Button size="sm">Browse available spaces</Button>
             </Link>
           </Card>
         ) : (
@@ -305,7 +305,7 @@ export default function MemberRequestsPage() {
                   <div className="flex flex-wrap gap-2">
                     <Link href={memberRequestDetailHref(b.public_id)}>
                       <Button size="sm" variant="secondary">
-                        View details
+                        View booking request
                       </Button>
                     </Link>
                     {canCancel(b) ? (
@@ -315,7 +315,7 @@ export default function MemberRequestsPage() {
                         onClick={() => cancelRequest(b.public_id)}
                         disabled={cancelling === b.public_id}
                       >
-                        {cancelling === b.public_id ? "Cancelling..." : "Cancel"}
+                        {cancelling === b.public_id ? "Cancelling request..." : "Cancel booking request"}
                       </Button>
                     ) : null}
                   </div>

@@ -464,7 +464,7 @@ export default function OwnerRequestsPage() {
       );
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Update failed");
+      setError(err instanceof Error ? err.message : "Unable to update booking request");
     } finally {
       setUpdating(null);
     }
@@ -591,12 +591,12 @@ export default function OwnerRequestsPage() {
       ) : null}
 
       {loading ? (
-        <div className="text-[13px] text-text-3">Loading…</div>
+        <div className="text-[13px] text-text-3">Loading booking requests...</div>
       ) : filtered.length === 0 ? (
         <Card className="text-[13px] text-text-3 text-center py-10">
           {bookings.length === 0
-            ? "No requests yet."
-            : "No requests match this filter."}
+            ? "No booking requests are waiting for review."
+            : "No booking requests match this filter."}
         </Card>
       ) : (
         <Card padded={false} className="overflow-hidden">
@@ -771,7 +771,7 @@ export default function OwnerRequestsPage() {
                   ) : null}
                   {!isPending && !isFailed && (
                     <Button size="sm" variant="ghost">
-                      View
+                      View request
                     </Button>
                   )}
                 </div>

@@ -251,7 +251,7 @@ export default function AdminUsersPage() {
                       href={href}
                       className="inline-flex h-9 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-text-2 transition-colors hover:bg-surface-2"
                     >
-                      View details
+                      View account details
                     </Link>
                   ) : null}
                 </div>

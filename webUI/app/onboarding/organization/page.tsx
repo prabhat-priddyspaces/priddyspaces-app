@@ -55,7 +55,7 @@ export default function OnboardingOrganizationPage() {
       updateMeCache(me);
       router.replace("/owner");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Creation failed");
+      setError(err instanceof Error ? err.message : "Unable to create owner organization");
     } finally {
       setLoading(false);
     }
@@ -64,7 +64,7 @@ export default function OnboardingOrganizationPage() {
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-textSecondary">
-        Loading...
+        Loading owner onboarding...
       </div>
     );
   }
@@ -77,7 +77,7 @@ export default function OnboardingOrganizationPage() {
             Set up your business
           </h1>
           <p className="mt-1 text-sm text-textSecondary">
-            Create your organization to start managing spaces.
+            Create the organization that hosts your rooms, desks, and memberships.
           </p>
         </div>
 

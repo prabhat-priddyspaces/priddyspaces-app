@@ -26,7 +26,7 @@ export function BookingsScreen() {
     setLoading(true);
     apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token)
       .then(setBookings)
-      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load bookings"))
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load booking requests"))
       .finally(() => setLoading(false));
   }
 
@@ -43,17 +43,17 @@ export function BookingsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Bookings</Text>
+        <Text style={styles.title}>My booking requests</Text>
         <TouchableOpacity style={styles.refreshButton} onPress={load}>
-          <Text style={styles.refreshText}>Refresh</Text>
+          <Text style={styles.refreshText}>Refresh requests</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.subtitle}>Your upcoming and past bookings.</Text>
+      <Text style={styles.subtitle}>Track pending, approved, and past workspace bookings.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {bookings.length === 0 && !loading ? (
-          <Text style={styles.empty}>No bookings yet.</Text>
+          <Text style={styles.empty}>No booking requests yet.</Text>
         ) : (
           bookings.map((booking) => (
             <TouchableOpacity
@@ -65,7 +65,7 @@ export function BookingsScreen() {
               <Text style={styles.cardSubtitle}>{booking.start_datetime}</Text>
               <Text style={styles.cardMuted}>{booking.end_datetime}</Text>
               {booking.estimated_amount != null ? (
-                <Text style={styles.cardMuted}>Estimated: ${booking.estimated_amount}</Text>
+                <Text style={styles.cardMuted}>Estimated total: ${booking.estimated_amount}</Text>
               ) : null}
             </TouchableOpacity>
           ))

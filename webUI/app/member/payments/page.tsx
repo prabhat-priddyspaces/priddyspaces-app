@@ -279,7 +279,7 @@ export default function MemberPaymentsPage() {
           {loading ? (
             <div className="mt-4 text-sm text-textMuted">Loading payment methods...</div>
           ) : bookingMethods.length === 0 ? (
-            <div className="mt-4 text-sm text-textMuted">No booking payment methods yet.</div>
+            <div className="mt-4 text-sm text-textMuted">No saved booking cards yet.</div>
           ) : (
             <div className="mt-4 grid gap-3">
               {bookingMethods.map((method) => (
@@ -315,7 +315,7 @@ export default function MemberPaymentsPage() {
           {loading ? (
             <div className="text-sm text-textMuted">Loading payments...</div>
           ) : payments.length === 0 ? (
-            <div className="text-sm text-textMuted">No payments yet.</div>
+            <div className="text-sm text-textMuted">No booking or membership payments yet.</div>
           ) : (
             <div className="grid gap-3">
               {payments.map((payment) => {
@@ -372,7 +372,7 @@ export default function MemberPaymentsPage() {
                         {invoice ? (
                           <Link href="/member/invoices">
                             <Button size="sm" variant="secondary">
-                              View invoice
+                              Open invoice record
                             </Button>
                           </Link>
                         ) : null}
@@ -383,7 +383,7 @@ export default function MemberPaymentsPage() {
                         ) : null}
                         {payment.status === "failed" && (payment.booking_id != null || payment.booking_request_id != null) ? (
                           <Link href={payment.booking_request_public_id ? `/member/requests/${payment.booking_request_public_id}` : "/member/requests"}>
-                            <Button size="sm">View requests</Button>
+                            <Button size="sm">Review booking request</Button>
                           </Link>
                         ) : null}
                       </div>

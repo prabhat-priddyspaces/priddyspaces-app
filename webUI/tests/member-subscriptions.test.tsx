@@ -32,7 +32,7 @@ describe("MemberSubscriptionsPage", () => {
     render(<MemberSubscriptionsPage />);
 
     expect(await screen.findByText("Downtown Hub")).toBeInTheDocument();
-    expect(screen.getByText("Manage your active workspace memberships.")).toBeInTheDocument();
+    expect(screen.getByText("Manage active workspace memberships, billing status, and cancellation timing.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Membership billing" })).not.toBeInTheDocument();
   });
 });

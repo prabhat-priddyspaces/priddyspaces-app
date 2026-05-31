@@ -34,13 +34,13 @@ export function LocationSpacesScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{name || "Spaces"}</Text>
-      <Text style={styles.subtitle}>Choose a space to request booking.</Text>
+      <Text style={styles.title}>{name || "Location spaces"}</Text>
+      <Text style={styles.subtitle}>Choose a room or desk to request a booking.</Text>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
         {spaces.length === 0 && !loading ? (
-          <Text style={styles.empty}>No spaces yet.</Text>
+          <Text style={styles.empty}>No bookable spaces available at this location.</Text>
         ) : (
           spaces.map((space) => (
             <TouchableOpacity
