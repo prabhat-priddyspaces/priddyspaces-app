@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         app_role: data.app_role,
         platform_role: data.platform_role,
         has_organization: data.has_organization ?? false,
-        default_route: data.default_route ?? "/onboarding/personal",
+        default_route: data.default_route ?? "/onboarding/member",
       };
     } catch {
       return null;

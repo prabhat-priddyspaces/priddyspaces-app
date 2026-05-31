@@ -1,26 +1,21 @@
 "use client";
 
 import { SignUp } from "@clerk/nextjs";
-import { useEffect } from "react";
-
-const SIGNUP_ROLE_KEY = "priddyspaces_signup_role";
 
 interface ClerkSignUpCardProps {
   owner?: boolean;
 }
 
 export function ClerkSignUpCard({ owner = false }: ClerkSignUpCardProps) {
-  useEffect(() => {
-    if (owner) {
-      window.sessionStorage.setItem(SIGNUP_ROLE_KEY, "owner");
-    } else {
-      window.sessionStorage.removeItem(SIGNUP_ROLE_KEY);
-    }
-  }, [owner]);
+  const role = owner ? "owner" : "member";
+  const onboardingUrl = owner ? "/onboarding/owner" : "/onboarding/member";
 
   return (
     <SignUp
       routing="hash"
+      forceRedirectUrl={onboardingUrl}
+      fallbackRedirectUrl={onboardingUrl}
+      unsafeMetadata={{ signup_role: role }}
       appearance={{
         variables: {
           colorPrimary: "#111827",

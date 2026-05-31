@@ -693,6 +693,14 @@ def test_admin_audit_logs_include_readable_labels(db_session, client_factory):
 def test_admin_owner_company_search_matches_public_id(db_session, client_factory):
     admin = _create_platform_member(db_session, email="owner-search-admin@example.com", role=PlatformTeamRole.SUPERADMIN)
     _owner, org = _create_org_owner(db_session, status=OrganizationReviewStatus.PENDING)
+    org.display_name = "Searchable Workspace"
+    org.industry = "Coworking"
+    org.website = "https://workspace.example"
+    org.business_email = "approval@workspace.example"
+    org.business_phone = "+1 555 0101"
+    org.description = "Review-ready owner onboarding detail."
+    db_session.add(org)
+    db_session.commit()
     client = client_factory({
         "sub": str(admin.public_id),
         "email": admin.email,
@@ -705,3 +713,9 @@ def test_admin_owner_company_search_matches_public_id(db_session, client_factory
     rows = response.json()
     assert len(rows) == 1
     assert rows[0]["public_id"] == org.public_id
+    assert rows[0]["display_name"] == "Searchable Workspace"
+    assert rows[0]["industry"] == "Coworking"
+    assert rows[0]["website"] == "https://workspace.example"
+    assert rows[0]["business_email"] == "approval@workspace.example"
+    assert rows[0]["business_phone"] == "+1 555 0101"
+    assert rows[0]["description"] == "Review-ready owner onboarding detail."

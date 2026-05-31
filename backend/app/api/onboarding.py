@@ -67,7 +67,11 @@ class ProfileIn(BaseModel):
 
 class OrgIn(BaseModel):
     name: str
+    display_name: str | None = None
     industry: str | None = None
+    business_email: str | None = None
+    business_phone: str | None = None
+    description: str | None = None
     size: str | None = None
     website: str | None = None
 
@@ -85,12 +89,31 @@ class OrgIn(BaseModel):
             raise ValueError(f"size must be one of {_ORG_SIZES}")
         return v
 
+    @field_validator("display_name", "industry", "business_email", "business_phone", "description")
+    @classmethod
+    def optional_text(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        return cleaned or None
+
+    @field_validator("business_email")
+    @classmethod
+    def business_email_valid(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip().lower()
+        if v is not None and v and "@" not in v:
+            raise ValueError("business_email must be a valid email address")
+        return v or None
+
     @field_validator("website")
     @classmethod
     def website_url(cls, v: str | None) -> str | None:
-        if v is not None and not re.match(r"https?://", v, re.IGNORECASE):
+        if v is not None:
+            v = v.strip()
+        if v is not None and v and not re.match(r"https?://", v, re.IGNORECASE):
             raise ValueError("website must be a valid URL starting with http:// or https://")
-        return v
+        return v or None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -235,7 +258,11 @@ def complete_organization(
     existing_org = db.query(Organization).filter(Organization.owner_id == user.id).first()
     if existing_org:
         existing_org.name = payload.name
+        existing_org.display_name = payload.display_name
         existing_org.industry = payload.industry
+        existing_org.business_email = payload.business_email
+        existing_org.business_phone = payload.business_phone
+        existing_org.description = payload.description
         existing_org.size = payload.size
         existing_org.website = payload.website
         existing_org.onboarding_completed = True
@@ -249,7 +276,11 @@ def complete_organization(
         owner_id=user.id,
         review_status=OrganizationReviewStatus.PENDING,
         onboarding_completed=True,
+        display_name=payload.display_name,
         industry=payload.industry,
+        business_email=payload.business_email,
+        business_phone=payload.business_phone,
+        description=payload.description,
         size=payload.size,
         website=payload.website,
     )

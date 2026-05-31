@@ -27,6 +27,7 @@ interface MeOverrides {
   phone?: string | null;
   company_name?: string | null;
   has_organization?: boolean;
+  default_route?: string;
 }
 
 export function meResponse(role: MockRole, overrides: MeOverrides = {}) {
@@ -42,7 +43,7 @@ export function meResponse(role: MockRole, overrides: MeOverrides = {}) {
     app_role: isAdmin ? null : role,
     platform_role: isAdmin ? "superadmin" : null,
     has_organization: overrides.has_organization ?? role === "owner",
-    default_route: isAdmin ? "/admin" : role === "owner" ? "/owner" : "/member",
+    default_route: overrides.default_route ?? (isAdmin ? "/admin" : role === "owner" ? "/owner" : "/spaces"),
     impersonation: {
       is_impersonating: false,
       actor_public_id: null,

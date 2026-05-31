@@ -710,6 +710,8 @@ def list_owner_companies(
         query = query.filter(
             or_(
                 func.lower(Organization.name).like(term),
+                func.lower(Organization.display_name).like(term),
+                func.lower(Organization.business_email).like(term),
                 func.lower(Organization.public_id).like(term),
             )
         )
@@ -774,6 +776,12 @@ def list_owner_companies(
         {
             "public_id": organization.public_id,
             "name": organization.name,
+            "display_name": organization.display_name,
+            "industry": organization.industry,
+            "website": organization.website,
+            "business_email": organization.business_email,
+            "business_phone": organization.business_phone,
+            "description": organization.description,
             "review_status": organization.review_status.value,
             "review_notes": organization.review_notes,
             "reviewed_at": organization.reviewed_at.isoformat() if organization.reviewed_at else None,

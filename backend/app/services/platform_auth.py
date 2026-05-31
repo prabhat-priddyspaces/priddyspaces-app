@@ -157,15 +157,15 @@ def build_default_route(
             return "/member"
         if app_role == UserAppRole.OWNER:
             return "/owner"
-        return "/onboarding/personal"
+        return "/onboarding/member"
     if platform_role is not None:
         return "/admin"
     if app_role == UserAppRole.MEMBER:
         return "/spaces"
     if app_role == UserAppRole.OWNER:
-        return "/owner" if has_organization else "/onboarding/organization"
+        return "/owner" if has_organization else "/onboarding/owner"
     # No role yet → onboarding
-    return "/onboarding/personal"
+    return "/onboarding/member"
 
 
 def touch_platform_last_login(db: Session, user_id: int) -> None:

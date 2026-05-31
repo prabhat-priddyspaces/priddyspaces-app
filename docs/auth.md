@@ -76,8 +76,8 @@ Social sign-in should be configured in Clerk.
 - Clerk sign-in/sign-up redirect URLs point to the application domain, not the
   hosted Account Portal domain.
 - `POST /webhooks/clerk` receives signed Clerk user and organization events.
-- New user sign-up completes `/api/onboarding/profile`.
+- New member sign-up completes `/api/onboarding/profile` from `/onboarding/member`.
 - Owner sign-up completes `/api/onboarding/organization` and creates a pending
-  organization review record.
+  organization review record from `/onboarding/owner`.
 - Platform admin/superadmin roles are present in Clerk public metadata before
   go-live support operations begin.

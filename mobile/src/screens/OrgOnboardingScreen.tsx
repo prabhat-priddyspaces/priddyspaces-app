@@ -7,20 +7,16 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
 } from "react-native";
 
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../constants";
-
-const ORG_SIZES = ["1-10", "11-50", "51-200", "200+"];
 
 export function OrgOnboardingScreen() {
   const { getToken } = useAuth();
 
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
-  const [size, setSize] = useState("");
   const [website, setWebsite] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +37,6 @@ export function OrgOnboardingScreen() {
         body: JSON.stringify({
           name: name.trim(),
           industry: industry.trim() || undefined,
-          size: size || undefined,
           website: website.trim() || undefined,
         }),
       });
@@ -78,21 +73,6 @@ export function OrgOnboardingScreen() {
         value={industry}
         onChangeText={setIndustry}
       />
-
-      <Text style={styles.label}>Company size (optional)</Text>
-      <View style={styles.sizeRow}>
-        {ORG_SIZES.map((s) => (
-          <TouchableOpacity
-            key={s}
-            style={[styles.sizeButton, size === s && styles.sizeButtonActive]}
-            onPress={() => setSize(size === s ? "" : s)}
-          >
-            <Text style={[styles.sizeButtonText, size === s && styles.sizeButtonTextActive]}>
-              {s}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
       <Text style={styles.label}>Website (optional)</Text>
       <TextInput
@@ -134,18 +114,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: "#FFF",
   },
-  sizeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  sizeButton: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: "#FFF",
-  },
-  sizeButtonActive: { borderColor: "#111827", backgroundColor: "#111827" },
-  sizeButtonText: { fontSize: 13, color: "#374151" },
-  sizeButtonTextActive: { color: "#FFF", fontWeight: "600" },
   primaryButton: {
     backgroundColor: "#111827",
     paddingVertical: 12,
