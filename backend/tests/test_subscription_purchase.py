@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from app.models.enums import (
     AvailabilityStatus,
+    BillingCycle,
     LocationStatus,
     OrganizationReviewStatus,
     SpaceType,
@@ -12,6 +13,7 @@ from app.models.location import Location
 from app.models.organization import Organization
 from app.models.space import Space
 from app.models.subscription import Subscription
+from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 
 
@@ -87,6 +89,30 @@ def _seed_subscription_space(
     return org, location, space
 
 
+def _seed_subscription_plan(
+    db,
+    org: Organization,
+    space: Space,
+    *,
+    stripe_price_id="price_public",
+    is_active=True,
+):
+    plan = SubscriptionPlan(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Monthly Desk",
+        space_type=space.space_type,
+        billing_cycle=BillingCycle.MONTHLY,
+        price=199,
+        stripe_price_id=stripe_price_id,
+        is_active=is_active,
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
 def _member_client(client_factory):
     return client_factory(
         {
@@ -110,7 +136,8 @@ def test_subscription_purchase_creates_pending_subscription_for_public_space(
     db_session, client_factory, monkeypatch
 ):
     member = _seed_member(db_session)
-    _org, _location, space = _seed_subscription_space(db_session)
+    org, _location, space = _seed_subscription_space(db_session)
+    plan = _seed_subscription_plan(db_session, org, space)
     created = {}
 
     monkeypatch.setattr("app.api.payments.create_customer", lambda email: _StripeCustomer())
@@ -125,7 +152,10 @@ def test_subscription_purchase_creates_pending_subscription_for_public_space(
 
     resp = _member_client(client_factory).post(
         "/api/payments/subscription",
-        json={"space_public_id": space.public_id, "stripe_price_id": "price_public"},
+        json={
+            "space_public_id": space.public_id,
+            "subscription_plan_public_id": plan.public_id,
+        },
     )
 
     assert resp.status_code == 200, resp.text
@@ -139,6 +169,55 @@ def test_subscription_purchase_creates_pending_subscription_for_public_space(
     assert subscription is not None
     assert subscription.space_id == space.id
     assert subscription.status == "pending"
+
+
+def test_subscription_purchase_allows_legacy_price_id_when_active_plan_matches(
+    db_session, client_factory, monkeypatch
+):
+    _seed_member(db_session)
+    org, _location, space = _seed_subscription_space(db_session)
+    _seed_subscription_plan(db_session, org, space, stripe_price_id="price_legacy")
+    created = {}
+
+    monkeypatch.setattr("app.api.payments.create_customer", lambda email: _StripeCustomer())
+
+    def fake_create_subscription(customer_id, stripe_price_id, metadata):
+        created["stripe_price_id"] = stripe_price_id
+        return _StripeSubscription()
+
+    monkeypatch.setattr("app.api.payments.create_subscription", fake_create_subscription)
+
+    resp = _member_client(client_factory).post(
+        "/api/payments/subscription",
+        json={"space_public_id": space.public_id, "stripe_price_id": "price_legacy"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert created["stripe_price_id"] == "price_legacy"
+
+
+def test_subscription_purchase_rejects_unconfigured_stripe_price_id(
+    db_session, client_factory, monkeypatch
+):
+    _seed_member(db_session)
+    org, _location, space = _seed_subscription_space(db_session)
+    _seed_subscription_plan(db_session, org, space, stripe_price_id="price_configured")
+    created = {"called": False}
+
+    def fail_create_subscription(*_args, **_kwargs):
+        created["called"] = True
+        raise AssertionError("Stripe subscription should not be created")
+
+    monkeypatch.setattr("app.api.payments.create_subscription", fail_create_subscription)
+
+    resp = _member_client(client_factory).post(
+        "/api/payments/subscription",
+        json={"space_public_id": space.public_id, "stripe_price_id": "price_attacker"},
+    )
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Subscription plan not found"
+    assert created["called"] is False
 
 
 def test_subscription_purchase_rejects_non_public_spaces(

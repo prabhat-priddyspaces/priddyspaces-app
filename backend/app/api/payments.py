@@ -177,6 +177,32 @@ def _require_public_subscription_space(db: Session, space: Space) -> tuple[Locat
     return location, organization
 
 
+def _subscription_plan_for_purchase(
+    db: Session, space: Space, payload: SubscriptionPurchase
+) -> SubscriptionPlan:
+    base_query = db.query(SubscriptionPlan).filter(
+        SubscriptionPlan.tenant_id == space.tenant_id,
+        SubscriptionPlan.space_type == space.space_type,
+        SubscriptionPlan.is_active.is_(True),
+    )
+    if payload.subscription_plan_public_id:
+        plan = base_query.filter(
+            SubscriptionPlan.public_id == payload.subscription_plan_public_id
+        ).first()
+    elif payload.stripe_price_id:
+        plan = base_query.filter(
+            SubscriptionPlan.stripe_price_id == payload.stripe_price_id
+        ).first()
+    else:
+        raise HTTPException(status_code=400, detail="Subscription plan required")
+
+    if not plan:
+        raise HTTPException(status_code=404, detail="Subscription plan not found")
+    if not plan.stripe_price_id:
+        raise HTTPException(status_code=400, detail="Stripe price id required")
+    return plan
+
+
 def _payment_visible_to_member(db: Session, user_id: int, payment: Payment) -> bool:
     members = list_org_members(db, user_id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
     if not members:
@@ -268,24 +294,8 @@ def create_subscription_purchase(
         raise HTTPException(status_code=404, detail="Space not found")
     _require_public_subscription_space(db, space)
 
-    stripe_price_id = payload.stripe_price_id
-    if payload.subscription_plan_public_id:
-        plan = (
-            db.query(SubscriptionPlan)
-            .filter(
-                SubscriptionPlan.public_id == payload.subscription_plan_public_id,
-                SubscriptionPlan.tenant_id == space.tenant_id,
-                SubscriptionPlan.space_type == space.space_type,
-                SubscriptionPlan.is_active.is_(True)
-            )
-            .first()
-        )
-        if not plan:
-            raise HTTPException(status_code=404, detail="Subscription plan not found")
-        stripe_price_id = plan.stripe_price_id
-
-    if not stripe_price_id:
-        raise HTTPException(status_code=400, detail="Stripe price id required")
+    plan = _subscription_plan_for_purchase(db, space, payload)
+    stripe_price_id = plan.stripe_price_id
 
     if not user.stripe_customer_id:
         customer = create_customer(email=user.email)
