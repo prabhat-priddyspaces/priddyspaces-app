@@ -27,6 +27,7 @@ node_modules/
 # Env
 .env
 .env.*
+!.env.example
 
 # Build
 .next/

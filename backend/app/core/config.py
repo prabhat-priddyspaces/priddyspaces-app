@@ -170,7 +170,7 @@ class Settings(BaseSettings):
             raise ValueError("PAYMENT_CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters")
         return self
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

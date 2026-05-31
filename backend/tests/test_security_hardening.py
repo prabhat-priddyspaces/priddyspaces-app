@@ -12,6 +12,17 @@ def test_production_config_requires_security_settings():
         Settings(ENVIRONMENT="production", DEBUG=True, JWT_SECRET="short")
 
 
+def test_config_ignores_removed_backend_oauth_env_keys():
+    loaded = Settings(
+        ENVIRONMENT="local",
+        AUTH_JWKS_URL="https://idp.example.test/.well-known/jwks.json",
+        AUTH_AUDIENCE="legacy-audience",
+        AUTH_ISSUER="legacy-issuer",
+    )
+
+    assert loaded.CLERK_JWKS_URL == ""
+
+
 def test_secret_encryption_uses_aead_and_detects_tampering(monkeypatch):
     monkeypatch.setattr(settings, "PAYMENT_CREDENTIAL_ENCRYPTION_KEY", "x" * 32)
     token = encrypt_secret("sk_test_secret")
