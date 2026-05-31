@@ -6,7 +6,8 @@
 - Webhooks are the source of truth for payment state.
 
 ## Auth
-- Backend-only JWT
+- Clerk JWTs are the production auth token; internal backend JWTs are limited
+  to impersonation and legacy local password auth.
 - Email verification required before payment.
 - All endpoints require auth unless explicitly marked public.
 

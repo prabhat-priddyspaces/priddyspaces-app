@@ -33,17 +33,11 @@ Then open [http://localhost:3000](http://localhost:3000). Changes to the code wi
 npm run dev:turbo
 ```
 
-**Register/login** – The form on the site sends requests to the **backend** URL. For direct API calls (e.g. curl), use the backend, not the frontend:
-
-```bash
-# Wrong (404): frontend has no /auth/register route
-curl http://localhost:3000/auth/register ...
-
-# Correct: call the backend
-curl http://localhost:8000/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"secret","first_name":"Jane","last_name":"Doe","role":"owner","terms_accepted":true,"privacy_policy_accepted":true}'
-```
+**Register/login** – Production web auth uses Clerk at `/sign-in`, `/sign-up`,
+and `/owners/sign-up`. FastAPI verifies Clerk JWTs on protected API requests.
+The backend still exposes `/auth/register` and `/auth/login` for legacy local
+password-auth tests and tooling, but those endpoints are not the production web
+sign-in path.
 
 ## Production build
 

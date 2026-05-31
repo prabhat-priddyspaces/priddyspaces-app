@@ -6,7 +6,8 @@
 - Mobile: Expo + React Native + TypeScript
 - Backend: FastAPI + SQLAlchemy + Alembic + Postgres
 - Payments: Stripe Connect (Express)
-- Auth: Backend-only JWT (email verification required before payment)
+- Auth: Clerk primary identity provider; FastAPI verifies Clerk JWTs and uses
+  internal JWTs only for impersonation and legacy local password auth
 - Email verification required before payment
 - UUID v7 public IDs for all externally exposed entities
 - Storage: S3 for space/location images (presigned URLs)

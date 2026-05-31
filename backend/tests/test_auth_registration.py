@@ -57,3 +57,12 @@ def test_owner_registration_is_supported_for_hidden_owner_signup(db_session, cli
     assert response.status_code == 200
     user = db_session.query(User).filter(User.email == "owner-signup@example.com").one()
     assert user.role == UserAppRole.OWNER
+
+
+def test_backend_hosted_oauth_routes_are_not_exposed(client_factory):
+    client = client_factory({})
+
+    assert client.get("/auth/login/google").status_code == 404
+    assert client.get("/auth/login/apple").status_code == 404
+    assert client.get("/auth/callback/google").status_code == 404
+    assert client.get("/auth/callback/apple").status_code == 404
