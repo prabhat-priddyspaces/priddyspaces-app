@@ -41,6 +41,13 @@ interface Location {
   amenities: Array<{ id: number; name: string }>;
 }
 
+const BOOKING_GRANULARITY_OPTIONS = [
+  { value: "30m", label: "30 minutes" },
+  { value: "60m", label: "60 minutes" },
+  { value: "120m", label: "2 hours" },
+  { value: "daily", label: "Daily" },
+];
+
 export function EditLocationClient() {
   const params = useParams<{ locationId: string }>();
   const router = useRouter();
@@ -293,11 +300,21 @@ export function EditLocationClient() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="granularity">Booking granularity</Label>
-              <Input
+              <select
                 id="granularity"
                 value={form.booking_granularity}
                 onChange={(e) => setForm({ ...form, booking_granularity: e.target.value })}
-              />
+                className="flex h-9 w-full rounded-xl border border-line-strong bg-surface px-3 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring"
+              >
+                {BOOKING_GRANULARITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-textSecondary">
+                Hourly bookings must follow this interval. All-day bookings use the full published availability window.
+              </p>
             </div>
             <div className="rounded-md border border-border bg-surface2 p-4">
               <div className="text-sm font-semibold text-textPrimary">Public Listing Details</div>

@@ -292,9 +292,10 @@ def get_marketplace_space_detail(
 
 
 _GRANULARITY_MINUTES = {
-    BookingGranularity.MIN_30: 30,
-    BookingGranularity.MIN_60: 60,
-    BookingGranularity.MIN_120: 120,
+    BookingGranularity.MIN_30.value: 30,
+    BookingGranularity.MIN_60.value: 60,
+    BookingGranularity.MIN_120.value: 120,
+    BookingGranularity.DAILY.value: 24 * 60,
 }
 
 
@@ -366,7 +367,8 @@ def get_marketplace_space_availability(
     ]
     hourly_price = min(hourly_prices) if hourly_prices else None
 
-    granularity = _GRANULARITY_MINUTES.get(location.booking_granularity)
+    raw_granularity = getattr(location.booking_granularity, "value", location.booking_granularity)
+    granularity = _GRANULARITY_MINUTES.get(raw_granularity)
 
     return SpaceAvailabilityOut(
         space_public_id=space.public_id,

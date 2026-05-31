@@ -127,6 +127,14 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _run_booking_request_side_effect(db: Session, label: str, callback) -> None:
+    try:
+        callback()
+    except Exception:
+        db.rollback()
+        logger.exception("booking request side effect failed: %s", label)
+
+
 def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
@@ -1516,10 +1524,21 @@ def create_booking_request(
         req, booking, _payment = charge_booking_request(db, req)
         if req.status == BookingRequestStatus.APPROVED:
             _activate_booking_series_if_needed(db, req)
-            ensure_access_passes_for_booking_request(db, req)
-            db.commit()
-            send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=user.id)
-            _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=user.id)
+            _run_booking_request_side_effect(
+                db,
+                "ensure_access_passes",
+                lambda: (ensure_access_passes_for_booking_request(db, req), db.commit()),
+            )
+            _run_booking_request_side_effect(
+                db,
+                "send_booking_confirmed_email",
+                lambda: send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=user.id),
+            )
+            _run_booking_request_side_effect(
+                db,
+                "notify_owner_team_confirmed_booking",
+                lambda: _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=user.id),
+            )
         elif req.status == BookingRequestStatus.PAYMENT_FAILED:
             _send_payment_failed_notifications(db, req, space, location, actor_user_id=user.id)
         elif req.status == BookingRequestStatus.CANCELLED:
@@ -1848,9 +1867,16 @@ def approve_booking_request(
         after_status = req.status
     if req.status == BookingRequestStatus.APPROVED:
         booking_for_email = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
-        ensure_access_passes_for_booking_request(db, req)
-        db.commit()
-        send_booking_confirmed_email(db, req, booking_for_email, space, location, actor_user_id=actor_id)
+        _run_booking_request_side_effect(
+            db,
+            "ensure_access_passes",
+            lambda: (ensure_access_passes_for_booking_request(db, req), db.commit()),
+        )
+        _run_booking_request_side_effect(
+            db,
+            "send_booking_confirmed_email",
+            lambda: send_booking_confirmed_email(db, req, booking_for_email, space, location, actor_user_id=actor_id),
+        )
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
         _send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.CANCELLED:
@@ -1864,16 +1890,20 @@ def approve_booking_request(
             reason="Payment failed and the organization cancels failed payments immediately.",
             actor_user_id=actor_id,
         )
-    write_audit_log(
+    _run_booking_request_side_effect(
         db,
-        actor_id=actor_id,
-        action="booking_request_approved" if req.status == BookingRequestStatus.APPROVED else "booking_request_payment_failed",
-        entity_type="booking_request",
-        entity_public_id=req.public_id,
-        before_state={"status": before_status.value},
-        after_state={"status": after_status.value, "payment_status": req.payment_status},
-        acting_as_user_id=acting_as_user_id,
-        context=_audit_context_with_actor_email(db, actor_id, context),
+        "write_audit_log",
+        lambda: write_audit_log(
+            db,
+            actor_id=actor_id,
+            action="booking_request_approved" if req.status == BookingRequestStatus.APPROVED else "booking_request_payment_failed",
+            entity_type="booking_request",
+            entity_public_id=req.public_id,
+            before_state={"status": before_status.value},
+            after_state={"status": after_status.value, "payment_status": req.payment_status},
+            acting_as_user_id=acting_as_user_id,
+            context=_audit_context_with_actor_email(db, actor_id, context),
+        ),
     )
     booking = None
     if req.booking_id:
@@ -2005,10 +2035,21 @@ def retry_booking_request_payment(
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
     if req.status == BookingRequestStatus.APPROVED:
         _activate_booking_series_if_needed(db, req)
-        ensure_access_passes_for_booking_request(db, req)
-        db.commit()
-        send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=actor_id)
-        _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id)
+        _run_booking_request_side_effect(
+            db,
+            "ensure_access_passes",
+            lambda: (ensure_access_passes_for_booking_request(db, req), db.commit()),
+        )
+        _run_booking_request_side_effect(
+            db,
+            "send_booking_confirmed_email",
+            lambda: send_booking_confirmed_email(db, req, booking, space, location, actor_user_id=actor_id),
+        )
+        _run_booking_request_side_effect(
+            db,
+            "notify_owner_team_confirmed_booking",
+            lambda: _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id),
+        )
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
         _send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.CANCELLED:
