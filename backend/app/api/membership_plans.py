@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.db.deps import get_db
-from app.models.enums import BookingMode, LocationStatus, SpaceType, SpaceVisibility, UserRole
+from app.models.enums import (
+    AvailabilityStatus,
+    BookingMode,
+    LocationStatus,
+    SpaceType,
+    SpaceVisibility,
+    UserRole,
+)
 from app.models.location import Location
 from app.models.membership_plan import MembershipPlan
 from app.models.organization import Organization
@@ -153,6 +160,7 @@ def list_public_membership_plans(
         not location
         or location.status != LocationStatus.ACTIVE
         or not organization_is_publicly_visible(organization)
+        or space.availability_status != AvailabilityStatus.AVAILABLE
         or space.visibility == SpaceVisibility.PRIVATE
     ):
         raise HTTPException(status_code=404, detail="Space not found")

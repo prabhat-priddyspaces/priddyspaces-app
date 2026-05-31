@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from app.models.enums import (
+    AvailabilityStatus,
     BillingCycle,
     BookingMode,
     LocationStatus,
@@ -225,6 +226,31 @@ def test_public_membership_plans_filtered_by_enabled_modes(db_session, client_fa
     )
     assert empty_resp.status_code == 200
     assert empty_resp.json() == []
+
+
+def test_public_membership_plans_hidden_when_space_unavailable(db_session, client_factory):
+    _, _, _, space = _seed_owner_with_space(db_session, space_type=SpaceType.PRIVATE_OFFICE)
+    client = _client(client_factory)
+
+    client.post(
+        "/api/membership-plans",
+        json={
+            "space_public_id": space.public_id,
+            "booking_mode": BookingMode.PRIVATE_OFFICE_LEASE.value,
+            "name": "12mo",
+            "price_cents": 200000,
+            "commitment_months": 12,
+        },
+    )
+
+    for status in (AvailabilityStatus.OCCUPIED, AvailabilityStatus.MAINTENANCE):
+        space.availability_status = status
+        db_session.add(space)
+        db_session.commit()
+
+        resp = client.get(f"/api/membership-plans/public?space_public_id={space.public_id}")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Space not found"
 
 
 def test_marketplace_space_detail_includes_product_booking_modes(db_session, client_factory):

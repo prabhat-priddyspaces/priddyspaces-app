@@ -1,4 +1,5 @@
 from app.models.enums import (
+    AvailabilityStatus,
     BillingCycle,
     LocationStatus,
     OrganizationReviewStatus,
@@ -92,3 +93,17 @@ def test_public_subscription_plans(db_session, client_factory):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["name"] == "Monthly Desk"
+
+
+def test_public_subscription_plans_hidden_when_space_unavailable(db_session, client_factory):
+    space = _seed_public_space_with_plan(db_session)
+    client = client_factory({"sub": "sub-owner", "email": "owner@example.com", "email_verified": True})
+
+    for status in (AvailabilityStatus.OCCUPIED, AvailabilityStatus.MAINTENANCE):
+        space.availability_status = status
+        db_session.add(space)
+        db_session.commit()
+
+        resp = client.get(f"/api/subscription-plans/public?space_public_id={space.public_id}")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Space not found"

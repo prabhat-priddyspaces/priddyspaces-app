@@ -11,7 +11,7 @@ from app.services.lookups import get_org_by_public_id
 from app.services.audit import write_audit_log
 from app.models.space import Space
 from app.models.location import Location
-from app.models.enums import LocationStatus, SpaceVisibility
+from app.models.enums import AvailabilityStatus, LocationStatus, SpaceVisibility
 from app.models.organization import Organization
 from app.services.platform_auth import get_audit_actor_context, organization_is_publicly_visible
 
@@ -100,7 +100,12 @@ def list_public_subscription_plans(
         raise HTTPException(status_code=404, detail="Space not found")
     location = db.query(Location).filter(Location.id == space.location_id).first()
     organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
-    if not location or location.status != LocationStatus.ACTIVE or not organization_is_publicly_visible(organization):
+    if (
+        not location
+        or location.status != LocationStatus.ACTIVE
+        or not organization_is_publicly_visible(organization)
+        or space.availability_status != AvailabilityStatus.AVAILABLE
+    ):
         raise HTTPException(status_code=404, detail="Space not found")
     if space.visibility == SpaceVisibility.PRIVATE:
         raise HTTPException(status_code=404, detail="Space not found")
