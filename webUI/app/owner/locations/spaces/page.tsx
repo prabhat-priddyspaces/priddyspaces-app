@@ -43,9 +43,14 @@ function LocationSpacesContent() {
             </p>
           </div>
           {locationId ? (
-            <Link href={`/owner/spaces/new?locationId=${encodeURIComponent(locationId)}`}>
-              <Button size="sm">Add Room</Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/owner/locations/${encodeURIComponent(locationId)}/edit`}>
+                <Button size="sm" variant="secondary">Location settings</Button>
+              </Link>
+              <Link href={`/owner/spaces/new?locationId=${encodeURIComponent(locationId)}`}>
+                <Button size="sm">Add Room</Button>
+              </Link>
+            </div>
           ) : (
             <Link href="/owner/locations/new">
               <Button size="sm">New Location</Button>
@@ -63,6 +68,11 @@ function LocationSpacesContent() {
               </div>
               <div className="mt-1 text-sm text-textMuted">
                 {selectedLocation?.city || "Inventory for this location"}
+              </div>
+              <div className="mt-3">
+                <Link href={`/owner/locations/${encodeURIComponent(locationId)}/edit`}>
+                  <Button size="sm" variant="secondary">Edit location settings</Button>
+                </Link>
               </div>
             </Card>
             <Card>

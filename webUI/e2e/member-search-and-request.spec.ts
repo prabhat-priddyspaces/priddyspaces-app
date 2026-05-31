@@ -231,6 +231,219 @@ test("member can submit a booking request from a space detail page", async ({ pa
   await expect(page.getByText("Invoice: inv_req_1")).toBeVisible();
 });
 
+test("member can submit an all-day conference booking without granularity blocking the day span", async ({ page }) => {
+  const bookingRequest = {
+    public_id: "req_all_day_1",
+    created_at: "2099-05-31T18:45:00.000Z",
+    space_public_id: "space_all_day_1",
+    space_name: "Austin Conference Room",
+    space_type: "conference_room",
+    organization_name: "Aligned Cowork",
+    location_public_id: "loc_all_day_1",
+    location_name: "Austin Hub",
+    location_address: "100 Congress Ave",
+    location_city: "Austin",
+    location_state: "TX",
+    location_postal_code: "78701",
+    location_timezone: "UTC",
+    location_public_phone: null,
+    location_public_email: null,
+    support_contacts: [],
+    booking_id: 303,
+    booking_public_id: "book_all_day_1",
+    estimated_amount: 350,
+    start_datetime: "2099-06-01T09:00:00.000Z",
+    end_datetime: "2099-06-01T18:30:00.000Z",
+    status: "approved",
+    payment_status: "succeeded",
+    payment_provider: "stripe",
+    member_owner_payment_method_public_id: "pm_owner_1",
+    approved_at: "2099-05-31T19:10:00.000Z",
+    rejected_at: null,
+    cancelled_at: null,
+    cancellation_deadline_at: "2099-05-31T09:00:00.000Z",
+    payment_hold_expires_at: null,
+    payment_failed_at: null,
+    booking_approval_mode: "auto",
+    payment_failure_hold_minutes: 30,
+    operator_notes: null,
+  };
+
+  await mockSession(page, "member");
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("member"));
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_all_day_1/availability") {
+      await json(route, {
+        space_public_id: "space_all_day_1",
+        timezone: "UTC",
+        granularity_minutes: 120,
+        availability_start_time: "09:00",
+        availability_end_time: "18:30",
+        buffer_before_minutes: 0,
+        buffer_after_minutes: 0,
+        hourly_price: 40,
+        daily_price: 350,
+        days: [
+          {
+            date: "2099-06-01",
+            fully_blocked: false,
+            busy_intervals: [],
+          },
+        ],
+      });
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_all_day_1") {
+      await json(route, {
+        space: {
+          public_id: "space_all_day_1",
+          name: "Austin Conference Room",
+          space_type: "conference_room",
+          capacity: 8,
+          availability_status: "available",
+          availability_start_time: "09:00:00",
+          availability_end_time: "18:30:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          price_daily: 350,
+          price_monthly: null,
+          hourly_price: 40,
+          membership_price: null,
+          amenities: ["whiteboard", "coffee"],
+        },
+        images: [],
+        location: {
+          location_public_id: "loc_all_day_1",
+          organization_name: "Aligned Cowork",
+          booking_approval_mode: "auto",
+          payment_failure_hold_minutes: 30,
+          name: "Austin Hub",
+          address: "100 Congress Ave",
+          city: "Austin",
+          state: "TX",
+          postal_code: "78701",
+          neighborhood: "Downtown",
+          timezone: "UTC",
+          lat: 30.2672,
+          lng: -97.7431,
+          public_phone: null,
+          public_email: null,
+          public_hours_weekdays: null,
+          public_hours_weekends: null,
+          public_parking_notes: [],
+          public_transit_notes: [],
+          public_included_items: [],
+        },
+        cancellation_policy: null,
+        support_contacts: [],
+      });
+      return;
+    }
+
+    if (key === "GET /api/membership-plans/public") {
+      await json(route, []);
+      return;
+    }
+
+    if (key === "POST /api/loyalty/redemptions/preview") {
+      await json(route, {
+        eligible: false,
+        reason: "Rewards are not available for this booking",
+        organization_public_id: "org_all_day_1",
+        wallet_public_id: null,
+        promo_balance: 0,
+        earned_balance: 0,
+        total_balance: 0,
+        point_value_cents: 1,
+        subtotal_cents: 35000,
+        max_redeemable_points: 0,
+        max_discount_cents: 0,
+        requested_points: 0,
+        discount_cents: 0,
+        priddy: {
+          eligible: false,
+          reason: "Rewards are not available for this booking",
+          balance: 0,
+          point_value_cents: 1,
+          max_redeemable_points: 0,
+          requested_points: 0,
+          discount_cents: 0,
+        },
+        owner: {
+          eligible: false,
+          reason: "No owner points available",
+          balance: 0,
+          point_value_cents: 1,
+          max_redeemable_points: 0,
+          requested_points: 0,
+          discount_cents: 0,
+        },
+      });
+      return;
+    }
+
+    if (key === "GET /api/payment-methods/resolve") {
+      await json(route, {
+        provider: "stripe",
+        owner_payment_setting_public_id: "ops_1",
+        organization_public_id: "org_all_day_1",
+        is_configured: true,
+        has_payment_method: true,
+        payment_method_public_id: "pm_owner_1",
+        publishable_key: "pk_test",
+        tokenizer_url: null,
+        message: null,
+      });
+      return;
+    }
+
+    if (key === "POST /api/booking-requests") {
+      const payload = route.request().postDataJSON() as {
+        start_datetime: string;
+        end_datetime: string;
+        booking_mode: string;
+        full_day: boolean;
+        member_owner_payment_method_public_id: string;
+        payment_authorization_consent: boolean;
+      };
+      expect(payload.booking_mode).toBe("day_pass");
+      expect(payload.full_day).toBe(true);
+      expect(payload.start_datetime).toBe("2099-06-01T09:00:00.000Z");
+      expect(payload.end_datetime).toBe("2099-06-01T18:30:00.000Z");
+      expect(payload.member_owner_payment_method_public_id).toBe("pm_owner_1");
+      expect(payload.payment_authorization_consent).toBe(true);
+      await json(route, bookingRequest);
+      return;
+    }
+
+    if (key === "GET /api/booking-requests") {
+      await json(route, [bookingRequest]);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/spaces/space_all_day_1");
+
+  await expect(page.getByRole("heading", { name: "Austin Conference Room" })).toBeVisible();
+  await page.getByLabel("All day").check();
+  await page.getByLabel("I authorize Aligned Cowork to charge my card now for this booking.").check();
+  await page.getByRole("button", { name: "Reserve & Pay" }).click();
+
+  await expect(page).toHaveURL(/\/member\/requests$/);
+  await expect(page.getByText("Austin Conference Room").first()).toBeVisible();
+});
+
 test("member can redeem Priddy Points for a full day pass without a card", async ({ page }) => {
   const bookingRequest = {
     public_id: "req_points_1",

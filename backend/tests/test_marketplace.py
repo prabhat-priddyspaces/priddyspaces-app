@@ -7,6 +7,7 @@ from app.main import app
 from app.models.enums import (
     AvailabilityStatus,
     BillingCycle,
+    BookingGranularity,
     BookingRequestStatus,
     LocationStatus,
     OrganizationReviewStatus,
@@ -863,6 +864,23 @@ def test_public_space_availability_marks_day_fully_blocked_by_bookings(db_sessio
         {"start": "09:00", "end": "12:00"},
         {"start": "12:00", "end": "18:00"},
     ]
+
+
+def test_public_space_availability_returns_daily_granularity(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_location = seeded["meeting_location"]
+    meeting_room = seeded["meeting_room"]
+    meeting_location.booking_granularity = BookingGranularity.DAILY
+    db_session.add(meeting_location)
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get(
+        f"/api/marketplace/spaces/{meeting_room.public_id}/availability?from=2026-04-16&to=2026-04-16"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["granularity_minutes"] == 24 * 60
 
 
 def test_public_marketplace_space_detail_hides_private_inventory(db_session):

@@ -78,6 +78,10 @@ def _granularity_minutes(location: Location) -> int:
     return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
 
 
+def _is_full_day_mode(*, booking_mode: str | None, full_day: bool) -> bool:
+    return full_day or booking_mode == "day_pass"
+
+
 def _add_months_clamped(dt: datetime, months: int) -> datetime:
     import calendar
 
@@ -172,6 +176,7 @@ def validate_occurrences_available(
 
     tz = resolve_tz(location.timezone)
     granularity = _granularity_minutes(location)
+    full_day_mode = _is_full_day_mode(booking_mode=booking_mode, full_day=full_day)
     ignore_booking_ids = ignore_booking_ids or set()
 
     for occurrence in occurrences:
@@ -183,12 +188,19 @@ def validate_occurrences_available(
         open_start, open_end = window
         if start_local < open_start or end_local > open_end:
             raise HTTPException(status_code=409, detail="Requested time is outside published availability")
-        if _minutes_between(start_local, end_local) < granularity:
-            raise HTTPException(status_code=400, detail="Booking duration is shorter than the location granularity")
-        if _minutes_between(open_start, start_local) % granularity != 0:
-            raise HTTPException(status_code=400, detail="Start time must align to booking granularity")
-        if _minutes_between(start_local, end_local) % granularity != 0:
-            raise HTTPException(status_code=400, detail="End time must align to booking granularity")
+        if full_day_mode:
+            if (
+                space.space_type == SpaceType.CONFERENCE_ROOM
+                and (start_local != open_start or end_local != open_end)
+            ):
+                raise HTTPException(status_code=400, detail="All-day bookings must match published availability")
+        else:
+            if _minutes_between(start_local, end_local) < granularity:
+                raise HTTPException(status_code=400, detail="Booking duration is shorter than the location granularity")
+            if _minutes_between(open_start, start_local) % granularity != 0:
+                raise HTTPException(status_code=400, detail="Start time must align to booking granularity")
+            if _minutes_between(start_local, end_local) % granularity != 0:
+                raise HTTPException(status_code=400, detail="End time must align to booking granularity")
 
         sub_exists = (
             db.query(Subscription)
