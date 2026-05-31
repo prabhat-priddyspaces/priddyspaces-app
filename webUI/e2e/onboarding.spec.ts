@@ -67,16 +67,15 @@ test("owner onboarding submits owner profile and business details without employ
 
   await page.goto("/onboarding/owner");
   await page.getByLabel("Full name").fill("Owner Test");
-  await page.getByRole("textbox", { name: "Phone (optional)", exact: true }).fill("+1 555 200 0000");
-  await page.getByLabel(/I agree/).check();
+  await page.getByRole("textbox", { name: "Phone *", exact: true }).fill("+1 555 200 0000");
   await page.getByLabel(/Legal business name/).fill("Austin Workspace LLC");
   await page.getByLabel("Public display name (optional)").fill("Austin Workspace");
-  await page.getByLabel("Industry (optional)").fill("Coworking");
   await page.getByLabel("Business email (optional)").fill("hello@austin.example");
-  await page.getByLabel("Business phone (optional)").fill("+1 555 200 0100");
+  await page.getByRole("textbox", { name: "Business phone *", exact: true }).fill("+1 555 200 0100");
   await page.getByLabel("Website (optional)").fill("https://austin.example");
   await page.getByLabel("Business description (optional)").fill("Flexible workspaces in Austin.");
-  await page.getByRole("button", { name: "Create owner account" }).click();
+  await page.getByLabel(/I agree/).check();
+  await page.getByRole("button", { name: "Save" }).click();
 
   await expect.poll(() => profilePayload).toMatchObject({
     role: "owner",
@@ -88,11 +87,11 @@ test("owner onboarding submits owner profile and business details without employ
   await expect.poll(() => organizationPayload).toMatchObject({
     name: "Austin Workspace LLC",
     display_name: "Austin Workspace",
-    industry: "Coworking",
     business_email: "hello@austin.example",
     business_phone: "+1 555 200 0100",
     website: "https://austin.example",
     description: "Flexible workspaces in Austin.",
   });
   expect(organizationPayload).not.toHaveProperty("size");
+  expect(organizationPayload).not.toHaveProperty("industry");
 });

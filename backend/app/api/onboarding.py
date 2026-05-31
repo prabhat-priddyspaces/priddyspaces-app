@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 import re
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -57,12 +57,26 @@ class ProfileIn(BaseModel):
             raise ValueError("full_name cannot be blank")
         return v
 
+    @field_validator("phone")
+    @classmethod
+    def optional_phone(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        return cleaned or None
+
     @field_validator("country")
     @classmethod
     def country_iso_alpha2(cls, v: str | None) -> str | None:
         if v is not None and not re.fullmatch(r"[A-Za-z]{2}", v):
             raise ValueError("country must be a 2-letter ISO 3166-1 alpha-2 code (e.g. US)")
         return v.upper() if v else v
+
+    @model_validator(mode="after")
+    def owner_phone_required(self) -> "ProfileIn":
+        if self.role == UserAppRole.OWNER and not self.phone:
+            raise ValueError("phone is required for owner onboarding")
+        return self
 
 
 class OrgIn(BaseModel):
@@ -253,6 +267,8 @@ def complete_organization(
 
     if user.role != UserAppRole.OWNER:
         raise HTTPException(status_code=403, detail="Only owners can create an organization")
+    if not payload.business_phone:
+        raise HTTPException(status_code=422, detail="business_phone is required")
 
     # Idempotency: if owner already has an org, update it rather than creating a duplicate
     existing_org = db.query(Organization).filter(Organization.owner_id == user.id).first()
