@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_calendar, owner_payments, payments, pricing, space_booking_modes, space_volume_discounts, spaces, stripe_connect, subscription_plans, subscriptions, webhooks, webhooks_clerk
+from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_bookings, owner_calendar, owner_payments, payments, pricing, space_booking_modes, space_volume_discounts, spaces, stripe_connect, subscription_plans, subscriptions, webhooks, webhooks_clerk
 from app.core.config import settings
 from app.core.rate_limit import RateLimitMiddleware
 
@@ -102,6 +102,7 @@ app.include_router(floor_plan_markers.router, prefix="/api")
 app.include_router(organization_members.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+app.include_router(owner_bookings.router, prefix="/api")
 app.include_router(owner_calendar.router, prefix="/api")
 app.include_router(org_member_profiles.router, prefix="/api")
 app.include_router(admin_calendar.router, prefix="/api")
