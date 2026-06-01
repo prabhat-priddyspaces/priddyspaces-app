@@ -67,6 +67,9 @@ describe("OwnerRequestsPage email delivery", () => {
       if (url === "/api/booking-requests") {
         return Promise.resolve([failedRequest]);
       }
+      if (url === "/api/booking-waitlist") {
+        return Promise.resolve([]);
+      }
       if (url === "/api/booking-requests/req_1/emails/resend") {
         return Promise.resolve([]);
       }

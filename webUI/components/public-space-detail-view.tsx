@@ -70,6 +70,7 @@ interface PublicSpaceDetailViewProps {
   initialEndTime?: string;
   initialPlanPublicId?: string;
   initialMoveInDate?: string;
+  initialWaitlistPublicId?: string;
   selfHrefBase?: string;
 }
 
@@ -148,6 +149,7 @@ export function PublicSpaceDetailView({
   initialEndTime = "",
   initialPlanPublicId,
   initialMoveInDate,
+  initialWaitlistPublicId,
   selfHrefBase = "/spaces",
 }: PublicSpaceDetailViewProps) {
   const router = useRouter();
@@ -358,6 +360,7 @@ export function PublicSpaceDetailView({
     availability?.hourly_price ?? detail?.space.hourly_price ?? null;
   const dailyPrice =
     availability?.daily_price ?? detail?.space.price_daily ?? null;
+  const waitlistEnabled = Boolean(detail?.location.waitlist_enabled || availability?.waitlist_enabled);
   const hourlyAmount = moneyToNumber(hourlyPrice);
   const dailyAmount = moneyToNumber(dailyPrice);
   const conferenceDayRateAvailable = isConferenceRoom && dailyAmount != null;
@@ -401,10 +404,10 @@ export function PublicSpaceDetailView({
     : null;
 
   useEffect(() => {
-    if (allDay && allDayDisabled) {
+    if (allDay && allDayDisabled && !(isSharedDesk && waitlistEnabled)) {
       setAllDay(false);
     }
-  }, [allDay, allDayDisabled]);
+  }, [allDay, allDayDisabled, isSharedDesk, waitlistEnabled]);
 
   useEffect(() => {
     if (!isSharedDesk) return;
@@ -517,6 +520,7 @@ export function PublicSpaceDetailView({
     if (endTime) params.set("end_time", endTime);
     if (extra?.planPublicId) params.set("plan", extra.planPublicId);
     if (extra?.moveInDate) params.set("move_in", extra.moveInDate);
+    if (initialWaitlistPublicId) params.set("waitlist", initialWaitlistPublicId);
     const qs = params.toString();
     return qs ? `${selfHrefBase}/${spaceId}?${qs}` : `${selfHrefBase}/${spaceId}`;
   }
@@ -590,7 +594,7 @@ export function PublicSpaceDetailView({
     return freshStartOptions.includes(startTime) && freshEndOptions.includes(endTime);
   }
 
-  async function ensureAvailabilityCurrent(): Promise<boolean> {
+  async function ensureAvailabilityCurrent(options?: { silentUnavailable?: boolean }): Promise<boolean> {
     const stale =
       availabilityFetchedAt == null ||
       Date.now() - availabilityFetchedAt > AVAILABILITY_STALE_MS;
@@ -598,11 +602,13 @@ export function PublicSpaceDetailView({
     if (!current || selectedWindowAvailableIn(current)) {
       return true;
     }
-    setAllDay(false);
-    setStartTime("");
-    setEndTime("");
-    setAutoFilled(true);
-    setError("That time is no longer available. Choose another date or time.");
+    if (!options?.silentUnavailable) {
+      setAllDay(false);
+      setStartTime("");
+      setEndTime("");
+      setAutoFilled(true);
+      setError("That time is no longer available. Choose another date or time.");
+    }
     return false;
   }
 
@@ -700,6 +706,7 @@ export function PublicSpaceDetailView({
             member_owner_payment_method_public_id: paymentMethodPublicId,
             payment_authorization_consent: true,
             redemption_lock_public_id: redemptionLockPublicId,
+            source_waitlist_public_id: initialWaitlistPublicId || undefined,
           }),
         },
         token,
@@ -708,6 +715,31 @@ export function PublicSpaceDetailView({
       router.push("/member/requests");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reservation failed");
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  async function submitWaitlist(payload: ReservationPayload) {
+    const token = getAccessToken() ?? undefined;
+    if (!token) {
+      router.push(buildLoginHref(buildSelfNextHref()));
+      return;
+    }
+    setRequesting(true);
+    setError("");
+    try {
+      await apiFetch(
+        "/api/booking-waitlist",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      );
+      router.push("/member/requests");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not join waitlist");
     } finally {
       setRequesting(false);
     }
@@ -760,11 +792,11 @@ export function PublicSpaceDetailView({
       setError("Choose a date before reserving.");
       return;
     }
-    if (isSharedDesk && maxSeatQuantity <= 0) {
+    if (isSharedDesk && maxSeatQuantity <= 0 && !waitlistEnabled) {
       setError("No day-pass seats are available for this date.");
       return;
     }
-    if (isSharedDesk && Math.max(1, Number(seatQuantity || 1)) > maxSeatQuantity) {
+    if (isSharedDesk && Math.max(1, Number(seatQuantity || 1)) > maxSeatQuantity && !waitlistEnabled) {
       setError(
         `Only ${maxSeatQuantity} ${maxSeatQuantity === 1 ? "seat is" : "seats are"} available for this date.`,
       );
@@ -778,8 +810,13 @@ export function PublicSpaceDetailView({
     }
 
     try {
-      const stillAvailable = await ensureAvailabilityCurrent();
-      if (!stillAvailable) return;
+      const stillAvailable = await ensureAvailabilityCurrent({ silentUnavailable: waitlistEnabled });
+      if (!stillAvailable) {
+        if (waitlistEnabled) {
+          await submitWaitlist(payload);
+        }
+        return;
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not refresh this space's availability window.");
       return;
@@ -811,6 +848,7 @@ export function PublicSpaceDetailView({
           seats_requested: 1,
           member_owner_payment_method_public_id: paymentMethodPublicId,
           payment_authorization_consent: true,
+          source_waitlist_public_id: initialWaitlistPublicId || undefined,
         }),
       },
       getAccessToken() ?? undefined,
@@ -884,6 +922,19 @@ export function PublicSpaceDetailView({
   const pointsCoverTotal =
     loyaltyDiscountCents > 0 &&
     loyaltyDiscountCents >= bookingTotalCentsForRewards;
+  const currentActionReservation = currentReservationPayload();
+  const waitlistAction =
+    waitlistEnabled &&
+    Boolean(currentActionReservation) &&
+    Boolean(availability) &&
+    !selectedWindowAvailableIn(availability!);
+  const reserveButtonText = waitlistAction
+    ? isAuthenticated
+      ? "Join waitlist"
+      : "Sign in to join waitlist"
+    : isAuthenticated
+      ? reserveActionLabel
+      : `Sign in to ${reserveActionLabel}`;
 
   const membershipPanel = membershipBookingMode ? (
     <div className="rounded-2xl border border-line p-5">
@@ -1211,6 +1262,8 @@ export function PublicSpaceDetailView({
                   }
                   initialPlanPublicId={initialPlanPublicId}
                   initialMoveInDate={initialMoveInDate}
+                  initialWaitlistPublicId={initialWaitlistPublicId}
+                  waitlistEnabled={waitlistEnabled}
                 />
               </div>
             ) : isVirtualOffice ? (
@@ -1375,7 +1428,7 @@ export function PublicSpaceDetailView({
                     </div>
                   ) : null}
 
-                  {isAuthenticated ? (
+                  {isAuthenticated && !waitlistAction ? (
                     <label className="flex items-start gap-3 rounded-[18px] border border-line bg-surface-2 px-4 py-3 text-sm text-text-2">
                       <input
                         type="checkbox"
@@ -1389,7 +1442,7 @@ export function PublicSpaceDetailView({
                     </label>
                   ) : null}
 
-                  {!leaseBookingMode ? (
+                  {!leaseBookingMode && !waitlistAction ? (
                     <div className="rounded-[18px] border border-line bg-surface px-4 py-3">
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-success-soft text-success">
@@ -1448,10 +1501,15 @@ export function PublicSpaceDetailView({
                   <button
                     type="button"
                     onClick={handleReserve}
-                    disabled={requesting || !date || (!allDay && (!startTime || !endTime))}
+                    disabled={
+                      requesting ||
+                      !date ||
+                      (waitlistAction && !currentActionReservation) ||
+                      (!waitlistAction && !allDay && (!startTime || !endTime))
+                    }
                     className="inline-flex h-12 items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {requesting ? "Reserving..." : isAuthenticated ? reserveActionLabel : `Sign in to ${reserveActionLabel}`}
+                    {requesting ? (waitlistAction ? "Joining waitlist..." : "Reserving...") : reserveButtonText}
                   </button>
                 </div>
 

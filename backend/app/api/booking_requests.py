@@ -84,6 +84,7 @@ from app.services.booking_inventory import (
     validate_no_exact_duplicate_user_slot,
     validate_occurrences_available,
 )
+from app.services.booking_waitlist import mark_waitlist_booked, validate_waitlist_invite_for_request
 from app.services.booking_modes import RECURRING_BOOKING_MODES
 from app.services.booking_products import validate_direct_booking_product
 from app.services.booking_payments import (
@@ -1516,7 +1517,28 @@ def create_booking_request(
         require_verified_email_for_payments(user)
         if payload.redemption_lock_public_id:
             raise HTTPException(status_code=400, detail="Rewards cannot be redeemed for memberships or leases")
+        source_waitlist_entry = None
+        if payload.source_waitlist_public_id:
+            source_plan = (
+                db.query(MembershipPlan)
+                .filter(MembershipPlan.public_id == payload.membership_plan_public_id)
+                .first()
+            )
+            if not source_plan:
+                raise HTTPException(status_code=404, detail="Membership plan not found")
+            source_waitlist_entry = validate_waitlist_invite_for_request(
+                db,
+                public_id=payload.source_waitlist_public_id,
+                user_id=user.id,
+                space_id=source_plan.space_id,
+                membership_plan_id=source_plan.id,
+                desired_start_date=payload.desired_start_date,
+            )
         req = _create_membership_purchase_request(payload, user, db)
+        mark_waitlist_booked(db, entry=source_waitlist_entry, booking_request=req)
+        if source_waitlist_entry:
+            db.commit()
+            db.refresh(req)
         space = db.query(Space).filter(Space.id == req.space_id).first()
         if space:
             location = db.query(Location).filter(Location.id == space.location_id).first()
@@ -1568,6 +1590,14 @@ def create_booking_request(
         recurrence_interval=payload.recurrence.interval if payload.recurrence else None,
         recurrence_count=payload.recurrence.count if payload.recurrence else None,
         recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
+    )
+    source_waitlist_entry = validate_waitlist_invite_for_request(
+        db,
+        public_id=payload.source_waitlist_public_id,
+        user_id=user.id,
+        space_id=space.id,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
     )
 
     validate_no_exact_duplicate_user_slot(
@@ -1684,6 +1714,10 @@ def create_booking_request(
             db.add(req)
         db.commit()
         db.refresh(req)
+        mark_waitlist_booked(db, entry=source_waitlist_entry, booking_request=req)
+        if source_waitlist_entry:
+            db.commit()
+            db.refresh(req)
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Booking overlaps existing booking")

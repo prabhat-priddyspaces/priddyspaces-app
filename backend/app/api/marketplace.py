@@ -397,5 +397,6 @@ def get_marketplace_space_availability(
         buffer_after_minutes=space.buffer_after_minutes or 0,
         hourly_price=hourly_price,
         daily_price=space.price_daily,
+        waitlist_enabled=bool(organization.waitlist_enabled),
         days=days,
     )

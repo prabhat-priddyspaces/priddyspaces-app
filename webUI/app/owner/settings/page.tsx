@@ -21,6 +21,7 @@ interface Organization {
   booking_approval_mode: "manual" | "auto";
   membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
+  waitlist_enabled: boolean;
 }
 
 interface LocationOption {
@@ -58,6 +59,7 @@ interface BookingSettings {
   booking_approval_mode: "manual" | "auto";
   membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
+  waitlist_enabled: boolean;
 }
 
 interface CancellationPolicy {
@@ -117,6 +119,7 @@ export default function OwnerSettingsPage() {
     booking_approval_mode: "manual" as "manual" | "auto",
     membership_lease_approval_mode: "manual" as "manual" | "auto",
     payment_failure_hold_minutes: "30",
+    waitlist_enabled: false,
   });
   const [policyForm, setPolicyForm] = useState({
     space_type: "conference_room",
@@ -252,6 +255,7 @@ export default function OwnerSettingsPage() {
         booking_approval_mode: "manual",
         membership_lease_approval_mode: "manual",
         payment_failure_hold_minutes: "30",
+        waitlist_enabled: false,
       });
       return;
     }
@@ -266,6 +270,7 @@ export default function OwnerSettingsPage() {
       booking_approval_mode: settings.booking_approval_mode,
       membership_lease_approval_mode: settings.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(settings.payment_failure_hold_minutes),
+      waitlist_enabled: Boolean(settings.waitlist_enabled),
     });
   }
 
@@ -428,6 +433,7 @@ export default function OwnerSettingsPage() {
           booking_approval_mode: bookingSettingsForm.booking_approval_mode,
           membership_lease_approval_mode: bookingSettingsForm.membership_lease_approval_mode,
           payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes),
+          waitlist_enabled: bookingSettingsForm.waitlist_enabled,
         }),
       },
       token
@@ -437,6 +443,7 @@ export default function OwnerSettingsPage() {
       booking_approval_mode: saved.booking_approval_mode,
       membership_lease_approval_mode: saved.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes),
+      waitlist_enabled: Boolean(saved.waitlist_enabled),
     });
     setMessage("Booking approval settings saved");
   }
@@ -730,11 +737,12 @@ export default function OwnerSettingsPage() {
                 {bookingSettings?.membership_lease_approval_mode === "auto" ? "auto approve" : "manual approval"} •{" "}
                 {bookingSettings?.payment_failure_hold_minutes === 0
                   ? "Cancel failed payments immediately"
-                  : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min payment recovery hold`}
+                  : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min payment recovery hold`}{" "}
+                • Waitlist {bookingSettings?.waitlist_enabled ? "on" : "off"}
               </div>
             </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-5">
             <div className="grid gap-2">
               <Label htmlFor="booking-approval-mode">Hourly/day-pass approval</Label>
               <select
@@ -788,6 +796,19 @@ export default function OwnerSettingsPage() {
                 <option value="60">60 min</option>
               </select>
             </div>
+            <label className="flex items-center gap-3 self-end rounded-md border border-border bg-surface px-3 py-2 text-sm text-textPrimary">
+              <input
+                type="checkbox"
+                checked={bookingSettingsForm.waitlist_enabled}
+                onChange={(e) =>
+                  setBookingSettingsForm((current) => ({
+                    ...current,
+                    waitlist_enabled: e.target.checked,
+                  }))
+                }
+              />
+              Enable waitlist
+            </label>
             <div className="flex items-end">
               <Button type="button" onClick={saveBookingSettings} disabled={!orgId}>
                 Save booking approval

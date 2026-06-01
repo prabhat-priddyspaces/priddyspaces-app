@@ -47,7 +47,7 @@ vi.mock("../components/use-address-autocomplete", () => ({
   reverseGeocode: reverseGeocodeMock,
 }));
 
-function mockSharedDeskDetail(availabilityDay: Record<string, unknown>) {
+function mockSharedDeskDetail(availabilityDay: Record<string, unknown>, waitlistEnabled = false) {
   apiFetchMock.mockImplementation((url: string) => {
     if (url.includes("/availability")) {
       return Promise.resolve({
@@ -60,6 +60,7 @@ function mockSharedDeskDetail(availabilityDay: Record<string, unknown>) {
         buffer_after_minutes: 0,
         hourly_price: null,
         daily_price: 49,
+        waitlist_enabled: waitlistEnabled,
         days: [availabilityDay],
       });
     }
@@ -86,11 +87,12 @@ function mockSharedDeskDetail(availabilityDay: Record<string, unknown>) {
           booking_products: [],
         },
         images: [],
-        location: {
-          location_public_id: "loc_1",
-          name: "Brickell Commons",
-          organization_name: "Public Org",
-          address: "100 Main St",
+          location: {
+            location_public_id: "loc_1",
+            name: "Brickell Commons",
+            organization_name: "Public Org",
+            waitlist_enabled: waitlistEnabled,
+            address: "100 Main St",
           city: "Miami",
           state: "FL",
           postal_code: "33101",
@@ -666,6 +668,25 @@ describe("public marketplace flows", () => {
     expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
     expect(screen.getByText("Sold out for the selected day.")).toBeInTheDocument();
     expect(screen.getByRole("spinbutton", { name: /Seats/ })).toBeDisabled();
+  });
+
+  it("shows a waitlist CTA when a sold-out day-pass space has waitlists enabled", async () => {
+    mockSharedDeskDetail(
+      {
+        date: "2026-06-01",
+        fully_blocked: true,
+        capacity: 4,
+        booked_seats: 4,
+        remaining_seats: 0,
+        busy_intervals: [{ start: "09:00", end: "17:00" }],
+      },
+      true,
+    );
+
+    render(<PublicSpaceDetailView spaceId="space_day_pass" backHref="/spaces" initialDate="2026-06-01" />);
+
+    expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in to join waitlist" })).toBeInTheDocument();
   });
 
   it("marks private-office lease prices on the detail page and checkout panel", async () => {

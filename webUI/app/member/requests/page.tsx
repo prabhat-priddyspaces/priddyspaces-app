@@ -51,6 +51,28 @@ interface BookingRequest {
   failure_reason: string | null;
 }
 
+interface BookingWaitlistEntry {
+  public_id: string;
+  created_at: string | null;
+  status: string;
+  space_public_id: string | null;
+  space_name: string | null;
+  space_type: string | null;
+  organization_name: string | null;
+  location_name: string | null;
+  location_city: string | null;
+  membership_plan_name: string | null;
+  request_kind: string;
+  booking_mode: string | null;
+  seats_requested: number;
+  start_datetime: string | null;
+  end_datetime: string | null;
+  desired_start_date: string | null;
+  invited_at: string | null;
+  invite_expires_at: string | null;
+  booking_href: string | null;
+}
+
 function memberRequestDetailHref(publicId: string) {
   return `/member/requests/${encodeURIComponent(publicId)}`;
 }
@@ -146,6 +168,7 @@ function retryOwnerName(request: BookingRequest) {
 
 export default function MemberRequestsPage() {
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
+  const [waitlist, setWaitlist] = useState<BookingWaitlistEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -156,8 +179,12 @@ export default function MemberRequestsPage() {
     async function load() {
       try {
         const token = getAccessToken() ?? undefined;
-        const list = await apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token);
-        setBookings(list);
+        const [requestList, waitlistList] = await Promise.all([
+          apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token),
+          apiFetch<BookingWaitlistEntry[]>("/api/booking-waitlist", { method: "GET" }, token),
+        ]);
+        setBookings(requestList);
+        setWaitlist(waitlistList);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Unable to load booking requests");
       } finally {
@@ -170,8 +197,12 @@ export default function MemberRequestsPage() {
   async function refreshRequests() {
     const token = getAccessToken() ?? undefined;
     if (!token) return;
-    const list = await apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token);
-    setBookings(list);
+    const [requestList, waitlistList] = await Promise.all([
+      apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token),
+      apiFetch<BookingWaitlistEntry[]>("/api/booking-waitlist", { method: "GET" }, token),
+    ]);
+    setBookings(requestList);
+    setWaitlist(waitlistList);
   }
 
   async function cancelRequest(publicId: string) {
@@ -184,6 +215,21 @@ export default function MemberRequestsPage() {
       await refreshRequests();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to cancel request");
+    } finally {
+      setCancelling(null);
+    }
+  }
+
+  async function cancelWaitlist(publicId: string) {
+    const token = getAccessToken() ?? undefined;
+    if (!token) return;
+    setCancelling(publicId);
+    setError(null);
+    try {
+      await apiFetch(`/api/booking-waitlist/${publicId}/cancel`, { method: "POST" }, token);
+      await refreshRequests();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to cancel waitlist entry");
     } finally {
       setCancelling(null);
     }
@@ -249,7 +295,7 @@ export default function MemberRequestsPage() {
         ) : null}
         {loading ? (
           <p className="mt-6 text-sm text-textMuted">Loading booking requests...</p>
-        ) : bookings.length === 0 ? (
+        ) : bookings.length === 0 && waitlist.length === 0 ? (
           <Card className="mt-6 p-6">
             <p className="text-center text-sm text-textMuted">No booking requests yet.</p>
             <Link href="/member" className="mt-4 flex justify-center">
@@ -258,6 +304,55 @@ export default function MemberRequestsPage() {
           </Card>
         ) : (
           <div className="mt-6 grid gap-4">
+            {waitlist.map((entry) => (
+              <Card key={entry.public_id} className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="text-sm">
+                    <div className="font-medium text-textPrimary">
+                      {entry.space_name || formatSpaceType(entry.space_type)}
+                    </div>
+                    <div className="mt-1 text-textMuted">
+                      Waitlist • {formatSpaceType(entry.space_type)}
+                      {entry.location_name ? ` • ${entry.location_name}` : ""}
+                      {entry.location_city ? ` • ${entry.location_city}` : ""}
+                    </div>
+                    {entry.membership_plan_name ? (
+                      <div className="mt-1 text-textMuted">Plan: {entry.membership_plan_name}</div>
+                    ) : null}
+                    <div className="mt-1 text-textMuted">
+                      {entry.desired_start_date
+                        ? `Desired start: ${entry.desired_start_date}`
+                        : `Requested: ${formatDateTime(entry.start_datetime)} – ${formatDateTime(entry.end_datetime)}`}
+                    </div>
+                    <div className="mt-1 text-textMuted">
+                      Status: <span className="capitalize">{formatStatus(entry.status)}</span>
+                    </div>
+                    {entry.invite_expires_at ? (
+                      <div className="mt-1 text-textMuted">
+                        Invite expires: {formatDateTime(entry.invite_expires_at)}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {entry.status === "invited" && entry.booking_href ? (
+                      <Link href={entry.booking_href}>
+                        <Button size="sm">Book now</Button>
+                      </Link>
+                    ) : null}
+                    {entry.status === "waitlisted" || entry.status === "invited" ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => cancelWaitlist(entry.public_id)}
+                        disabled={cancelling === entry.public_id}
+                      >
+                        {cancelling === entry.public_id ? "Cancelling..." : "Cancel waitlist"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </Card>
+            ))}
             {bookings.map((b) => (
               <Card key={b.public_id} className="p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">

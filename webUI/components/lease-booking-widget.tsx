@@ -49,6 +49,8 @@ export interface LeaseBookingWidgetProps {
   buildLoginNextHref: (params: { planPublicId: string | null; moveInDate: string }) => string;
   initialPlanPublicId?: string;
   initialMoveInDate?: string;
+  initialWaitlistPublicId?: string;
+  waitlistEnabled?: boolean;
 }
 
 export function LeaseBookingWidget({
@@ -63,6 +65,8 @@ export function LeaseBookingWidget({
   buildLoginNextHref,
   initialPlanPublicId,
   initialMoveInDate,
+  initialWaitlistPublicId,
+  waitlistEnabled = false,
 }: LeaseBookingWidgetProps) {
   const router = useRouter();
   const isAuthenticated = Boolean(getAccessToken());
@@ -180,6 +184,7 @@ export function LeaseBookingWidget({
             seats_requested: 1,
             member_owner_payment_method_public_id: paymentMethodPublicId,
             payment_authorization_consent: true,
+            source_waitlist_public_id: initialWaitlistPublicId || undefined,
           }),
         },
         getAccessToken() ?? undefined,
@@ -246,6 +251,41 @@ export function LeaseBookingWidget({
       return;
     }
     if (leaseUnavailableForSelection) {
+      if (waitlistEnabled) {
+        if (!isAuthenticated) {
+          router.push(
+            buildLoginHref(
+              buildLoginNextHref({
+                planPublicId: selectedPlan.public_id,
+                moveInDate,
+              }),
+            ),
+          );
+          return;
+        }
+        setSubmitting(true);
+        setError("");
+        try {
+          await apiFetch(
+            "/api/booking-waitlist",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                membership_plan_public_id: selectedPlan.public_id,
+                desired_start_date: moveInDate,
+                seats_requested: 1,
+              }),
+            },
+            getAccessToken() ?? undefined,
+          );
+          router.push("/member/requests");
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : "Could not join waitlist");
+        } finally {
+          setSubmitting(false);
+        }
+        return;
+      }
       setError(
         nextAvailableMoveIn
           ? `That move-in date is unavailable. Next available date is ${formatDateLong(nextAvailableMoveIn)}.`
@@ -394,13 +434,17 @@ export function LeaseBookingWidget({
       <button
         type="button"
         onClick={handleContinue}
-        disabled={submitting || !selectedPlan || leaseUnavailableForSelection}
+        disabled={submitting || !selectedPlan || (leaseUnavailableForSelection && !waitlistEnabled)}
         className="inline-flex h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting
           ? "Submitting…"
           : leaseUnavailableForSelection
-            ? "Currently leased"
+            ? waitlistEnabled
+              ? isAuthenticated
+                ? "Join waitlist"
+                : "Sign in to join waitlist"
+              : "Currently leased"
             : isAuthenticated
               ? autoApproval
                 ? "Reserve & Pay"

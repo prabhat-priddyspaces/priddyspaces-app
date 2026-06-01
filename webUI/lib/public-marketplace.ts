@@ -23,6 +23,7 @@ export interface MarketplaceLocationSummary {
   booking_approval_mode?: "manual" | "auto" | string;
   membership_lease_approval_mode?: "manual" | "auto" | string;
   payment_failure_hold_minutes?: number | null;
+  waitlist_enabled?: boolean;
   name: string;
   address: string;
   city: string | null;
@@ -63,6 +64,7 @@ export interface MarketplaceLocationSpace {
   booking_approval_mode?: "manual" | "auto" | string;
   membership_lease_approval_mode?: "manual" | "auto" | string;
   payment_failure_hold_minutes?: number | null;
+  waitlist_enabled?: boolean;
   name: string;
   space_type: string;
   capacity: number;
@@ -142,6 +144,7 @@ export interface MarketplaceSpaceDetailLocation {
   booking_approval_mode?: "manual" | "auto" | string;
   membership_lease_approval_mode?: "manual" | "auto" | string;
   payment_failure_hold_minutes?: number | null;
+  waitlist_enabled?: boolean;
   name: string;
   address: string;
   city: string | null;
@@ -208,6 +211,7 @@ export interface SpaceAvailabilityResponse {
   buffer_after_minutes: number;
   hourly_price: MoneyValue | null;
   daily_price: MoneyValue | null;
+  waitlist_enabled?: boolean;
   days: SpaceAvailabilityDay[];
 }
 

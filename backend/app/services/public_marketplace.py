@@ -622,6 +622,7 @@ def _build_location_payload(
         )
         or "manual",
         "payment_failure_hold_minutes": organization.payment_failure_hold_minutes if organization else None,
+        "waitlist_enabled": bool(organization.waitlist_enabled) if organization else False,
         "name": location.name,
         "address": location.address,
         "city": location.city,

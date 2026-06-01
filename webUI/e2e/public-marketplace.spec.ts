@@ -332,6 +332,10 @@ test("auto-approved lease request does not appear as pending in owner inbox", as
       await json(route, []);
       return;
     }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
+      return;
+    }
 
     await json(route, { detail: `Unhandled route: ${key}` }, 404);
   });

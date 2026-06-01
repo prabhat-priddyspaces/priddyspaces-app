@@ -40,6 +40,7 @@ class MarketplaceLocationSummaryOut(BaseModel):
     booking_approval_mode: str = "manual"
     membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
+    waitlist_enabled: bool = False
     name: str
     address: str
     city: str | None = None
@@ -149,6 +150,7 @@ class MarketplaceSpaceDetailLocationOut(BaseModel):
     booking_approval_mode: str = "manual"
     membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
+    waitlist_enabled: bool = False
     name: str
     address: str
     city: str | None = None
@@ -212,4 +214,5 @@ class SpaceAvailabilityOut(BaseModel):
     buffer_after_minutes: int = 0
     hourly_price: MoneyAmount | None
     daily_price: MoneyAmount | None
+    waitlist_enabled: bool = False
     days: list[SpaceAvailabilityDayOut]
