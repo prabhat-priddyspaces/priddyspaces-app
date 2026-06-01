@@ -38,6 +38,17 @@ class OwnerPaymentSettingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OwnerMarketplaceReadinessOut(BaseModel):
+    organization_public_id: str
+    organization_name: str
+    provider: str | None = None
+    status: str
+    blockers: list[str]
+    public_listing_count: int
+    marketplace_visible_listing_count: int
+    payment_hidden_listing_count: int
+
+
 class PaymentProviderOverrideUpdate(BaseModel):
     payment_provider: str | None = None
 

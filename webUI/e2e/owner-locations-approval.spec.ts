@@ -49,6 +49,22 @@ test("owner sees company review status on locations and can request approval", a
       return;
     }
 
+    if (key === "GET /api/owner/marketplace-readiness") {
+      await json(route, [
+        {
+          organization_public_id: "org_1",
+          organization_name: "Boca Raton Workspace",
+          provider: "stripe",
+          status: "blocked",
+          blockers: ["Stripe payment provider is not configured"],
+          public_listing_count: 1,
+          marketplace_visible_listing_count: 0,
+          payment_hidden_listing_count: 1,
+        },
+      ]);
+      return;
+    }
+
     if (key === "GET /api/locations/loc_1/spaces") {
       await json(route, [{ public_id: "space_1", availability_status: "available" }]);
       return;
@@ -75,8 +91,11 @@ test("owner sees company review status on locations and can request approval", a
   await page.goto("/owner/locations");
 
   await expect(page.getByRole("heading", { name: "Locations" })).toBeVisible();
+  await expect(page.getByText("Payment setup required.")).toBeVisible();
+  await expect(page.getByText("Your listings are hidden from search until payments are configured.")).toBeVisible();
   await expect(page.getByText("Downtown")).toBeVisible();
   await expect(page.getByText("Marketplace in review")).toBeVisible();
+  await expect(page.getByText("Hidden from search until payment setup is complete.")).toBeVisible();
   await page.getByRole("button", { name: "Request approval" }).click();
 
   await expect(page.getByText("Approval request sent to Admins.")).toBeVisible();
@@ -107,6 +126,11 @@ test("super admin approval email link opens the company and approves it", async 
           review_notes: null,
           commission_override_pct: null,
           stripe_connected: false,
+          payment_status: "blocked",
+          payment_provider: "stripe",
+          payment_blockers: ["Stripe payment provider is not configured"],
+          marketplace_visible_listings: 0,
+          payment_hidden_listings: 1,
           locations: 1,
           listings: 1,
           owner: { email: "owner@test.com", name: "Owner Test" },
@@ -129,6 +153,8 @@ test("super admin approval email link opens the company and approves it", async 
 
   await expect(page.getByText("Approval link opened. Review the company, then click Approve.")).toBeVisible();
   await expect(page.getByText("This company was opened from an approval request email.")).toBeVisible();
+  await expect(page.getByText("Payment missing")).toBeVisible();
+  await expect(page.getByText("Stripe payment provider is not configured")).toBeVisible();
   await page.getByRole("button", { name: "Approve" }).click();
 
   expect(patchPayload).toMatchObject({ review_status: "approved" });

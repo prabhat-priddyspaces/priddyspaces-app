@@ -29,6 +29,7 @@ from app.schemas.membership_plan import (
 from app.services.auth_user import get_or_create_user
 from app.services.authz import require_location_roles
 from app.services.booking_modes import is_mode_valid_for_space_type
+from app.services.owner_payments import require_space_payment_ready_for_public_surface
 from app.services.platform_auth import organization_is_publicly_visible
 
 _EXCLUSIVE_LEASE_MODES = {
@@ -164,6 +165,7 @@ def list_public_membership_plans(
         or space.visibility == SpaceVisibility.PRIVATE
     ):
         raise HTTPException(status_code=404, detail="Space not found")
+    require_space_payment_ready_for_public_surface(db, space)
 
     enabled_modes = {
         row.booking_mode

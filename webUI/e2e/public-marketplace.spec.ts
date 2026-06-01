@@ -151,6 +151,28 @@ test("public marketplace can ask for browser location and search the default rad
     .toBe(true);
 });
 
+test("public marketplace shows no payment-blocked listings", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/marketplace/locations") {
+      await json(route, {
+        meta: { total_locations: 0, page: 1, page_size: 20 },
+        results: [],
+      });
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/spaces?q=Payment%20Blocked");
+
+  await expect(page.getByText("No locations matched this search.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payment Blocked Workspace" })).toHaveCount(0);
+});
+
 test("public marketplace redirects to /spaces and supports route-driven location search", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());

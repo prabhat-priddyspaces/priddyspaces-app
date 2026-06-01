@@ -22,6 +22,7 @@ from app.services.authz import (
 from app.services.audit import write_audit_log
 from app.models.location import Location
 from app.services.lookups import get_location_by_public_id
+from app.services.owner_payments import space_payment_is_marketplace_ready
 from app.services.platform_auth import get_audit_actor_context, organization_is_publicly_visible
 
 router = APIRouter()
@@ -150,7 +151,7 @@ def get_space(
     location_amenities = get_location_amenities_map(db, [location.id]).get(location.id, []) if location else []
     amenity_text = ", ".join(str(item["name"]) for item in location_amenities) if location_amenities else None
 
-    if _space_publicly_visible(space, location, organization):
+    if _space_publicly_visible(space, location, organization) and space_payment_is_marketplace_ready(db, space):
         return _serialize_space(
             space,
             organization=organization,

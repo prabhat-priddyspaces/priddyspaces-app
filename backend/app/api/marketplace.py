@@ -34,6 +34,7 @@ from app.services.public_marketplace import (
     search_public_locations,
 )
 from app.services.money import CENT, to_money_decimal
+from app.services.owner_payments import require_space_payment_ready_for_public_surface, space_payment_is_marketplace_ready
 from app.services.space_availability import get_space_availability
 
 router = APIRouter()
@@ -164,6 +165,21 @@ def search_marketplace(
         query = query.add_columns(literal(None).label("distance_km"))
 
     rows = query.all()
+    if not rows:
+        return []
+
+    spaces_by_public_id = {
+        space.public_id: space
+        for space in db.query(Space)
+        .filter(Space.public_id.in_([row.space_public_id for row in rows]))
+        .all()
+    }
+    rows = [
+        row
+        for row in rows
+        if (space := spaces_by_public_id.get(row.space_public_id)) is not None
+        and space_payment_is_marketplace_ready(db, space)
+    ]
     if not rows:
         return []
 
@@ -341,6 +357,7 @@ def get_marketplace_space_availability(
         or organization.review_status != OrganizationReviewStatus.APPROVED
     ):
         raise HTTPException(status_code=404, detail="Marketplace space not found")
+    require_space_payment_ready_for_public_surface(db, space, detail="Marketplace space not found")
 
     days = get_space_availability(
         db,

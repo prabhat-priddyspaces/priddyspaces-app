@@ -125,6 +125,21 @@ def _payment_method(db, member: User, space: Space) -> MemberOwnerPaymentMethod:
     return method
 
 
+def _owner_payment_setting(db, space: Space) -> OwnerPaymentSetting:
+    setting = OwnerPaymentSetting(
+        organization_id=space.tenant_id,
+        tenant_id=space.tenant_id,
+        provider="stripe",
+        is_enabled=True,
+        stripe_publishable_key="pk_test_access",
+        stripe_secret_key_encrypted="sk_test_access",
+    )
+    db.add(setting)
+    db.commit()
+    db.refresh(setting)
+    return setting
+
+
 def _booking(
     db,
     member: User,
@@ -383,6 +398,7 @@ def test_member_directory_is_limited_to_other_members_at_same_location(db_sessio
 
 def test_guest_registration_claims_prior_approved_booking(db_session, client_factory):
     owner, _org, _location, space = _owner_space(db_session)
+    _owner_payment_setting(db_session, space)
     guest_client = client_factory({})
     start = datetime(2026, 7, 5, 13, 0, tzinfo=timezone.utc)
     create = guest_client.post(

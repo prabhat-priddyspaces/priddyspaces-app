@@ -14,6 +14,7 @@ from app.models.enums import (
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
+from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.subscription import Subscription
@@ -40,6 +41,17 @@ def _seed_owner_with_space(db, *, space_type: SpaceType = SpaceType.PRIVATE_OFFI
     db.add(org)
     db.commit()
     db.refresh(org)
+    db.add(
+        OwnerPaymentSetting(
+            organization_id=org.id,
+            tenant_id=org.id,
+            provider="stripe",
+            is_enabled=True,
+            stripe_publishable_key="pk_test_owner",
+            stripe_secret_key_encrypted="sk_test_owner",
+        )
+    )
+    db.commit()
 
     db.add(
         OrganizationMember(

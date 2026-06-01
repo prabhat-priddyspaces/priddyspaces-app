@@ -45,6 +45,8 @@ export interface LocationCardProps {
   mtdNet: number | null;
   status: "active" | "onboarding" | string;
   organizationReviewStatus?: string | null;
+  marketplacePaymentStatus?: string | null;
+  paymentHiddenListings?: number | null;
   onRequestApproval?: () => void;
   requestingApproval?: boolean;
   primary?: boolean;
@@ -94,6 +96,8 @@ export function LocationCard({
   mtdNet,
   status,
   organizationReviewStatus,
+  marketplacePaymentStatus,
+  paymentHiddenListings,
   onRequestApproval,
   requestingApproval,
   primary,
@@ -111,6 +115,7 @@ export function LocationCard({
       : "text-warning";
   const visibleAmenities = amenities.slice(0, 4);
   const hiddenCount = Math.max(0, amenities.length - visibleAmenities.length);
+  const paymentBlocked = (paymentHiddenListings ?? 0) > 0;
 
   return (
     <Card
@@ -178,6 +183,15 @@ export function LocationCard({
               <Badge variant={review.variant} dot>
                 {review.label}
               </Badge>
+              {paymentBlocked ? (
+                <Badge variant="warning" dot className="ml-1.5">
+                  Payment setup required
+                </Badge>
+              ) : marketplacePaymentStatus === "ready" ? (
+                <Badge variant="success" dot className="ml-1.5">
+                  Payments ready
+                </Badge>
+              ) : null}
             </div>
           </div>
           <Button
@@ -240,6 +254,19 @@ export function LocationCard({
             </Button>
           </div>
         )}
+
+        {paymentBlocked ? (
+          <div className="mb-3 rounded-[8px] border border-warning/30 bg-warning-soft px-3 py-2">
+            <div className="text-[12px] leading-5 text-warning">
+              Hidden from search until payment setup is complete.
+            </div>
+            <Link href="/owner/settings/payments">
+              <Button type="button" variant="default" size="sm" className="mt-2">
+                Fix payments
+              </Button>
+            </Link>
+          </div>
+        ) : null}
 
         <div className="flex gap-1.5">
           <Link

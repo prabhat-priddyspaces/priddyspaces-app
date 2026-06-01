@@ -19,6 +19,7 @@ from app.models.enums import (
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
+from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.space import Space
 from app.models.user import User
@@ -44,6 +45,17 @@ def _seed_owner_location(db):
     db.add(org)
     db.commit()
     db.refresh(org)
+    db.add(
+        OwnerPaymentSetting(
+            organization_id=org.id,
+            tenant_id=org.id,
+            provider="stripe",
+            is_enabled=True,
+            stripe_publishable_key="pk_test_assistant",
+            stripe_secret_key_encrypted="sk_test_assistant",
+        )
+    )
+    db.commit()
 
     db.add(
         OrganizationMember(

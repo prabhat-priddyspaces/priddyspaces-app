@@ -122,6 +122,31 @@ def _seed_payment_method(db, member: User, space: Space) -> MemberOwnerPaymentMe
     return method
 
 
+def _seed_owner_payment_setting(db, space: Space) -> OwnerPaymentSetting:
+    existing = (
+        db.query(OwnerPaymentSetting)
+        .filter(
+            OwnerPaymentSetting.organization_id == space.tenant_id,
+            OwnerPaymentSetting.provider == "stripe",
+        )
+        .first()
+    )
+    if existing:
+        return existing
+    setting = OwnerPaymentSetting(
+        organization_id=space.tenant_id,
+        tenant_id=space.tenant_id,
+        provider="stripe",
+        is_enabled=True,
+        stripe_publishable_key="pk_test_owner",
+        stripe_secret_key_encrypted="sk_test_owner",
+    )
+    db.add(setting)
+    db.commit()
+    db.refresh(setting)
+    return setting
+
+
 def _seed_extra_payment_method(
     db,
     member: User,
@@ -204,6 +229,7 @@ def _request_payload(space: Space, method: MemberOwnerPaymentMethod | None, day:
 
 def test_conference_day_rate_preview_uses_day_rate_label(db_session, client_factory):
     _, space = _seed_owner_space(db_session)
+    _seed_owner_payment_setting(db_session, space)
     client = client_factory({})
 
     response = client.post(
@@ -794,6 +820,7 @@ def test_sendgrid_webhook_updates_booking_outbound(
 
 def test_guest_booking_request_survives_notification_failure(db_session, client_factory, monkeypatch):
     _owner, space = _seed_owner_space(db_session)
+    _seed_owner_payment_setting(db_session, space)
 
     def fail_notification(*args, **kwargs):
         raise RuntimeError("email service unavailable")
@@ -884,6 +911,7 @@ def test_guest_booking_request_hides_inactive_location_and_pending_owner(db_sess
 
 def test_guest_booking_request_rejects_buffered_booking_conflict(db_session, client_factory):
     _owner, space = _seed_owner_space(db_session)
+    _seed_owner_payment_setting(db_session, space)
     booking = Booking(
         user_id=1,
         space_id=space.id,

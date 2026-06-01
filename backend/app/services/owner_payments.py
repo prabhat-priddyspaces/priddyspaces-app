@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,7 +13,7 @@ from app.core.config import settings
 from app.core.crypto import decrypt_secret
 from app.models.booking_request import BookingRequest
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
-from app.models.enums import BookingRequestStatus
+from app.models.enums import AvailabilityStatus, BookingRequestStatus, LocationStatus, SpaceVisibility
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.owner_payment_setting import OwnerPaymentSetting
@@ -35,6 +36,27 @@ OPEN_BOOKING_STATUSES = {
 }
 
 SUPPORTED_PAYMENT_PROVIDERS = {"stripe", "cardpointe"}
+PAYMENT_READINESS_BOOKING_ERROR = "This listing is not accepting bookings until the owner configures payments."
+
+
+@dataclass
+class PaymentProviderReadiness:
+    provider: str
+    ready: bool
+    blockers: list[str]
+    setting: OwnerPaymentSetting | None = None
+
+
+@dataclass
+class OrganizationPaymentReadiness:
+    organization_public_id: str
+    organization_name: str
+    provider: str | None
+    status: str
+    blockers: list[str]
+    public_listing_count: int
+    marketplace_visible_listing_count: int
+    payment_hidden_listing_count: int
 
 
 def _has_secret(value: str | None) -> bool:
@@ -44,7 +66,7 @@ def _has_secret(value: str | None) -> bool:
         return False
 
 
-def validate_owner_payment_setting_ready(setting: OwnerPaymentSetting) -> None:
+def owner_payment_setting_missing_fields(setting: OwnerPaymentSetting) -> list[str]:
     missing: list[str] = []
     provider = normalize_provider(setting.provider)
     if provider == "stripe":
@@ -63,6 +85,11 @@ def validate_owner_payment_setting_ready(setting: OwnerPaymentSetting) -> None:
             missing.append("CardPointe gateway site")
         if not (setting.cardpointe_tokenizer_url or "").strip():
             missing.append("CardPointe tokenizer URL")
+    return missing
+
+
+def validate_owner_payment_setting_ready(setting: OwnerPaymentSetting) -> None:
+    missing = owner_payment_setting_missing_fields(setting)
     if missing:
         raise HTTPException(
             status_code=400,
@@ -88,6 +115,145 @@ def resolve_payment_provider(db: Session, space: Space) -> tuple[str, Organizati
         or settings.DEFAULT_PAYMENT_PROVIDER
     )
     return provider, organization, location
+
+
+def provider_display_name(provider: str | None) -> str:
+    if provider == "cardpointe":
+        return "CardPointe"
+    if provider == "stripe":
+        return "Stripe"
+    return (provider or "Payment").strip().title()
+
+
+def get_owner_payment_readiness(
+    db: Session,
+    organization_id: int,
+    provider: str,
+) -> PaymentProviderReadiness:
+    setting = (
+        db.query(OwnerPaymentSetting)
+        .filter(
+            OwnerPaymentSetting.organization_id == organization_id,
+            OwnerPaymentSetting.provider == provider,
+        )
+        .first()
+    )
+    label = provider_display_name(provider)
+    if not setting:
+        return PaymentProviderReadiness(
+            provider=provider,
+            ready=False,
+            blockers=[f"{label} payment provider is not configured"],
+        )
+    if not setting.is_enabled:
+        return PaymentProviderReadiness(
+            provider=provider,
+            ready=False,
+            blockers=[f"{label} payment provider is disabled"],
+            setting=setting,
+        )
+    missing = owner_payment_setting_missing_fields(setting)
+    if missing:
+        return PaymentProviderReadiness(
+            provider=provider,
+            ready=False,
+            blockers=["Payment provider setup incomplete: " + ", ".join(missing)],
+            setting=setting,
+        )
+    if (setting.connection_status or "").strip().lower() == "failed":
+        return PaymentProviderReadiness(
+            provider=provider,
+            ready=False,
+            blockers=[f"{label} connection test failed"],
+            setting=setting,
+        )
+    return PaymentProviderReadiness(provider=provider, ready=True, blockers=[], setting=setting)
+
+
+def space_payment_readiness(db: Session, space: Space) -> PaymentProviderReadiness:
+    try:
+        provider, organization, _location = resolve_payment_provider(db, space)
+    except HTTPException as exc:
+        return PaymentProviderReadiness(
+            provider="unknown",
+            ready=False,
+            blockers=[str(exc.detail)],
+        )
+    return get_owner_payment_readiness(db, organization.id, provider)
+
+
+def space_payment_is_marketplace_ready(db: Session, space: Space) -> bool:
+    return space_payment_readiness(db, space).ready
+
+
+def require_space_payment_ready_for_public_surface(db: Session, space: Space, detail: str = "Space not found") -> None:
+    if not space_payment_is_marketplace_ready(db, space):
+        raise HTTPException(status_code=404, detail=detail)
+
+
+def require_space_payment_ready_for_booking(db: Session, space: Space) -> None:
+    if not space_payment_is_marketplace_ready(db, space):
+        raise HTTPException(status_code=400, detail=PAYMENT_READINESS_BOOKING_ERROR)
+
+
+def organization_marketplace_payment_readiness(
+    db: Session,
+    organization: Organization,
+) -> OrganizationPaymentReadiness:
+    rows = (
+        db.query(Space)
+        .join(Location, Location.id == Space.location_id)
+        .filter(
+            Location.organization_id == organization.id,
+            Location.status == LocationStatus.ACTIVE,
+            Space.visibility == SpaceVisibility.PUBLIC,
+            Space.availability_status == AvailabilityStatus.AVAILABLE,
+        )
+        .all()
+    )
+    if not rows:
+        return OrganizationPaymentReadiness(
+            organization_public_id=organization.public_id,
+            organization_name=organization.name,
+            provider=None,
+            status="no_public_listings",
+            blockers=[],
+            public_listing_count=0,
+            marketplace_visible_listing_count=0,
+            payment_hidden_listing_count=0,
+        )
+
+    providers: set[str] = set()
+    blockers: list[str] = []
+    ready_count = 0
+    for space in rows:
+        readiness = space_payment_readiness(db, space)
+        providers.add(readiness.provider)
+        if readiness.ready:
+            ready_count += 1
+            continue
+        for blocker in readiness.blockers:
+            if blocker not in blockers:
+                blockers.append(blocker)
+
+    hidden_count = len(rows) - ready_count
+    if hidden_count == 0:
+        status = "ready"
+    elif ready_count > 0:
+        status = "partial"
+    else:
+        status = "blocked"
+    provider = next(iter(providers)) if len(providers) == 1 else "mixed"
+    return OrganizationPaymentReadiness(
+        organization_public_id=organization.public_id,
+        organization_name=organization.name,
+        provider=provider,
+        status=status,
+        blockers=blockers,
+        public_listing_count=len(rows),
+        marketplace_visible_listing_count=ready_count,
+        payment_hidden_listing_count=hidden_count,
+    )
 
 
 def get_enabled_owner_payment_setting(
