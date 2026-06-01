@@ -89,6 +89,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationNotice, setLocationNotice] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autoLocateAttemptedRef = useRef(false);
@@ -175,7 +176,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
     setForm((current) => ({ ...current, max_price: value }));
   }
 
-  function updateSearch(nextForm = form) {
+  function buildSearchHref(nextForm = form) {
     const params = new URLSearchParams();
     const entries: Array<[keyof typeof DEFAULT_FORM, string]> = [
       ["q", nextForm.q],
@@ -204,12 +205,67 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
       }
     }
     const nextQuery = params.toString();
-    router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+    return nextQuery ? `${pathname}?${nextQuery}` : pathname;
+  }
+
+  function updateSearch(nextForm = form) {
+    router.push(buildSearchHref(nextForm));
+  }
+
+  function valueFromForm(data: FormData, key: keyof typeof DEFAULT_FORM) {
+    const value = data.get(key);
+    return typeof value === "string" ? value : "";
+  }
+
+  function submitSearchFromForm(
+    formElement: HTMLFormElement,
+    options: { documentNavigation?: boolean } = {},
+  ) {
+    const data = new FormData(formElement);
+    const q = valueFromForm(data, "q");
+    const qChangedOutsideReact = q !== form.q;
+    const nextForm = {
+      ...form,
+      q,
+      date: valueFromForm(data, "date"),
+      start_time: valueFromForm(data, "start_time"),
+      end_time: valueFromForm(data, "end_time"),
+      capacity: valueFromForm(data, "capacity"),
+      max_price: valueFromForm(data, "max_price"),
+      max_price_monthly: valueFromForm(data, "max_price_monthly"),
+      sort: valueFromForm(data, "sort"),
+      lat: qChangedOutsideReact ? "" : valueFromForm(data, "lat"),
+      lng: qChangedOutsideReact ? "" : valueFromForm(data, "lng"),
+      radius_miles: valueFromForm(data, "radius_miles"),
+    };
+    const href = buildSearchHref(nextForm);
+    const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent.toLowerCase();
+    if (options.documentNavigation && typeof window !== "undefined" && !userAgent.includes("jsdom")) {
+      window.location.assign(href);
+      return;
+    }
+    router.push(href);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (event.defaultPrevented) return;
     event.preventDefault();
-    updateSearch();
+    submitSearchFromForm(event.currentTarget);
+  }
+
+  function bindSearchForm(node: HTMLFormElement | null) {
+    formRef.current = node;
+  }
+
+  function bindSearchButton(node: HTMLButtonElement | null) {
+    if (!node) return;
+    node.onclick = (event) => {
+      event.preventDefault();
+      const formElement = formRef.current || node.form;
+      if (formElement) {
+        submitSearchFromForm(formElement, { documentNavigation: true });
+      }
+    };
   }
 
   // Keep the autocomplete callback fresh so it uses the latest form state.
@@ -339,9 +395,16 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
         {/* Search bar — divided horizontal card */}
         <Card padded={false} className="overflow-hidden mb-3">
           <form
+            ref={bindSearchForm}
             onSubmit={handleSubmit}
+            action={pathname}
+            method="get"
             className="grid gap-0 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] divide-y lg:divide-y-0 lg:divide-x divide-line"
           >
+            <input type="hidden" name="sort" value={form.sort} />
+            <input type="hidden" name="lat" value={form.lat} />
+            <input type="hidden" name="lng" value={form.lng} />
+            <input type="hidden" name="radius_miles" value={form.radius_miles} />
             <SearchField
               icon={<MapPin size={13} className="text-brand" />}
               label="Where"
@@ -349,6 +412,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               <div className="flex items-center gap-2">
                 <input
                   ref={searchInputRef}
+                  name="q"
                   value={form.q}
                   onChange={(event) => {
                     const value = event.target.value;
@@ -383,6 +447,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             >
               <input
                 type="date"
+                name="date"
                 value={form.date}
                 onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
                 className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
@@ -397,6 +462,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 >
                   <input
                     type="time"
+                    name="start_time"
                     value={form.start_time}
                     onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))}
                     className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
@@ -408,6 +474,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 >
                   <input
                     type="time"
+                    name="end_time"
                     value={form.end_time}
                     onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))}
                     className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
@@ -422,6 +489,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 >
                   <input
                     type="number"
+                    name="capacity"
                     min="1"
                     value={form.capacity}
                     onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))}
@@ -435,6 +503,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 >
                   <input
                     type="number"
+                    name={config.priceParamKey}
                     min="0"
                     value={
                       config.priceParamKey === "max_price_monthly"
@@ -451,6 +520,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
 
             <div className="p-2 flex items-stretch">
               <button
+                ref={bindSearchButton}
                 type="submit"
                 className="inline-flex w-full h-11 lg:h-auto items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-white transition hover:bg-brand-hover lg:min-w-[120px]"
               >
