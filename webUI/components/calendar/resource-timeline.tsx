@@ -8,7 +8,7 @@ import {
   CalendarSpace,
   SPACE_TYPE_LABEL,
   formatTime,
-  statusColorClass,
+  statusEventClass,
 } from "@/lib/calendar";
 
 interface ResourceTimelineProps {
@@ -153,10 +153,11 @@ export function ResourceTimeline({
                     <button
                       key={`${event.kind}-${event.public_id}`}
                       type="button"
+                      data-testid={`calendar-event-${event.public_id}`}
                       onClick={() => onEventClick?.(event)}
                       className={cn(
                         "absolute top-1 bottom-1 overflow-hidden rounded-sm border px-2 text-left text-xs leading-tight transition hover:opacity-90",
-                        statusColorClass(event.status)
+                        statusEventClass(event.status)
                       )}
                       style={{ left, width: Math.max(width, 24) }}
                       title={`${event.member.name} · ${event.status}`}

@@ -7,6 +7,7 @@ import { CalendarFilterBar, CalendarFilters } from "@/components/calendar/calend
 import { EventList } from "@/components/calendar/event-list";
 import { EventQuickActionPopover } from "@/components/calendar/event-quick-action-popover";
 import { MonthGrid } from "@/components/calendar/month-grid";
+import { PersonalDayGrid } from "@/components/calendar/personal-day-grid";
 import { ResourceTimeline } from "@/components/calendar/resource-timeline";
 import { WeekGrid } from "@/components/calendar/week-grid";
 import {
@@ -102,6 +103,13 @@ export function CalendarBoard({
     );
   }, [data, filters?.memberSearch]);
 
+  const displaySpaces = useMemo(() => {
+    if (!data) return [];
+    if (viewer !== "member") return data.spaces;
+    const eventSpaceIds = new Set(filteredEvents.map((event) => event.space_public_id));
+    return data.spaces.filter((space) => eventSpaceIds.has(space.public_id));
+  }, [data, filteredEvents, viewer]);
+
   const headerLabel = useMemo(() => {
     if (view === "month") {
       return anchor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -152,6 +160,7 @@ export function CalendarBoard({
           </Button>
           <input
             type="date"
+            data-testid="calendar-date-input"
             value={isoDateOnly(anchor)}
             onChange={(e) => {
               if (!e.target.value) return;
@@ -178,11 +187,18 @@ export function CalendarBoard({
         <WeekGrid windowStart={window.start} events={filteredEvents} onEventClick={setSelected} />
       ) : view === "list" ? (
         <EventList events={filteredEvents} onEventClick={setSelected} />
+      ) : viewer === "member" && view === "day" ? (
+        <PersonalDayGrid
+          windowStart={window.start}
+          spaces={data.spaces}
+          events={filteredEvents}
+          onEventClick={setSelected}
+        />
       ) : (
         <ResourceTimeline
           windowStart={window.start}
           windowEnd={window.end}
-          spaces={data.spaces}
+          spaces={displaySpaces}
           events={filteredEvents}
           onEventClick={setSelected}
         />

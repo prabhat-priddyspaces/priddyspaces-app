@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.db.deps import get_db
 from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
+from app.models.enums import SpaceType
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.space import Space
@@ -23,6 +25,22 @@ from app.services.platform_auth import (
 )
 
 router = APIRouter(prefix="/api", tags=["me"])
+
+
+def _parse_space_types(values: list[str] | None) -> set[SpaceType] | None:
+    if not values:
+        return None
+    out: set[SpaceType] = set()
+    for value in values:
+        try:
+            out.add(SpaceType(value))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown space_type: {value}")
+    return out
+
+
+def _empty_calendar(start: datetime, end: datetime) -> CalendarResponse:
+    return CalendarResponse(start=start, end=end, events=[], spaces=[], truncated=False)
 
 @router.get("/me", response_model=MeOut)
 def get_me(
@@ -71,31 +89,57 @@ def get_me(
 def my_calendar(
     start: datetime = Query(...),
     end: datetime = Query(...),
+    location_public_id: str | None = Query(None),
+    space_type: list[str] | None = Query(None),
+    space_public_id: list[str] | None = Query(None),
+    status: list[str] | None = Query(None),
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ) -> CalendarResponse:
     user = get_effective_user(db, token)
-    # Find every location where this user has any booking, request, or subscription.
+    space_type_filter = _parse_space_types(space_type)
+
+    # Find only spaces this user has touched. The shared calendar builder renders
+    # every space it receives, so member views must never pass a whole location.
     space_ids: set[int] = set()
     for (sid,) in db.query(Booking.space_id).filter(Booking.user_id == user.id).distinct():
+        space_ids.add(sid)
+    for (sid,) in (
+        db.query(BookingRequest.space_id).filter(BookingRequest.user_id == user.id).distinct()
+    ):
         space_ids.add(sid)
     for (sid,) in (
         db.query(Subscription.space_id).filter(Subscription.user_id == user.id).distinct()
     ):
         space_ids.add(sid)
-    location_ids: set[int] = set()
-    if space_ids:
-        for (lid,) in (
-            db.query(Space.location_id).filter(Space.id.in_(space_ids)).distinct()
-        ):
-            location_ids.add(lid)
-    if not location_ids:
-        return CalendarResponse(start=start, end=end, events=[], spaces=[], truncated=False)
+    if not space_ids:
+        return _empty_calendar(start, end)
+
+    spaces_query = db.query(Space).filter(Space.id.in_(space_ids))
+    if location_public_id:
+        location = db.query(Location).filter(Location.public_id == location_public_id).first()
+        if not location:
+            return _empty_calendar(start, end)
+        spaces_query = spaces_query.filter(Space.location_id == location.id)
+    if space_type_filter:
+        spaces_query = spaces_query.filter(Space.space_type.in_(space_type_filter))
+    if space_public_id:
+        spaces_query = spaces_query.filter(Space.public_id.in_(space_public_id))
+
+    scoped_spaces = spaces_query.all()
+    scoped_space_ids = {space.id for space in scoped_spaces}
+    location_ids = {space.location_id for space in scoped_spaces}
+    if not scoped_space_ids or not location_ids:
+        return _empty_calendar(start, end)
+
     return build_calendar_events(
         db,
         location_ids=location_ids,
         start=start,
         end=end,
+        space_types=space_type_filter,
+        space_ids=scoped_space_ids,
+        statuses=set(status) if status else None,
         user_id_filter=user.id,
     )
 
