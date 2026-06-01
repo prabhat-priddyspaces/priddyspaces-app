@@ -12,6 +12,7 @@ from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.enums import (
     AvailabilityStatus,
+    BookingRequestKind,
     BookingRequestStatus,
     BookingStatus,
     SpaceType,
@@ -80,6 +81,36 @@ def _granularity_minutes(location: Location) -> int:
 
 def _is_full_day_mode(*, booking_mode: str | None, full_day: bool) -> bool:
     return full_day or booking_mode == "day_pass"
+
+
+def is_shared_desk_day_pass(
+    space: Space,
+    *,
+    booking_mode: str | None = None,
+    full_day: bool = False,
+    request_kind: str | BookingRequestKind | None = None,
+) -> bool:
+    request_kind_value = getattr(request_kind, "value", request_kind)
+    return space.space_type == SpaceType.SHARED_DESK and (
+        full_day
+        or booking_mode == "day_pass"
+        or request_kind_value == BookingRequestKind.DAILY_BOOKING.value
+    )
+
+
+def booking_blocks_inventory(
+    space: Space,
+    *,
+    booking_mode: str | None = None,
+    full_day: bool = False,
+    request_kind: str | BookingRequestKind | None = None,
+) -> bool:
+    return not is_shared_desk_day_pass(
+        space,
+        booking_mode=booking_mode,
+        full_day=full_day,
+        request_kind=request_kind,
+    )
 
 
 def _add_months_clamped(dt: datetime, months: int) -> datetime:
@@ -220,9 +251,10 @@ def validate_occurrences_available(
         if sub_exists:
             raise HTTPException(status_code=409, detail="Space already subscribed for that date")
 
-        is_shared_day_pass = (
-            space.space_type == SpaceType.SHARED_DESK
-            and (full_day or booking_mode == "day_pass")
+        is_shared_day_pass = is_shared_desk_day_pass(
+            space,
+            booking_mode=booking_mode,
+            full_day=full_day,
         )
         if is_shared_day_pass:
             requested_seats = max(1, seats_requested or 1)
@@ -258,6 +290,7 @@ def validate_occurrences_available(
         booking_query = db.query(Booking).filter(
             Booking.space_id == space.id,
             Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
+            Booking.blocks_inventory.is_(True),
             func.coalesce(Booking.inventory_start_datetime, Booking.start_datetime) < occurrence.inventory_end_datetime,
             func.coalesce(Booking.inventory_end_datetime, Booking.end_datetime) > occurrence.inventory_start_datetime,
         )
@@ -290,6 +323,7 @@ def create_pending_booking_hold(
     occurrence: InventoryOccurrence,
     booking_request_id: int | None = None,
     booking_series_id: int | None = None,
+    blocks_inventory: bool = True,
 ) -> Booking:
     booking = Booking(
         user_id=user_id,
@@ -303,6 +337,7 @@ def create_pending_booking_hold(
         booking_series_id=booking_series_id,
         recurrence_sequence=occurrence.sequence,
         status=BookingStatus.PENDING,
+        blocks_inventory=blocks_inventory,
     )
     db.add(booking)
     db.flush()
