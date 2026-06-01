@@ -136,6 +136,80 @@ def test_calendar_returns_booking_event(db_session, client_factory):
     assert ev["member"]["name"] == "Cal Member"
 
 
+def test_calendar_filters_by_organization_public_id_for_multi_org_owner(db_session, client_factory):
+    owner, org_a, _loc_a, space_a = _seed_owner_with_space(db_session)
+    member = _seed_member(db_session)
+
+    org_b = Organization(name="Second Cal Org", owner_id=owner.id)
+    db_session.add(org_b)
+    db_session.commit()
+    db_session.refresh(org_b)
+    db_session.add(
+        OrganizationMember(
+            organization_id=org_b.id,
+            tenant_id=org_b.id,
+            user_id=owner.id,
+            role=UserRole.OWNER,
+        )
+    )
+    loc_b = Location(
+        organization_id=org_b.id,
+        tenant_id=org_b.id,
+        name="Second Location",
+        address="2 Calendar Ave",
+        city="Testville",
+        timezone="UTC",
+    )
+    db_session.add(loc_b)
+    db_session.commit()
+    db_session.refresh(loc_b)
+    space_b = Space(
+        location_id=loc_b.id,
+        tenant_id=org_b.id,
+        name="Room 202",
+        space_type=SpaceType.CONFERENCE_ROOM,
+        capacity=4,
+        availability_status=AvailabilityStatus.AVAILABLE,
+        price_daily=200,
+    )
+    db_session.add(space_b)
+    db_session.commit()
+    db_session.refresh(space_b)
+
+    db_session.add_all(
+        [
+            Booking(
+                user_id=member.id,
+                space_id=space_a.id,
+                tenant_id=org_a.id,
+                start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc),
+                status=BookingStatus.CONFIRMED,
+            ),
+            Booking(
+                user_id=member.id,
+                space_id=space_b.id,
+                tenant_id=org_b.id,
+                start_datetime=datetime(2026, 5, 6, 10, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc),
+                status=BookingStatus.CONFIRMED,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    client = client_factory(_owner_token(owner))
+    start, end = _window()
+    resp = client.get(
+        f"/api/owner/calendar?{_qs(start, end, organization_public_id=org_a.public_id)}"
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [space["public_id"] for space in data["spaces"]] == [space_a.public_id]
+    assert [event["space_public_id"] for event in data["events"]] == [space_a.public_id]
+
+
 def test_calendar_filters_to_member_and_allows_full_member_window(db_session, client_factory):
     owner, _org, _loc, space = _seed_owner_with_space(db_session)
     member = _seed_member(db_session, email="member-a@example.com", sub="sub-member-a")

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -27,6 +27,11 @@ import {
 import { cn } from "@/lib/utils";
 
 type TabKey = "overview" | "upcoming" | "past" | "notes";
+
+interface Organization {
+  public_id: string;
+  name: string;
+}
 
 const TABS: { value: TabKey; label: string }[] = [
   { value: "overview", label: "Overview" },
@@ -58,7 +63,12 @@ function memberActivityWindow(detail: MemberDetail): { start: Date; end: Date } 
 
 export function OwnerMemberDetailClient() {
   const params = useParams<{ public_id: string }>();
+  const searchParams = useSearchParams();
   const public_id = params?.public_id ?? "";
+  const requestedOrgId = searchParams.get("organization_public_id") ?? "";
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(true);
+  const [orgId, setOrgId] = useState("");
   const [member, setMember] = useState<MemberDetail | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,18 +84,65 @@ export function OwnerMemberDetailClient() {
   const [draftTags, setDraftTags] = useState("");
   const [draftNotes, setDraftNotes] = useState("");
 
+  const membersHref = useMemo(() => {
+    if (!orgId) return "/owner/members";
+    const params = new URLSearchParams({ organization_public_id: orgId });
+    return `/owner/members?${params.toString()}`;
+  }, [orgId]);
+
+  useEffect(() => {
+    let active = true;
+    const token = getAccessToken() ?? undefined;
+    if (!token) {
+      setOrgsLoading(false);
+      setLoading(false);
+      setError("Sign in required");
+      return;
+    }
+
+    apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token)
+      .then((list) => {
+        if (!active) return;
+        setOrgs(list);
+        const requested = list.find((org) => org.public_id === requestedOrgId);
+        setOrgId((current) => requested?.public_id || current || list[0]?.public_id || "");
+        setOrgsLoading(false);
+        if (list.length === 0) setLoading(false);
+      })
+      .catch((err) => {
+        if (!active) return;
+        if (requestedOrgId) {
+          setOrgId(requestedOrgId);
+        } else {
+          setError(err instanceof Error ? err.message : "Failed to load organizations");
+          setLoading(false);
+        }
+        setOrgsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [requestedOrgId]);
+
   const load = useCallback(async () => {
+    if (orgsLoading) return;
     const token = getAccessToken() ?? undefined;
     if (!token) {
       setLoading(false);
       setError("Sign in required");
       return;
     }
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
+      const memberParams = new URLSearchParams({ organization_public_id: orgId });
       const detail = await apiFetch<MemberDetail>(
-        `/api/owner/members/${public_id}`,
+        `/api/owner/members/${encodeURIComponent(public_id)}?${memberParams.toString()}`,
         { method: "GET" },
         token
       );
@@ -102,6 +159,7 @@ export function OwnerMemberDetailClient() {
       params.set("start", start.toISOString());
       params.set("end", end.toISOString());
       params.set("member_public_id", public_id);
+      params.set("organization_public_id", orgId);
       params.set("include", "bookings,requests,subscriptions");
       const calendar = await apiFetch<CalendarResponse>(
         `/api/owner/calendar?${params.toString()}`,
@@ -112,15 +170,17 @@ export function OwnerMemberDetailClient() {
         setEvents(calendar.events.filter((e) => e.member.public_id === public_id));
       }
     } catch (err) {
+      setMember(null);
+      setEvents([]);
       setError(err instanceof Error ? err.message : "Failed to load member");
     } finally {
       setLoading(false);
     }
-  }, [public_id]);
+  }, [orgId, orgsLoading, public_id]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!orgsLoading) load();
+  }, [load, orgsLoading]);
 
   const { upcoming, past } = useMemo(() => {
     const now = Date.now();
@@ -137,17 +197,18 @@ export function OwnerMemberDetailClient() {
 
   async function save() {
     const token = getAccessToken() ?? undefined;
-    if (!token) return;
+    if (!token || !orgId) return;
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
+      const memberParams = new URLSearchParams({ organization_public_id: orgId });
       const tags = draftTags
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
       const updated = await apiFetch<MemberDetail>(
-        `/api/owner/members/${public_id}`,
+        `/api/owner/members/${encodeURIComponent(public_id)}?${memberParams.toString()}`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -182,7 +243,7 @@ export function OwnerMemberDetailClient() {
       <AppShell>
         <div className="text-sm text-error">{error || "Member not found"}</div>
         <div className="mt-4">
-          <Link href="/owner/members" className="text-sm text-accent hover:underline">
+          <Link href={membersHref} className="text-sm text-accent hover:underline">
             ← Back to members
           </Link>
         </div>
@@ -195,7 +256,7 @@ export function OwnerMemberDetailClient() {
       <div className="grid gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <Link href="/owner/members" className="text-xs text-accent hover:underline">
+            <Link href={membersHref} className="text-xs text-accent hover:underline">
               ← Members
             </Link>
             <h2 className="mt-1 text-2xl font-semibold text-textPrimary">{member.name}</h2>
@@ -217,6 +278,22 @@ export function OwnerMemberDetailClient() {
               ) : null}
             </div>
           </div>
+          {orgs.length > 1 ? (
+            <label className="grid min-w-[220px] gap-1 text-xs text-textMuted">
+              Organization
+              <select
+                value={orgId}
+                onChange={(e) => setOrgId(e.target.value)}
+                className="h-9 rounded-sm border border-border bg-white px-2 text-sm text-textPrimary"
+              >
+                {orgs.map((org) => (
+                  <option key={org.public_id} value={org.public_id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <a
             href={`mailto:${member.email}`}
             className="inline-flex h-9 items-center rounded-sm border border-border bg-white px-3 text-xs text-textSecondary hover:bg-surface2"

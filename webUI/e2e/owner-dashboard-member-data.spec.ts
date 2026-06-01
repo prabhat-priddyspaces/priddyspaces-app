@@ -164,6 +164,76 @@ test("owner dashboard uses live calendar and payment data instead of sample card
   );
 });
 
+test("owner members passes organization context for multi-org owners", async ({ page }) => {
+  const memberRequests: URL[] = [];
+
+  await mockSession(page, "owner");
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("owner"));
+      return;
+    }
+    if (key === "GET /api/owner/marketplace-readiness") {
+      await json(route, []);
+      return;
+    }
+    if (key === "GET /api/orgs") {
+      await json(route, [
+        { public_id: "org_1", name: "Downtown Cowork" },
+        { public_id: "org_2", name: "Uptown Cowork" },
+      ]);
+      return;
+    }
+    if (key === "GET /api/owner/members") {
+      memberRequests.push(url);
+      const orgId = url.searchParams.get("organization_public_id");
+      if (!orgId) {
+        await json(route, { detail: "organization_public_id required for multi-org owner" }, 400);
+        return;
+      }
+      await json(route, [
+        {
+          user_public_id: orgId === "org_2" ? "member_2" : "member_1",
+          organization_public_id: orgId,
+          name: orgId === "org_2" ? "Uptown Member" : "Downtown Member",
+          email: orgId === "org_2" ? "uptown@example.com" : "downtown@example.com",
+          status: "active",
+          phone: null,
+          company_name: null,
+          tags: [],
+          notes_preview: null,
+          materialized: false,
+          stats: memberStats(new Date(), new Date()),
+        },
+      ]);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/owner/members");
+
+  await expect(page.getByText("Downtown Member")).toBeVisible();
+  await expect.poll(() => memberRequests.at(-1)?.searchParams.get("organization_public_id")).toBe("org_1");
+  await expect(page.getByRole("link", { name: "Downtown Member" })).toHaveAttribute(
+    "href",
+    /organization_public_id=org_1/,
+  );
+
+  await page.getByLabel("Organization").selectOption("org_2");
+
+  await expect(page.getByText("Uptown Member")).toBeVisible();
+  await expect.poll(() => memberRequests.at(-1)?.searchParams.get("organization_public_id")).toBe("org_2");
+  await expect(page.getByRole("link", { name: "Uptown Member" })).toHaveAttribute(
+    "href",
+    /organization_public_id=org_2/,
+  );
+});
+
 test("owner member detail shows member-scoped upcoming and past activity", async ({ page }) => {
   const now = new Date();
   const pastStart = withTime(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1), 10);
@@ -171,6 +241,7 @@ test("owner member detail shows member-scoped upcoming and past activity", async
   const futureStart = withTime(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), 12);
   const futureEnd = withTime(futureStart, 13);
   let calendarQuery: URL | null = null;
+  let detailQuery: URL | null = null;
 
   await mockSession(page, "owner");
   await page.route("**/api/**", async (route) => {
@@ -185,7 +256,12 @@ test("owner member detail shows member-scoped upcoming and past activity", async
       await json(route, { enabled: false, primary_model: "", summary_model: "" });
       return;
     }
+    if (key === "GET /api/orgs") {
+      await json(route, [{ public_id: "org_1", name: "Downtown Cowork" }]);
+      return;
+    }
     if (key === "GET /api/owner/members/member_1") {
+      detailQuery = url;
       await json(route, {
         user_public_id: "member_1",
         organization_public_id: "org_1",
@@ -234,7 +310,9 @@ test("owner member detail shows member-scoped upcoming and past activity", async
   await page.goto("/owner/members/member_1");
 
   await expect(page.getByRole("heading", { name: "Test Member" })).toBeVisible();
+  await expect.poll(() => detailQuery?.searchParams.get("organization_public_id")).toBe("org_1");
   await expect.poll(() => calendarQuery?.searchParams.get("member_public_id")).toBe("member_1");
+  await expect.poll(() => calendarQuery?.searchParams.get("organization_public_id")).toBe("org_1");
 
   await page.getByRole("button", { name: "Upcoming" }).click();
   await expect(page.getByText("Future Room")).toBeVisible();
