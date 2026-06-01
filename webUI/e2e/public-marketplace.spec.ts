@@ -609,6 +609,11 @@ test("public marketplace search excludes leased private offices", async ({ page 
       ),
     )
     .toBe(true);
+
+  await page.getByRole("link", { name: "Open Available Private Office" }).click();
+  await expect(page).toHaveURL(/\/spaces\/space_open_private\?/);
+  await expect(page).toHaveURL(/date=2026-06-15/);
+  await expect(page).toHaveURL(/move_in=2026-06-15/);
 });
 
 test("day-pass detail refreshes remaining seats after a guest request", async ({ page }) => {

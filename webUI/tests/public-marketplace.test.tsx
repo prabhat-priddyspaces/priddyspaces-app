@@ -4,6 +4,8 @@ import { vi } from "vitest";
 
 import { PublicMarketplaceBrowser } from "../components/public-marketplace-browser";
 import { PublicSpaceDetailView } from "../components/public-space-detail-view";
+import { LeaseBookingWidget } from "../components/lease-booking-widget";
+import { buildMarketplaceSpaceHref } from "../lib/public-marketplace";
 
 const { pushMock, apiFetchMock, reverseGeocodeMock, routePath, searchQuery } = vi.hoisted(() => ({
   pushMock: vi.fn(),
@@ -342,6 +344,18 @@ describe("public marketplace flows", () => {
 
     expect(pushMock).toHaveBeenCalledWith(
       "/private-offices?q=Miami&date=2026-06-15&capacity=4&max_price_monthly=2000",
+    );
+  });
+
+  it("passes private-office search date into the listing move-in date", () => {
+    expect(
+      buildMarketplaceSpaceHref(
+        "space_private",
+        "private-offices",
+        "q=Miami&date=2026-06-15&capacity=4",
+      ),
+    ).toBe(
+      "/spaces/space_private?back=%2Fprivate-offices%3Fq%3DMiami%26date%3D2026-06-15%26capacity%3D4&date=2026-06-15&move_in=2026-06-15",
     );
   });
 
@@ -765,5 +779,61 @@ describe("public marketplace flows", () => {
     expect(await screen.findByRole("heading", { name: "Private Office 4" })).toBeInTheDocument();
     expect(screen.getByText("$1,800/month*")).toBeInTheDocument();
     expect(await screen.findByText("$1,900/mo*")).toBeInTheDocument();
+  });
+
+  it("allows a currently leased private office when the selected future move-in is available", async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (url.includes("/availability")) {
+        const parsed = new URL(url, "http://localhost");
+        expect(parsed.searchParams.get("from")).toBe("2030-09-10");
+        return Promise.resolve({
+          space_public_id: "space_lease",
+          timezone: "America/New_York",
+          granularity_minutes: 60,
+          availability_start_time: "09:00",
+          availability_end_time: "17:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          hourly_price: null,
+          daily_price: null,
+          days: [{ date: "2030-09-10", fully_blocked: false, busy_intervals: [] }],
+        });
+      }
+      if (url.startsWith("/api/membership-plans/public")) {
+        return Promise.resolve([
+          {
+            public_id: "plan_lease",
+            booking_mode: "private_office_lease",
+            name: "Private office lease",
+            description: null,
+            price_cents: 179900,
+            billing_cycle: "monthly",
+            commitment_months: 36,
+            included_meeting_room_hours_per_month: 0,
+            overage_hourly_rate_cents: null,
+            seats_per_plan: 4,
+            space_capacity: 4,
+            available_seats: 0,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(
+      <LeaseBookingWidget
+        spacePublicId="space_lease"
+        spaceType="private_office"
+        spaceCapacity={4}
+        bookingMode="private_office_lease"
+        spaceMonthlyPrice={1799}
+        buildLoginNextHref={({ moveInDate }) => `/spaces/space_lease?move_in=${moveInDate}`}
+        initialMoveInDate="2030-09-10"
+      />,
+    );
+
+    expect(await screen.findByText(/Available on selected move-in/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2030-09-10")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in to continue" })).toBeEnabled();
   });
 });

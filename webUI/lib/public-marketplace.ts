@@ -344,6 +344,10 @@ export function buildMarketplaceSpaceHref(
       next.set(key, value);
     }
   }
+  const selectedDate = current.get("date");
+  if (routeKey === "private-offices" && selectedDate) {
+    next.set("move_in", selectedDate);
+  }
 
   return `/spaces/${encodeURIComponent(spacePublicId)}?${next.toString()}`;
 }

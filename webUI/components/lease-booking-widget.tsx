@@ -104,15 +104,24 @@ export function LeaseBookingWidget({
   }, [spacePublicId, bookingMode, initialPlanPublicId]);
 
   useEffect(() => {
-    const fromIso = DATE_INPUT_FALLBACK();
+    const todayIso = DATE_INPUT_FALLBACK();
+    const fromIso = moveInDate && moveInDate > todayIso ? moveInDate : todayIso;
     const toIso = addDaysIso(fromIso, 120);
+    let active = true;
     apiFetch<SpaceAvailabilityResponse>(
       `/api/marketplace/spaces/${encodeURIComponent(spacePublicId)}/availability?from=${fromIso}&to=${toIso}`,
       { method: "GET" },
     )
-      .then(setAvailability)
-      .catch(() => setAvailability(null));
-  }, [spacePublicId]);
+      .then((response) => {
+        if (active) setAvailability(response);
+      })
+      .catch(() => {
+        if (active) setAvailability(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [spacePublicId, moveInDate]);
 
   const selectedPlan = useMemo(
     () => plans.find((p) => p.public_id === selectedPlanId) ?? null,
@@ -139,6 +148,10 @@ export function LeaseBookingWidget({
       availabilityOpen &&
       !isDayBookable(moveInDay, availabilityOpen, availabilityGranularity),
   );
+  const moveInAvailabilityLoaded = Boolean(availability && moveInDay && availabilityOpen);
+  const selectedMoveInAvailable = moveInAvailabilityLoaded && !moveInBlocked;
+  const selectionUnavailableBecauseLeased = isFullyLeased && !selectedMoveInAvailable;
+  const leaseUnavailableForSelection = moveInBlocked || selectionUnavailableBecauseLeased;
   const nextAvailableMoveIn = useMemo(() => {
     if (!availability || !availabilityOpen) return null;
     const next = availability.days.find(
@@ -185,7 +198,7 @@ export function LeaseBookingWidget({
       setError("Choose a move-in date.");
       return;
     }
-    if (moveInBlocked) {
+    if (leaseUnavailableForSelection) {
       setError(
         nextAvailableMoveIn
           ? `That move-in date is unavailable. Next available date is ${formatDateLong(nextAvailableMoveIn)}.`
@@ -229,7 +242,7 @@ export function LeaseBookingWidget({
       setError("Choose a move-in date.");
       return;
     }
-    if (moveInBlocked) {
+    if (leaseUnavailableForSelection) {
       setError(
         nextAvailableMoveIn
           ? `That move-in date is unavailable. Next available date is ${formatDateLong(nextAvailableMoveIn)}.`
@@ -286,14 +299,14 @@ export function LeaseBookingWidget({
 
   return (
     <div className="rounded-2xl border border-line p-5">
-      {isFullyLeased ? (
+      {leaseUnavailableForSelection ? (
         <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700">
           <TriangleAlert className="h-4 w-4" />
           Currently leased ({spaceCapacity}-seat {seatNoun})
         </div>
       ) : (
         <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-success-soft px-3 py-1.5 text-sm font-medium text-success">
-          Available ({spaceCapacity}-seat {seatNoun})
+          {isFullyLeased ? "Available on selected move-in" : "Available"} ({spaceCapacity}-seat {seatNoun})
         </div>
       )}
 
@@ -378,12 +391,12 @@ export function LeaseBookingWidget({
       <button
         type="button"
         onClick={handleContinue}
-        disabled={submitting || !selectedPlan || isFullyLeased || moveInBlocked}
+        disabled={submitting || !selectedPlan || leaseUnavailableForSelection}
         className="inline-flex h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting
           ? "Submitting…"
-          : isFullyLeased
+          : leaseUnavailableForSelection
             ? "Currently leased"
             : isAuthenticated
               ? "Continue to Checkout Summary"
