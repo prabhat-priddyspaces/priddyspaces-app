@@ -101,3 +101,5 @@ class MemberDirectoryItemOut(BaseModel):
     space_name: str | None = None
     space_type: str
     last_seen_at: datetime | None = None
+    is_currently_in_office: bool = False
+    checked_in_at: datetime | None = None

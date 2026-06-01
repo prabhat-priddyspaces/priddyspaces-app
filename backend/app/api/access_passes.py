@@ -413,10 +413,23 @@ def list_current_attendance(
 @router.get("/member/directory", response_model=list[MemberDirectoryItemOut])
 def member_directory(
     days: int = Query(90, ge=1, le=365),
+    location_public_id: str | None = Query(None),
+    search: str | None = Query(None),
+    currently_in_office: bool = Query(False),
     db: Session = Depends(get_db),
     token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
     if user.role != UserAppRole.MEMBER:
         raise HTTPException(status_code=403, detail="Member only")
-    return [MemberDirectoryItemOut(**item) for item in directory_items_for_member(db, user, days=days)]
+    return [
+        MemberDirectoryItemOut(**item)
+        for item in directory_items_for_member(
+            db,
+            user,
+            days=days,
+            location_public_id=location_public_id,
+            search=search,
+            currently_in_office=currently_in_office,
+        )
+    ]

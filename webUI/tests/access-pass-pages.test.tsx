@@ -147,6 +147,8 @@ beforeEach(() => {
       space_name: "Conference Room 2",
       space_type: "conference_room",
       last_seen_at: "2026-07-01T10:00:00Z",
+      is_currently_in_office: true,
+      checked_in_at: "2026-07-01T10:05:00Z",
     },
   ]);
 });
@@ -208,7 +210,91 @@ describe("member directory screen", () => {
 
     expect(await screen.findByText("Peer Member")).toBeInTheDocument();
     expect(screen.getByText("peer@example.com")).toBeInTheDocument();
+    expect(screen.getByTestId("member-presence-dot")).toBeInTheDocument();
     expect(screen.queryByText("member@example.com")).not.toBeInTheDocument();
+    expect(mocks.listMemberDirectory).toHaveBeenCalledWith({}, "token");
+  });
+
+  it("passes filters to the directory API and clears them", async () => {
+    const onlinePeer = {
+      member_public_id: "user_2",
+      name: "Online Peer",
+      email: "online@example.com",
+      location_public_id: "loc_1",
+      location_name: "Main",
+      space_public_id: "space_1",
+      space_name: "Conference Room 2",
+      space_type: "conference_room",
+      last_seen_at: "2026-07-01T10:00:00Z",
+      is_currently_in_office: true,
+      checked_in_at: "2026-07-01T10:05:00Z",
+    };
+    const offlinePeer = {
+      member_public_id: "user_3",
+      name: "Offline Peer",
+      email: "offline@example.com",
+      location_public_id: "loc_2",
+      location_name: "Annex",
+      space_public_id: "space_2",
+      space_name: "Private Office 1",
+      space_type: "private_office",
+      last_seen_at: "2026-07-01T11:00:00Z",
+      is_currently_in_office: false,
+      checked_in_at: null,
+    };
+    mocks.listMemberDirectory.mockImplementation(async (filters = {}) => {
+      let rows = [onlinePeer, offlinePeer];
+      if (filters.location_public_id) {
+        rows = rows.filter((row) => row.location_public_id === filters.location_public_id);
+      }
+      if (filters.search) {
+        const term = filters.search.toLowerCase();
+        rows = rows.filter((row) => row.name.toLowerCase().includes(term) || row.email.toLowerCase().includes(term));
+      }
+      if (filters.currently_in_office) {
+        rows = rows.filter((row) => row.is_currently_in_office);
+      }
+      return rows;
+    });
+
+    render(<MemberDirectoryPage />);
+
+    expect(await screen.findByText("Online Peer")).toBeInTheDocument();
+    expect(screen.getByText("Offline Peer")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by location"), { target: { value: "loc_2" } });
+    await waitFor(() => {
+      expect(mocks.listMemberDirectory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ location_public_id: "loc_2" }),
+        "token",
+      );
+    });
+    await waitFor(() => expect(screen.queryByText("Online Peer")).not.toBeInTheDocument());
+    expect(screen.getByText("Offline Peer")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Clear"));
+    await waitFor(() => expect(mocks.listMemberDirectory).toHaveBeenLastCalledWith({}, "token"));
+
+    fireEvent.change(screen.getByPlaceholderText("Search members"), { target: { value: "online" } });
+    await waitFor(() => {
+      expect(mocks.listMemberDirectory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "online" }),
+        "token",
+      );
+    });
+
+    fireEvent.click(screen.getByText("Clear"));
+    await waitFor(() => expect(screen.getByText("Offline Peer")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText("In office now"));
+    await waitFor(() => {
+      expect(mocks.listMemberDirectory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ currently_in_office: true }),
+        "token",
+      );
+    });
+    await waitFor(() => expect(screen.queryByText("Offline Peer")).not.toBeInTheDocument());
+    expect(screen.getByText("Online Peer")).toBeInTheDocument();
   });
 });
 

@@ -396,6 +396,51 @@ def test_member_directory_is_limited_to_other_members_at_same_location(db_sessio
     assert emails == {same_location.email, subscription_peer.email}
 
 
+def test_member_directory_filters_and_presence(db_session, client_factory):
+    owner, _org, location, space = _owner_space(db_session)
+    other_owner, _other_org, other_location, other_space = _owner_space(
+        db_session,
+        owner_email="directory-filter-owner@example.com",
+    )
+    requester = _user(db_session, "directory-filter-requester@example.com", UserAppRole.MEMBER)
+    online_peer = _user(db_session, "directory-online-peer@example.com", UserAppRole.MEMBER)
+    offline_peer = _user(db_session, "directory-offline-peer@example.com", UserAppRole.MEMBER)
+    now = datetime.now(timezone.utc)
+    _booking(db_session, requester, space, start=now - timedelta(days=1), end=now - timedelta(days=1, hours=-1))
+    _booking(db_session, requester, other_space, start=now - timedelta(days=1), end=now - timedelta(days=1, hours=-1))
+    online_booking = _booking(db_session, online_peer, space, start=now - timedelta(minutes=5), end=now + timedelta(hours=2))
+    _booking(db_session, offline_peer, other_space, start=now - timedelta(minutes=5), end=now + timedelta(hours=2))
+
+    token = _token_for_booking(db_session, online_booking)
+    owner_client = client_factory(_auth(owner))
+    assert owner_client.post("/api/access-passes/check-in", json={"token": token}).status_code == 200
+
+    requester_client = client_factory(_auth(requester))
+    response = requester_client.get("/api/member/directory")
+
+    assert response.status_code == 200
+    rows = {row["email"]: row for row in response.json()}
+    assert rows[online_peer.email]["is_currently_in_office"] is True
+    assert rows[online_peer.email]["checked_in_at"] is not None
+    assert rows[offline_peer.email]["is_currently_in_office"] is False
+    assert rows[offline_peer.email]["checked_in_at"] is None
+
+    location_response = requester_client.get(f"/api/member/directory?location_public_id={location.public_id}")
+    assert {row["email"] for row in location_response.json()} == {online_peer.email}
+
+    other_location_response = requester_client.get(f"/api/member/directory?location_public_id={other_location.public_id}")
+    assert {row["email"] for row in other_location_response.json()} == {offline_peer.email}
+
+    search_response = requester_client.get("/api/member/directory?search=offline-peer")
+    assert {row["email"] for row in search_response.json()} == {offline_peer.email}
+
+    in_office_response = requester_client.get("/api/member/directory?currently_in_office=true")
+    assert {row["email"] for row in in_office_response.json()} == {online_peer.email}
+
+    other_owner_client = client_factory(_auth(other_owner))
+    assert other_owner_client.get("/api/attendance/current").json() == []
+
+
 def test_guest_registration_claims_prior_approved_booking(db_session, client_factory):
     owner, _org, _location, space = _owner_space(db_session)
     _owner_payment_setting(db_session, space)
