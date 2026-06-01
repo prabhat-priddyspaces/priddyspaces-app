@@ -80,6 +80,98 @@ describe("owner space reward controls", () => {
     expect(body).not.toHaveProperty("owner_points_enabled");
   });
 
+  it("sends setup fee rows from space creation", async () => {
+    apiFetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/locations" && init?.method === "GET") {
+        return Promise.resolve([{ public_id: "loc_1", name: "Main", city: "Austin" }]);
+      }
+      if (url === "/api/spaces" && init?.method === "POST") {
+        return Promise.resolve({ public_id: "space_1" });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<NewSpacePage />);
+
+    expect(await screen.findByText("Main, Austin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
+
+    const labels = screen.getAllByLabelText("Line item");
+    const amounts = screen.getAllByLabelText("Amount ($)");
+    fireEvent.change(labels[0], { target: { value: "  Room   setup " } });
+    fireEvent.change(amounts[0], { target: { value: "75.50" } });
+    fireEvent.change(labels[1], { target: { value: "AV kit" } });
+    fireEvent.change(amounts[1], { target: { value: "25" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Space" }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/spaces",
+        expect.objectContaining({ method: "POST" }),
+        "token",
+      );
+    });
+    const createCall = apiFetchMock.mock.calls.find(([url]) => url === "/api/spaces");
+    const body = JSON.parse(createCall?.[1]?.body as string);
+    expect(body.setup_fee_items).toEqual([
+      { label: "Room setup", amount_cents: 7550, is_active: true, sort_order: 0 },
+      { label: "AV kit", amount_cents: 2500, is_active: true, sort_order: 1 },
+    ]);
+  });
+
+  it("ignores blank setup fee rows from space creation", async () => {
+    apiFetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/locations" && init?.method === "GET") {
+        return Promise.resolve([{ public_id: "loc_1", name: "Main", city: "Austin" }]);
+      }
+      if (url === "/api/spaces" && init?.method === "POST") {
+        return Promise.resolve({ public_id: "space_1" });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<NewSpacePage />);
+
+    expect(await screen.findByText("Main, Austin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Space" }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        "/api/spaces",
+        expect.objectContaining({ method: "POST" }),
+        "token",
+      );
+    });
+    const createCall = apiFetchMock.mock.calls.find(([url]) => url === "/api/spaces");
+    const body = JSON.parse(createCall?.[1]?.body as string);
+    expect(body.setup_fee_items).toEqual([]);
+  });
+
+  it("blocks partial setup fee rows from space creation", async () => {
+    apiFetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/locations" && init?.method === "GET") {
+        return Promise.resolve([{ public_id: "loc_1", name: "Main", city: "Austin" }]);
+      }
+      if (url === "/api/spaces" && init?.method === "POST") {
+        return Promise.resolve({ public_id: "space_1" });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<NewSpacePage />);
+
+    expect(await screen.findByText("Main, Austin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
+    fireEvent.change(screen.getByLabelText("Line item"), { target: { value: "Room setup" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Space" }));
+
+    expect(await screen.findByText("Setup fee amount must be greater than 0.")).toBeInTheDocument();
+    expect(apiFetchMock.mock.calls.some(([url, init]) => url === "/api/spaces" && init?.method === "POST")).toBe(false);
+  });
+
   it("does not render or send reward fields from space editing", async () => {
     apiFetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/spaces/space_1" && init?.method === "GET") {

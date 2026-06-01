@@ -12,6 +12,7 @@ from app.schemas.space_setup_fee import SetupFeeItemOut, SetupFeeReplaceIn
 from app.services.auth_user import get_or_create_user
 from app.services.authz import require_location_roles
 from app.services.platform_auth import organization_is_publicly_visible
+from app.services.setup_fees import add_normalized_setup_fee_items, normalize_setup_fee_items
 
 
 router = APIRouter()
@@ -75,27 +76,17 @@ def replace_setup_fees(
     user = get_or_create_user(db, token)
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN})
 
-    seen_labels: set[str] = set()
-    for item in payload.items:
-        label = " ".join(item.label.split())
-        if not label:
-            raise HTTPException(status_code=400, detail="Setup fee label is required")
-        key = label.casefold()
-        if key in seen_labels:
-            raise HTTPException(status_code=400, detail=f"Duplicate setup fee label: {label}")
-        seen_labels.add(key)
+    try:
+        setup_fee_items = normalize_setup_fee_items(payload.items)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     db.query(SpaceSetupFeeItem).filter(SpaceSetupFeeItem.space_id == space.id).delete()
-    for index, item in enumerate(payload.items):
-        db.add(
-            SpaceSetupFeeItem(
-                tenant_id=space.tenant_id,
-                space_id=space.id,
-                label=" ".join(item.label.split()),
-                amount_cents=item.amount_cents,
-                is_active=item.is_active,
-                sort_order=item.sort_order if item.sort_order is not None else index,
-            )
-        )
+    add_normalized_setup_fee_items(
+        db,
+        tenant_id=space.tenant_id,
+        space_id=space.id,
+        items=setup_fee_items,
+    )
     db.commit()
     return list_setup_fees(space_public_id, db, token)

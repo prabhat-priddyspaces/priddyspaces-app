@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { LeaseTermsManager } from "@/components/lease-terms-manager";
+import { SetupFeeManager } from "@/components/setup-fee-manager";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,11 +24,29 @@ interface SpaceResponse {
   public_id: string;
 }
 
+interface SetupFeeDraftRow {
+  label: string;
+  amount: string;
+}
+
+interface SetupFeeCreateItem {
+  label: string;
+  amount_cents: number;
+  is_active: boolean;
+  sort_order: number;
+}
+
 type TermManagedSpaceType = "private_office" | "suite" | "shared_desk" | "virtual_office";
 
 function moneyPayload(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function amountToCents(value: string) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 0;
+  return Math.round(amount * 100);
 }
 
 function typeConfig(spaceType: string) {
@@ -106,6 +125,7 @@ export default function NewSpacePage() {
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [setupFeeRows, setSetupFeeRows] = useState<SetupFeeDraftRow[]>([]);
   const [createdSpace, setCreatedSpace] = useState<{
     public_id: string;
     space_type: TermManagedSpaceType;
@@ -138,6 +158,50 @@ export default function NewSpacePage() {
     loadLocations().catch(() => null);
   }, [queryLocationId]);
 
+  function addSetupFeeRow() {
+    setSetupFeeRows((current) => [...current, { label: "", amount: "" }]);
+  }
+
+  function removeSetupFeeRow(index: number) {
+    setSetupFeeRows((current) => current.filter((_, i) => i !== index));
+  }
+
+  function updateSetupFeeRow(index: number, key: keyof SetupFeeDraftRow, value: string) {
+    setSetupFeeRows((current) => current.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+  }
+
+  function buildSetupFeeItems(): SetupFeeCreateItem[] | null {
+    const items: SetupFeeCreateItem[] = [];
+    const seenLabels = new Set<string>();
+    for (const row of setupFeeRows) {
+      const label = row.label.trim().replace(/\s+/g, " ");
+      const amountText = row.amount.trim();
+      if (!label && !amountText) continue;
+      if (!label) {
+        setMessage("Setup fee line item is required.");
+        return null;
+      }
+      const amount_cents = amountToCents(amountText);
+      if (amount_cents <= 0) {
+        setMessage("Setup fee amount must be greater than 0.");
+        return null;
+      }
+      const key = label.toLowerCase();
+      if (seenLabels.has(key)) {
+        setMessage(`Duplicate setup fee label: ${label}`);
+        return null;
+      }
+      seenLabels.add(key);
+      items.push({
+        label,
+        amount_cents,
+        is_active: true,
+        sort_order: items.length,
+      });
+    }
+    return items;
+  }
+
   async function handleSave(nextStep: "inventory" | "media") {
     try {
       setSaving(true);
@@ -161,6 +225,8 @@ export default function NewSpacePage() {
         setMessage("Capacity must be at least 1.");
         return;
       }
+      const setupFeeItems = buildSetupFeeItems();
+      if (!setupFeeItems) return;
 
       const token = getAccessToken() ?? undefined;
       const space = await apiFetch<SpaceResponse>(
@@ -180,6 +246,7 @@ export default function NewSpacePage() {
             buffer_before_minutes: config.showBuffers ? Number(form.buffer_before_minutes || 0) : 0,
             buffer_after_minutes: config.showBuffers ? Number(form.buffer_after_minutes || 0) : 0,
             visibility: form.visibility,
+            setup_fee_items: setupFeeItems,
           }),
         },
         token
@@ -381,27 +448,82 @@ export default function NewSpacePage() {
               </div>
             </div>
             ) : null}
-            <div className="flex flex-wrap gap-3">
-              <Button type="button" onClick={() => handleSave("media")} disabled={saving}>
-                {saving ? "Saving..." : "Save And Add Photos"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => handleSave("inventory")}
-                disabled={saving}
-              >
-                  {createdSpace?.space_type === form.space_type ? "Done" : "Save Space"}
-              </Button>
-              <Link href={form.location_public_id ? `/owner/locations/spaces?locationId=${form.location_public_id}` : "/owner/locations"}>
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
-              </Link>
-            </div>
-            {message ? <div className="text-sm text-textMuted">{message}</div> : null}
           </div>
         </Card>
+        {createdSpace?.space_type === form.space_type ? (
+          <SetupFeeManager spacePublicId={createdSpace.public_id} />
+        ) : (
+          <Card>
+            <div className="grid gap-4">
+              <div>
+                <h3 className="text-lg font-semibold">One-time setup fees</h3>
+                <p className="text-xs text-textMuted">
+                  Mandatory setup costs shown before checkout and charged once per booking request.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                {setupFeeRows.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-border p-3 text-sm text-textMuted">
+                    No setup fees yet.
+                  </div>
+                ) : null}
+                {setupFeeRows.map((row, index) => (
+                  <div key={index} className="grid grid-cols-[minmax(0,1fr)_140px_auto] items-end gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`new-setup-fee-label-${index}`}>Line item</Label>
+                      <Input
+                        id={`new-setup-fee-label-${index}`}
+                        value={row.label}
+                        onChange={(event) => updateSetupFeeRow(index, "label", event.target.value)}
+                        placeholder="Room setup"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`new-setup-fee-amount-${index}`}>Amount ($)</Label>
+                      <Input
+                        id={`new-setup-fee-amount-${index}`}
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        inputMode="decimal"
+                        value={row.amount}
+                        onChange={(event) => updateSetupFeeRow(index, "amount", event.target.value)}
+                        placeholder="75"
+                      />
+                    </div>
+                    <Button type="button" variant="ghost" onClick={() => removeSetupFeeRow(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="secondary" onClick={addSetupFeeRow}>
+                  Add fee
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" onClick={() => handleSave("media")} disabled={saving}>
+            {saving ? "Saving..." : "Save And Add Photos"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleSave("inventory")}
+            disabled={saving}
+          >
+            {createdSpace?.space_type === form.space_type ? "Done" : "Save Space"}
+          </Button>
+          <Link href={form.location_public_id ? `/owner/locations/spaces?locationId=${form.location_public_id}` : "/owner/locations"}>
+            <Button type="button" variant="ghost">
+              Cancel
+            </Button>
+          </Link>
+        </div>
+        {message ? <div className="text-sm text-textMuted">{message}</div> : null}
         {isTermManagedSpaceType(form.space_type) ? (
           createdSpace?.space_type === form.space_type ? (
             <LeaseTermsManager

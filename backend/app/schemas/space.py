@@ -1,8 +1,9 @@
 from datetime import time
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility
 from app.schemas.money import MoneyAmount
+from app.schemas.space_setup_fee import SetupFeeItemIn
 
 
 class SpaceCreate(BaseModel):
@@ -21,6 +22,7 @@ class SpaceCreate(BaseModel):
     priddy_points_enabled: bool | None = None
     owner_points_enabled: bool | None = None
     amenities: str | None = None
+    setup_fee_items: list[SetupFeeItemIn] = Field(default_factory=list, max_length=20)
 
 
 class SpaceOut(BaseModel):

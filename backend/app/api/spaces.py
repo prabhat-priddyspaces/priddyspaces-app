@@ -25,6 +25,7 @@ from app.models.location import Location
 from app.services.lookups import get_location_by_public_id
 from app.services.owner_payments import space_payment_is_marketplace_ready
 from app.services.platform_auth import get_audit_actor_context, organization_is_publicly_visible
+from app.services.setup_fees import add_normalized_setup_fee_items, normalize_setup_fee_items
 
 router = APIRouter()
 
@@ -96,6 +97,10 @@ def create_space(
 
     user = get_or_create_user(db, token)
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN})
+    try:
+        setup_fee_items = normalize_setup_fee_items(payload.setup_fee_items)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     space = Space(
         location_id=location.id,
@@ -131,6 +136,12 @@ def create_space(
                 is_enabled=True,
             )
         )
+    add_normalized_setup_fee_items(
+        db,
+        tenant_id=location.organization_id,
+        space_id=space.id,
+        items=setup_fee_items,
+    )
     db.commit()
     db.refresh(space)
     location_amenities = get_location_amenities_map(db, [location.id]).get(location.id, [])
