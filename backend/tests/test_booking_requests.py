@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from unittest.mock import MagicMock
 
 from app.core.config import settings
@@ -959,6 +959,75 @@ def test_booking_request_approve_creates_booking(db_session, client_factory, mon
     assert approved["estimated_amount"] is not None
     assert approved["approved_at"] is not None
 
+    booking = db_session.query(Booking).filter(Booking.id == approved["booking_id"]).first()
+    assert booking is not None
+    assert booking.status == BookingStatus.CONFIRMED
+
+
+def test_shared_desk_day_pass_approval_survives_confirmation_email_failure(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
+    owner, space = _seed_owner_space(db_session)
+    space.name = "shared office"
+    space.space_type = SpaceType.SHARED_DESK
+    space.capacity = 8
+    space.price_daily = 200
+    space.price_hourly = None
+    space.availability_start_time = time(8, 0)
+    space.availability_end_time = time(18, 0)
+    db_session.add(space)
+    db_session.commit()
+    member = User(
+        email="tester+clerk_test@mailinto.com",
+        auth_subject="sub-shared-approval",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post(
+        "/api/booking-requests",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 5, 31, 8, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 5, 31, 18, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "day_pass",
+            "full_day": True,
+            "member_owner_payment_method_public_id": method.public_id,
+            "payment_authorization_consent": True,
+        },
+    )
+    assert create.status_code == 200, create.text
+
+    def raise_email_failure(*_args, **_kwargs):
+        raise RuntimeError("template render failed")
+
+    monkeypatch.setattr("app.api.booking_requests.send_booking_confirmed_email", raise_email_failure)
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    approve = owner_client.post(
+        f"/api/booking-requests/{create.json()['public_id']}/approve",
+        json={"operator_notes": "ok"},
+    )
+
+    assert approve.status_code == 200, approve.text
+    approved = approve.json()
+    assert approved["status"] == BookingRequestStatus.APPROVED.value
+    assert approved["booking_id"] is not None
     booking = db_session.query(Booking).filter(Booking.id == approved["booking_id"]).first()
     assert booking is not None
     assert booking.status == BookingStatus.CONFIRMED

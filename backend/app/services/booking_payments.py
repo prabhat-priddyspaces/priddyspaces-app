@@ -49,6 +49,14 @@ logger = logging.getLogger(__name__)
 DEFAULT_PAYMENT_FAILURE_HOLD_MINUTES = 30
 
 
+def _run_post_payment_side_effect(db: Session, label: str, callback) -> None:
+    try:
+        callback()
+    except Exception:
+        db.rollback()
+        logger.exception("booking payment post-success side effect failed: %s", label)
+
+
 def _payment_failure_hold_minutes(db: Session, req: BookingRequest) -> int:
     organization = db.query(Organization).filter(Organization.id == req.tenant_id).first()
     if organization is None or organization.payment_failure_hold_minutes is None:
@@ -409,11 +417,21 @@ def finalize_successful_booking_request_payment(
     db.refresh(req)
     db.refresh(booking)
     db.refresh(payment)
-    finalize_redemption_for_payment(db, req, booking, payment)
-    db.commit()
-    record_earned_for_payment(db, payment, booking=booking, booking_request=req)
-    ensure_access_passes_for_booking_request(db, req)
-    db.commit()
+    _run_post_payment_side_effect(
+        db,
+        "finalize_redemption",
+        lambda: (finalize_redemption_for_payment(db, req, booking, payment), db.commit()),
+    )
+    _run_post_payment_side_effect(
+        db,
+        "record_earned_points",
+        lambda: record_earned_for_payment(db, payment, booking=booking, booking_request=req),
+    )
+    _run_post_payment_side_effect(
+        db,
+        "ensure_access_passes",
+        lambda: (ensure_access_passes_for_booking_request(db, req), db.commit()),
+    )
     return req, booking, payment
 
 
@@ -638,10 +656,16 @@ def charge_booking_request(
         db.refresh(req)
         db.refresh(booking)
         db.refresh(payment)
-        finalize_redemption_for_payment(db, req, booking, payment)
-        db.commit()
-        ensure_access_passes_for_booking_request(db, req)
-        db.commit()
+        _run_post_payment_side_effect(
+            db,
+            "finalize_redemption",
+            lambda: (finalize_redemption_for_payment(db, req, booking, payment), db.commit()),
+        )
+        _run_post_payment_side_effect(
+            db,
+            "ensure_access_passes",
+            lambda: (ensure_access_passes_for_booking_request(db, req), db.commit()),
+        )
         return req, booking, payment
 
     failure_reason = "Payment provider did not return a result"
