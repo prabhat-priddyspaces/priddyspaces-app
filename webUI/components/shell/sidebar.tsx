@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  AlertTriangle,
   Box,
   Building2,
   Calendar,
@@ -99,6 +100,7 @@ const ownerSections: SidebarSection[] = [
     label: "Finance",
     items: [
       { href: "/owner/payments", icon: CreditCard, label: "Payments" },
+      { href: "/owner/payments/health", icon: AlertTriangle, label: "Payment health" },
       { href: "/owner/invoices", icon: FileText, label: "Invoices" },
     ],
   },
@@ -204,6 +206,7 @@ export function getSidebarSections(
 export function isActive(pathname: string, href: string): boolean {
   if (href === "/owner" || href === "/member" || href === "/admin")
     return pathname === href;
+  if (href === "/owner/payments") return pathname === href;
   return pathname === href || pathname.startsWith(href + "/");
 }
 
