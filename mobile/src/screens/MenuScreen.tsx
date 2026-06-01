@@ -25,6 +25,7 @@ const ownerItems: MenuItem[] = [
 
 const memberItems: MenuItem[] = [
   { label: "Marketplace", screen: "Marketplace", target: "tab" },
+  { label: "Calendar", screen: "Calendar", target: "tab" },
   { label: "Bookings", screen: "Bookings", target: "tab" },
   { label: "Access Passes", screen: "AccessPasses", target: "tab" },
   { label: "My Space QR", screen: "MySpaceQr", target: "tab" },

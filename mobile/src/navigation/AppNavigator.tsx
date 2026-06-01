@@ -13,6 +13,7 @@ import { OnboardingScreen } from "../screens/OnboardingScreen";
 import { OrgOnboardingScreen } from "../screens/OrgOnboardingScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { BookingsScreen } from "../screens/BookingsScreen";
+import { MemberCalendarScreen } from "../screens/MemberCalendarScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { OwnerDashboardScreen } from "../screens/owner/OwnerDashboardScreen";
 import { OwnerLocationsScreen } from "../screens/owner/OwnerLocationsScreen";
@@ -121,6 +122,7 @@ function MemberTabs() {
       })}
     >
       <Tabs.Screen name="Marketplace" component={MarketplaceStack} options={{ headerShown: false }} />
+      <Tabs.Screen name="Calendar" component={MemberCalendarScreen} options={{ title: "Calendar" }} />
       <Tabs.Screen name="Bookings" component={BookingsScreen} />
       <Tabs.Screen name="AccessPasses" component={AccessPassesScreen} options={{ title: "Access Passes" }} />
       <Tabs.Screen name="MySpaceQr" component={MySpaceQrScreen} options={{ title: "My Space QR" }} />
