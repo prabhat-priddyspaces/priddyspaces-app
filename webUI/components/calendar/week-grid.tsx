@@ -9,7 +9,7 @@ import {
   formatTime,
   isoDateOnly,
   startOfDay,
-  statusColorClass,
+  statusEventClass,
 } from "@/lib/calendar";
 
 interface WeekGridProps {
@@ -86,10 +86,11 @@ export function WeekGrid({ windowStart, events, onEventClick }: WeekGridProps) {
                     <button
                       key={`${event.kind}-${event.public_id}`}
                       type="button"
+                      data-testid={`calendar-event-${event.public_id}`}
                       onClick={() => onEventClick?.(event)}
                       className={cn(
                         "absolute left-1 right-1 overflow-hidden rounded-sm border px-1 text-left text-[11px] leading-tight hover:opacity-90",
-                        statusColorClass(event.status)
+                        statusEventClass(event.status)
                       )}
                       style={{ top, height: Math.max(height, 18) }}
                       title={`${event.member.name} · ${event.space_name ?? ""}`}

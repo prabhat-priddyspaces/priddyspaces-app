@@ -7,10 +7,9 @@ import {
   CalendarEvent,
   addDays,
   isoDateOnly,
-  startOfDay,
   startOfMonth,
   startOfWeek,
-  statusColorClass,
+  statusEventClass,
 } from "@/lib/calendar";
 
 interface MonthGridProps {
@@ -82,10 +81,11 @@ export function MonthGrid({ windowStart, events, onEventClick }: MonthGridProps)
                   <button
                     key={`${event.kind}-${event.public_id}`}
                     type="button"
+                    data-testid={`calendar-event-${event.public_id}`}
                     onClick={() => onEventClick?.(event)}
                     className={cn(
                       "truncate rounded-sm border px-1 py-0.5 text-left text-[10px] leading-tight hover:opacity-90",
-                      statusColorClass(event.status)
+                      statusEventClass(event.status)
                     )}
                     title={`${event.member.name} · ${event.space_name ?? ""}`}
                   >

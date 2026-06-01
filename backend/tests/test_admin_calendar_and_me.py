@@ -2,8 +2,10 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote
 
 from app.models.booking import Booking
+from app.models.booking_request import BookingRequest
 from app.models.enums import (
     AvailabilityStatus,
+    BookingRequestStatus,
     BookingStatus,
     PlatformTeamRole,
     SpaceType,
@@ -218,6 +220,121 @@ def test_me_calendar_shows_only_own_bookings(db_session, client_factory):
     events = resp.json()["events"]
     assert len(events) == 1
     assert events[0]["member"]["public_id"] == me.public_id
+
+
+def test_me_calendar_limits_spaces_to_own_activity_and_filters_location(db_session, client_factory):
+    _owner, org, loc_a, space_a = _seed_org_with_space(
+        db_session,
+        owner_email="own-spaces@example.com",
+        owner_sub="sub-own-spaces",
+        name="Mine",
+    )
+    other_space_same_location = Space(
+        location_id=loc_a.id,
+        tenant_id=org.id,
+        name="Other Member Room",
+        space_type=SpaceType.PRIVATE_OFFICE,
+        capacity=2,
+        availability_status=AvailabilityStatus.AVAILABLE,
+        price_daily=120,
+    )
+    loc_b = Location(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Mine Second Loc",
+        address="2 St",
+        city="City",
+        timezone="UTC",
+    )
+    db_session.add_all([other_space_same_location, loc_b])
+    db_session.commit()
+    db_session.refresh(other_space_same_location)
+    db_session.refresh(loc_b)
+    space_b = Space(
+        location_id=loc_b.id,
+        tenant_id=org.id,
+        name="Mine Second Room",
+        space_type=SpaceType.PRIVATE_OFFICE,
+        capacity=2,
+        availability_status=AvailabilityStatus.AVAILABLE,
+        price_daily=120,
+    )
+    db_session.add(space_b)
+    db_session.commit()
+    db_session.refresh(space_b)
+
+    me = _seed_member(db_session, email="mine@example.com", sub="sub-mine", name="Mine")
+    other = _seed_member(db_session, email="not-mine@example.com", sub="sub-not-mine", name="Not Mine")
+    db_session.add_all([
+        Booking(
+            user_id=me.id, space_id=space_a.id, tenant_id=org.id,
+            start_datetime=datetime(2026, 5, 5, 9, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            status=BookingStatus.CONFIRMED,
+        ),
+        Booking(
+            user_id=me.id, space_id=space_b.id, tenant_id=org.id,
+            start_datetime=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 5, 5, 13, 0, tzinfo=timezone.utc),
+            status=BookingStatus.CONFIRMED,
+        ),
+        Booking(
+            user_id=other.id, space_id=other_space_same_location.id, tenant_id=org.id,
+            start_datetime=datetime(2026, 5, 5, 14, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 5, 5, 15, 0, tzinfo=timezone.utc),
+            status=BookingStatus.CONFIRMED,
+        ),
+    ])
+    db_session.commit()
+
+    client = client_factory(_token(me))
+    start = datetime(2026, 5, 4, 0, 0, tzinfo=timezone.utc)
+    end = start + timedelta(days=7)
+    resp = client.get(f"/api/me/calendar?{_qs(start, end)}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert {space["public_id"] for space in data["spaces"]} == {space_a.public_id, space_b.public_id}
+    assert {event["space_public_id"] for event in data["events"]} == {space_a.public_id, space_b.public_id}
+
+    resp_loc = client.get(
+        f"/api/me/calendar?{_qs(start, end, location_public_id=loc_a.public_id)}"
+    )
+    assert resp_loc.status_code == 200
+    loc_data = resp_loc.json()
+    assert [space["public_id"] for space in loc_data["spaces"]] == [space_a.public_id]
+    assert [event["space_public_id"] for event in loc_data["events"]] == [space_a.public_id]
+
+
+def test_me_calendar_includes_own_pending_requests_without_prior_booking(db_session, client_factory):
+    _owner, org, _loc, space = _seed_org_with_space(
+        db_session,
+        owner_email="request-owner@example.com",
+        owner_sub="sub-request-owner",
+        name="RequestOrg",
+    )
+    me = _seed_member(db_session, email="request-me@example.com", sub="sub-request-me", name="Request Me")
+    db_session.add(
+        BookingRequest(
+            tenant_id=org.id,
+            user_id=me.id,
+            space_id=space.id,
+            start_datetime=datetime(2026, 5, 5, 9, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+            status=BookingRequestStatus.REQUESTED,
+        )
+    )
+    db_session.commit()
+
+    client = client_factory(_token(me))
+    start = datetime(2026, 5, 4, 0, 0, tzinfo=timezone.utc)
+    end = start + timedelta(days=7)
+    resp = client.get(f"/api/me/calendar?{_qs(start, end)}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [space_item["public_id"] for space_item in data["spaces"]] == [space.public_id]
+    assert len(data["events"]) == 1
+    assert data["events"][0]["kind"] == "request"
+    assert data["events"][0]["status"] == "request.requested"
 
 
 def test_me_calendar_empty_when_no_bookings(db_session, client_factory):

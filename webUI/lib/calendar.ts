@@ -75,6 +75,19 @@ export function statusColorClass(status: string): string {
   return STATUS_COLOR[status] || "bg-surface2 text-textPrimary border-border";
 }
 
+const STATUS_EVENT_COLOR: Record<string, string> = {
+  "booking.pending": "border-amber-300 border-l-4 border-l-amber-500 bg-amber-50 text-amber-950 shadow-sm",
+  "booking.confirmed": "border-emerald-300 border-l-4 border-l-emerald-600 bg-emerald-50 text-emerald-950 shadow-sm",
+  "booking.canceled": "border-slate-300 border-l-4 border-l-slate-400 bg-slate-100 text-slate-600 shadow-sm line-through",
+  "request.requested": "border-blue-300 border-l-4 border-l-blue-600 bg-blue-50 text-blue-950 shadow-sm",
+  "request.payment_failed": "border-red-300 border-l-4 border-l-red-600 bg-red-50 text-red-950 shadow-sm",
+  "subscription.active": "border-indigo-300 border-l-4 border-l-indigo-600 bg-indigo-50 text-indigo-950 shadow-sm",
+};
+
+export function statusEventClass(status: string): string {
+  return STATUS_EVENT_COLOR[status] || "border-slate-300 border-l-4 border-l-slate-500 bg-white text-slate-900 shadow-sm";
+}
+
 export function eventDuration(event: CalendarEvent): number {
   return new Date(event.end).getTime() - new Date(event.start).getTime();
 }
