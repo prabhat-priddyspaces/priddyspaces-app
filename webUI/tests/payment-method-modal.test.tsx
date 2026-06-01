@@ -36,48 +36,54 @@ describe("PaymentMethodModal", () => {
   });
 
   it("requires CardPointe last4 and expiration before saving", async () => {
+    const addEventListenerSpy = vi.spyOn(window, "addEventListener");
     const onSaved = vi.fn();
-    render(
-      <PaymentMethodModal
-        open
-        spacePublicId="space_1"
-        organizationName="Skyline Works"
-        initialMode="add"
-        onClose={vi.fn()}
-        onSaved={onSaved}
-      />,
-    );
-
-    expect(await screen.findByTitle("CardPointe tokenizer")).toBeInTheDocument();
-    expect(
-      screen.getByText("I authorize Skyline Works to charge this card for approved or instant bookings."),
-    ).toBeInTheDocument();
-    const saveButton = screen.getByRole("button", { name: "Save payment method" });
-    expect(saveButton).toBeDisabled();
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: JSON.stringify({
-            token: "9411111111114242",
-            last4: "4242",
-            expiry: "122030",
-          }),
-        }),
+    try {
+      render(
+        <PaymentMethodModal
+          open
+          spacePublicId="space_1"
+          organizationName="Skyline Works"
+          initialMode="add"
+          onClose={vi.fn()}
+          onSaved={onSaved}
+        />,
       );
-    });
-    fireEvent.click(screen.getByRole("checkbox"));
 
-    expect(await screen.findByText("Card ending in 4242 · Expires 12/2030")).toBeInTheDocument();
-    await waitFor(() => expect(saveButton).not.toBeDisabled());
-    fireEvent.click(saveButton);
+      expect(await screen.findByTitle("CardPointe tokenizer")).toBeInTheDocument();
+      await waitFor(() => expect(addEventListenerSpy).toHaveBeenCalledWith("message", expect.any(Function)));
+      expect(
+        screen.getByText("I authorize Skyline Works to charge this card for approved or instant bookings."),
+      ).toBeInTheDocument();
+      const saveButton = screen.getByRole("button", { name: "Save payment method" });
+      expect(saveButton).toBeDisabled();
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("pm_1"));
-    const saveCall = vi.mocked(apiFetch).mock.calls.find(([url, init]) => url === "/api/payment-methods" && init?.method === "POST");
-    expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({
-      card_token: "9411111111114242",
-      last4: "4242",
-      expiration: "122030",
-    });
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: JSON.stringify({
+              token: "9411111111114242",
+              last4: "4242",
+              expiry: "122030",
+            }),
+          }),
+        );
+      });
+      fireEvent.click(screen.getByRole("checkbox"));
+
+      expect(await screen.findByText("Card ending in 4242 · Expires 12/2030")).toBeInTheDocument();
+      await waitFor(() => expect(saveButton).not.toBeDisabled());
+      fireEvent.click(saveButton);
+
+      await waitFor(() => expect(onSaved).toHaveBeenCalledWith("pm_1"));
+      const saveCall = vi.mocked(apiFetch).mock.calls.find(([url, init]) => url === "/api/payment-methods" && init?.method === "POST");
+      expect(JSON.parse(String(saveCall?.[1]?.body))).toMatchObject({
+        card_token: "9411111111114242",
+        last4: "4242",
+        expiration: "122030",
+      });
+    } finally {
+      addEventListenerSpy.mockRestore();
+    }
   });
 });
