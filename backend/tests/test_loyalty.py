@@ -19,6 +19,7 @@ from app.models.payment import Payment
 from app.models.space import Space
 from app.models.user import User
 from app.services.loyalty import get_or_create_wallet, grant_priddy_signup_points, write_ledger_entry
+from app.services.platform_auth import get_or_create_platform_settings
 from app.services.payment_providers import ChargeResult
 
 
@@ -236,6 +237,25 @@ def test_private_office_redemption_is_blocked(db_session, client_factory):
     assert "space type" in preview.json()["reason"]
 
 
+def test_owner_settings_include_platform_priddy_eligibility(db_session, client_factory):
+    owner, _customer, org, _space, _method = _seed(db_session, space_type=SpaceType.SHARED_DESK)
+    platform = get_or_create_platform_settings(db_session)
+    platform.priddy_points_enabled = True
+    platform.priddy_allowed_space_types = ["shared_desk"]
+    platform.priddy_allowed_booking_modes = ["day_pass"]
+    db_session.add(platform)
+    db_session.commit()
+
+    owner_client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+    response = owner_client.get(f"/api/loyalty/settings?organization_public_id={org.public_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["platform_priddy_points_enabled"] is True
+    assert data["platform_priddy_allowed_space_types"] == ["shared_desk"]
+    assert data["platform_priddy_allowed_booking_modes"] == ["day_pass"]
+
+
 def test_member_registration_gets_priddy_points(db_session, client_factory):
     client = client_factory({"sub": "unused", "email": "unused@example.com", "email_verified": True})
 
@@ -315,6 +335,86 @@ def test_redemption_preview_repairs_priddy_signup_points(db_session, client_fact
     assert preview.json()["priddy"]["eligible"] is True
     assert preview.json()["priddy"]["balance"] == 1000
     assert preview.json()["priddy"]["max_redeemable_points"] == 1000
+
+
+def test_priddy_points_ignore_deprecated_space_flag_for_org_level_eligibility(db_session, client_factory):
+    owner, customer, org, space, _method = _seed(db_session, space_type=SpaceType.SHARED_DESK)
+    space.price_daily = 10
+    space.priddy_points_enabled = False
+    db_session.add(space)
+    db_session.commit()
+    owner_client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+    settings = owner_client.put(
+        f"/api/loyalty/settings?organization_public_id={org.public_id}",
+        json={"accepts_priddy_points": True},
+    )
+    assert settings.status_code == 200
+    customer_client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+
+    preview = customer_client.post(
+        "/api/loyalty/redemptions/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 6, 9, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 6, 9, 17, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "day_pass",
+            "full_day": True,
+        },
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["priddy"]["eligible"] is True
+    assert preview.json()["priddy"]["max_redeemable_points"] == 1000
+
+
+def test_priddy_points_respect_platform_space_type_boundary(db_session, client_factory):
+    owner, customer, org, space, _method = _seed(db_session, space_type=SpaceType.CONFERENCE_ROOM)
+    owner_client = client_factory({"sub": owner.auth_subject, "email": owner.email, "email_verified": True})
+    settings = owner_client.put(
+        f"/api/loyalty/settings?organization_public_id={org.public_id}",
+        json={"accepts_priddy_points": True},
+    )
+    assert settings.status_code == 200
+    customer_client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+
+    preview = customer_client.post(
+        "/api/loyalty/redemptions/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 6, 10, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+        },
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["priddy"]["eligible"] is False
+    assert "space type" in preview.json()["priddy"]["reason"]
+
+
+def test_owner_points_ignore_deprecated_space_flag_for_org_level_eligibility(db_session, client_factory):
+    _owner, customer, org, space, _method = _seed(db_session, space_type=SpaceType.CONFERENCE_ROOM)
+    space.owner_points_enabled = False
+    db_session.add(space)
+    db_session.commit()
+    _grant_points(db_session, org, customer, 1000)
+    customer_client = client_factory({"sub": customer.auth_subject, "email": customer.email, "email_verified": True})
+
+    preview = customer_client.post(
+        "/api/loyalty/redemptions/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 6, 11, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+        },
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["owner"]["eligible"] is True
+    assert preview.json()["owner"]["max_redeemable_points"] == 1000
 
 
 def test_priddy_points_cover_day_pass_without_card(db_session, client_factory):

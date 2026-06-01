@@ -27,6 +27,19 @@ const campaignTypes = [
   { value: "manual", label: "Manual campaign" },
 ];
 
+const spaceTypeOptions: Array<[string, string]> = [
+  ["shared_desk", "Shared desk"],
+  ["conference_room", "Conference room"],
+  ["virtual_office", "Virtual office"],
+  ["private_office", "Private office"],
+  ["suite", "Suite"],
+];
+
+const bookingModeOptions: Array<[string, string]> = [
+  ["day_pass", "Day pass"],
+  ["hourly", "Hourly"],
+];
+
 export default function OwnerLoyaltyPage() {
   const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
   const [orgId, setOrgId] = useState("");
@@ -202,6 +215,13 @@ export default function OwnerLoyaltyPage() {
     }
   }
 
+  const priddySpaceOptions = settings
+    ? spaceTypeOptions.filter(([value]) => (settings.platform_priddy_allowed_space_types || []).includes(value))
+    : [];
+  const priddyBookingModeOptions = settings
+    ? bookingModeOptions.filter(([value]) => (settings.platform_priddy_allowed_booking_modes || []).includes(value))
+    : [];
+
   return (
     <AppShell>
       <div className="space-y-6">
@@ -249,7 +269,7 @@ export default function OwnerLoyaltyPage() {
                   checked={settings.is_enabled}
                   onChange={(event) => updateSetting("is_enabled", event.target.checked)}
                 />
-                Owner points enabled
+                Workspace rewards enabled
               </label>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -267,14 +287,14 @@ export default function OwnerLoyaltyPage() {
                   <input type="checkbox" checked={settings.accepts_priddy_points} onChange={(event) => updateSetting("accepts_priddy_points", event.target.checked)} />
                   Accept Priddy Points
                 </label>
-                <div className="mt-1 text-xs text-textMuted">Members can use platform points as a discount on eligible listings.</div>
+                <div className="mt-1 text-xs text-textMuted">Members can redeem platform points on eligible bookings allowed by Priddyspaces.</div>
               </div>
               <div className="rounded-sm border border-border p-3">
                 <label className="flex items-center gap-2 text-sm font-medium text-textPrimary">
                   <input type="checkbox" checked={settings.owner_points_redemption_enabled} onChange={(event) => updateSetting("owner_points_redemption_enabled", event.target.checked)} />
-                  Allow owner point redemption
+                  Enable workspace rewards
                 </label>
-                <div className="mt-1 text-xs text-textMuted">Members can spend this owner's points on eligible listings.</div>
+                <div className="mt-1 text-xs text-textMuted">Members can redeem points earned with this organization on eligible bookings.</div>
               </div>
               <div className="flex items-end">
                 <Button type="button" onClick={saveSettings} disabled={saving}>
@@ -283,24 +303,39 @@ export default function OwnerLoyaltyPage() {
               </div>
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <ReadOnlyEligibilityGroup
+                title="Priddy Points space types"
+                testId="priddy-space-eligibility"
+                options={settings.platform_priddy_points_enabled ? priddySpaceOptions : []}
+                emptyText={
+                  settings.platform_priddy_points_enabled
+                    ? "No space types are eligible for Priddy Points."
+                    : "Priddy Points are disabled by Priddyspaces."
+                }
+              />
+              <ReadOnlyEligibilityGroup
+                title="Priddy Points booking types"
+                testId="priddy-booking-eligibility"
+                options={settings.platform_priddy_points_enabled ? priddyBookingModeOptions : []}
+                emptyText={
+                  settings.platform_priddy_points_enabled
+                    ? "No booking types are eligible for Priddy Points."
+                    : "Priddy Points are disabled by Priddyspaces."
+                }
+              />
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
               <EligibilityGroup
-                title="Owner point space types"
-                options={[
-                  ["shared_desk", "Shared desk"],
-                  ["conference_room", "Conference room"],
-                  ["virtual_office", "Virtual office"],
-                  ["private_office", "Private office"],
-                  ["suite", "Suite"],
-                ]}
+                title="Workspace rewards space types"
+                testId="workspace-space-eligibility"
+                options={spaceTypeOptions}
                 selected={settings.allowed_space_types}
                 onToggle={(value) => toggleSettingList("allowed_space_types", value)}
               />
               <EligibilityGroup
-                title="Owner point booking types"
-                options={[
-                  ["day_pass", "Day pass"],
-                  ["hourly", "Hourly"],
-                ]}
+                title="Workspace rewards booking types"
+                testId="workspace-booking-eligibility"
+                options={bookingModeOptions}
                 selected={settings.allowed_booking_modes}
                 onToggle={(value) => toggleSettingList("allowed_booking_modes", value)}
               />
@@ -430,17 +465,19 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function EligibilityGroup({
   title,
+  testId,
   options,
   selected,
   onToggle,
 }: {
   title: string;
+  testId?: string;
   options: Array<[string, string]>;
   selected: string[];
   onToggle: (value: string) => void;
 }) {
   return (
-    <div className="rounded-sm border border-border p-3">
+    <div className="rounded-sm border border-border p-3" data-testid={testId}>
       <div className="text-sm font-semibold text-textPrimary">{title}</div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {options.map(([value, label]) => (
@@ -450,6 +487,36 @@ function EligibilityGroup({
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ReadOnlyEligibilityGroup({
+  title,
+  testId,
+  options,
+  emptyText,
+}: {
+  title: string;
+  testId?: string;
+  options: Array<[string, string]>;
+  emptyText: string;
+}) {
+  return (
+    <div className="rounded-sm border border-border p-3" data-testid={testId}>
+      <div className="text-sm font-semibold text-textPrimary">{title}</div>
+      {options.length > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {options.map(([value, label]) => (
+            <label key={value} className="flex items-center gap-2 text-sm text-textSecondary">
+              <input type="checkbox" checked readOnly disabled />
+              {label}
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-sm text-textMuted">{emptyText}</div>
+      )}
     </div>
   );
 }
