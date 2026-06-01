@@ -37,7 +37,7 @@ function LocationSpacesContent() {
       <div className="grid gap-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold">Inventory</h2>
+            <h2 className="text-2xl font-semibold">Manage rooms</h2>
             <p className="text-textSecondary">
               Manage rooms, desks, pricing overrides, and space photos.
             </p>
@@ -48,12 +48,12 @@ function LocationSpacesContent() {
                 <Button size="sm" variant="secondary">Location settings</Button>
               </Link>
               <Link href={`/owner/spaces/new?locationId=${encodeURIComponent(locationId)}`}>
-                <Button size="sm">Add Room</Button>
+                <Button size="sm">Add space</Button>
               </Link>
             </div>
           ) : (
             <Link href="/owner/locations/new">
-              <Button size="sm">New Location</Button>
+              <Button size="sm">New location</Button>
             </Link>
           )}
         </div>
@@ -67,7 +67,7 @@ function LocationSpacesContent() {
                 {selectedLocation?.name || "Selected location"}
               </div>
               <div className="mt-1 text-sm text-textMuted">
-                {selectedLocation?.city || "Inventory for this location"}
+                {selectedLocation?.city || "Rooms and spaces for this location"}
               </div>
               <div className="mt-3">
                 <Link href={`/owner/locations/${encodeURIComponent(locationId)}/edit`}>
@@ -81,7 +81,7 @@ function LocationSpacesContent() {
           </>
         ) : locations.length === 0 ? (
           <Card className="p-6">
-            <div className="text-sm text-textMuted">No owner locations are ready for inventory yet. Create one to begin adding rooms.</div>
+            <div className="text-sm text-textMuted">No owner locations are ready yet. Create one to begin adding rooms and spaces.</div>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -91,11 +91,11 @@ function LocationSpacesContent() {
                 <div className="mt-1 text-sm text-textMuted">{location.city || "City not set"}</div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link href={`/owner/locations/spaces?locationId=${encodeURIComponent(location.public_id)}`}>
-                    <Button size="sm">Manage inventory</Button>
+                    <Button size="sm">Manage rooms</Button>
                   </Link>
                   <Link href={`/owner/spaces/new?locationId=${encodeURIComponent(location.public_id)}`}>
                     <Button size="sm" variant="secondary">
-                      Add room
+                      Add space
                     </Button>
                   </Link>
                 </div>
@@ -115,8 +115,8 @@ export default function LocationSpaces() {
         <AppShell>
           <div className="grid gap-6">
             <div>
-              <h2 className="text-2xl font-semibold">Inventory</h2>
-              <p className="text-textSecondary">Loading inventory...</p>
+              <h2 className="text-2xl font-semibold">Manage rooms</h2>
+              <p className="text-textSecondary">Loading rooms and spaces...</p>
             </div>
           </div>
         </AppShell>

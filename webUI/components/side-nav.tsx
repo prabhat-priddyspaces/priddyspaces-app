@@ -13,7 +13,6 @@ const nav = [
   { href: "/owner/loyalty", label: "Loyalty" },
   { href: "/owner/analytics", label: "Analytics" },
   { href: "/owner/locations", label: "Locations" },
-  { href: "/owner/locations/spaces", label: "Inventory" },
   { href: "/owner/spaces/new", label: "New Space" },
   { href: "/owner/locations/new", label: "New Location" },
   { href: "/owner/team", label: "Team" },

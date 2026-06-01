@@ -156,7 +156,7 @@ export function SpaceMediaClient() {
             </p>
           </div>
           <Link href={backHref}>
-            <Button variant="secondary">Back To Inventory</Button>
+            <Button variant="secondary">Back To Rooms</Button>
           </Link>
         </div>
 

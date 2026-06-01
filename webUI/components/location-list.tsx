@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Map as MapIcon, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,12 @@ interface Space {
   availability_status: string;
 }
 
+interface ApprovedBookingRequest {
+  public_id: string;
+  location_public_id: string | null;
+  end_datetime: string;
+}
+
 interface Organization {
   public_id: string;
   name: string;
@@ -52,9 +58,12 @@ export function LocationList() {
   const [organizations, setOrganizations] = useState<Record<string, Organization>>({});
   const [paymentReadiness, setPaymentReadiness] = useState<Record<string, MarketplaceReadiness>>({});
   const [spacesByLocation, setSpacesByLocation] = useState<Record<string, Space[]>>({});
+  const [approvedRequests, setApprovedRequests] = useState<ApprovedBookingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [cityFilter, setCityFilter] = useState("all");
   const [approvalMessage, setApprovalMessage] = useState("");
   const [requestingOrgId, setRequestingOrgId] = useState<string | null>(null);
 
@@ -62,16 +71,18 @@ export function LocationList() {
     async function load() {
       try {
         const token = getAccessToken() ?? undefined;
-        const [list, orgList, readinessList] = await Promise.all([
+        const [list, orgList, readinessList, approvedList] = await Promise.all([
           apiFetch<Location[]>("/api/locations", { method: "GET" }, token),
           apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token),
           apiFetch<MarketplaceReadiness[]>("/api/owner/marketplace-readiness", { method: "GET" }, token).catch(() => []),
+          apiFetch<ApprovedBookingRequest[]>("/api/booking-requests?status=approved", { method: "GET" }, token).catch(() => []),
         ]);
         setLocations(list);
         setOrganizations(Object.fromEntries(orgList.map((org) => [org.public_id, org])));
         setPaymentReadiness(
           Object.fromEntries((Array.isArray(readinessList) ? readinessList : []).map((item) => [item.organization_public_id, item]))
         );
+        setApprovedRequests(Array.isArray(approvedList) ? approvedList : []);
         const spacesEntries = await Promise.all(
           list.map(async (loc) => {
             try {
@@ -129,15 +140,36 @@ export function LocationList() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return locations;
     return locations.filter((l) => {
-      return (
+      const matchesQuery =
+        !q ||
         l.name.toLowerCase().includes(q) ||
         (l.city ?? "").toLowerCase().includes(q) ||
-        l.address.toLowerCase().includes(q)
-      );
+        l.address.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesCity = cityFilter === "all" || (l.city ?? "") === cityFilter;
+      return matchesQuery && matchesStatus && matchesCity;
     });
-  }, [locations, query]);
+  }, [cityFilter, locations, query, statusFilter]);
+
+  const cityOptions = useMemo(
+    () =>
+      Array.from(new Set(locations.map((location) => location.city).filter(Boolean) as string[])).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [locations]
+  );
+
+  const upcomingApprovedByLocation = useMemo(() => {
+    const now = Date.now();
+    return approvedRequests.reduce<Record<string, number>>((counts, request) => {
+      if (!request.location_public_id) return counts;
+      const endTime = new Date(request.end_datetime).getTime();
+      if (!Number.isFinite(endTime) || endTime < now) return counts;
+      counts[request.location_public_id] = (counts[request.location_public_id] ?? 0) + 1;
+      return counts;
+    }, {});
+  }, [approvedRequests]);
 
   if (error) {
     return <div className="text-[13px] text-danger">{error}</div>;
@@ -158,16 +190,30 @@ export function LocationList() {
             className="pl-9"
           />
         </div>
-        <Button variant="default" size="sm">
-          Status · All <ChevronDown size={11} />
-        </Button>
-        <Button variant="default" size="sm">
-          City · All <ChevronDown size={11} />
-        </Button>
+        <select
+          aria-label="Filter locations by status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="h-[30px] rounded-lg border border-line-strong bg-surface px-2.5 text-[12px] font-medium text-text outline-none hover:border-text-3"
+        >
+          <option value="all">Status · All</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select
+          aria-label="Filter locations by city"
+          value={cityFilter}
+          onChange={(e) => setCityFilter(e.target.value)}
+          className="h-[30px] rounded-lg border border-line-strong bg-surface px-2.5 text-[12px] font-medium text-text outline-none hover:border-text-3"
+        >
+          <option value="all">City · All</option>
+          {cityOptions.map((city) => (
+            <option key={city} value={city}>
+              {city}
+            </option>
+          ))}
+        </select>
         <div className="flex-1" />
-        <Button variant="default" size="sm">
-          <MapIcon size={14} /> Map view
-        </Button>
         <Link href="/owner/locations/new">
           <Button variant="primary" size="sm">
             <Plus size={14} /> New location
@@ -187,9 +233,6 @@ export function LocationList() {
           {filtered.map((location, i) => {
             const spaces = spacesByLocation[location.public_id] ?? [];
             const total = spaces.length;
-            const occupied = spaces.filter(
-              (s) => s.availability_status !== "available"
-            ).length;
             const org = organizations[location.organization_public_id];
             const readiness = paymentReadiness[location.organization_public_id];
             return (
@@ -200,7 +243,7 @@ export function LocationList() {
                 city={location.city}
                 address={location.address}
                 rooms={total}
-                occupancy={total === 0 ? null : occupied / total}
+                upcomingApprovedCount={upcomingApprovedByLocation[location.public_id] ?? 0}
                 // HANDOFF: per-location MTD net not yet returned by /api/locations.
                 mtdNet={null}
                 status={location.status}
