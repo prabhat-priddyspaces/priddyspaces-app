@@ -61,7 +61,10 @@ describe("OwnerMemberDetailClient", () => {
     futureEnd.setHours(13, 0, 0, 0);
 
     apiFetchMock.mockImplementation((url: string) => {
-      if (url === "/api/owner/members/member_1") {
+      if (url === "/api/orgs") {
+        return Promise.resolve([{ public_id: "org_1", name: "Downtown Cowork" }]);
+      }
+      if (url === "/api/owner/members/member_1?organization_public_id=org_1") {
         return Promise.resolve({
           user_public_id: "member_1",
           organization_public_id: "org_1",
@@ -121,6 +124,11 @@ describe("OwnerMemberDetailClient", () => {
     await waitFor(() => {
       expect(apiFetchMock).toHaveBeenCalledWith(
         expect.stringContaining("member_public_id=member_1"),
+        { method: "GET" },
+        "token",
+      );
+      expect(apiFetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("organization_public_id=org_1"),
         { method: "GET" },
         "token",
       );
