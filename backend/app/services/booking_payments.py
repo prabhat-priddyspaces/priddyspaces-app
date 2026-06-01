@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
@@ -35,6 +36,7 @@ from app.services.notifications import (
     send_owner_booking_cancelled_notification,
 )
 from app.services.access_passes import ensure_access_pass_for_booking, ensure_access_passes_for_booking_request
+from app.services.booking_inventory import booking_blocks_inventory
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
 from app.services.cancellation_refunds import policy_for_space, policy_snapshot, refund_percent_from_snapshot
@@ -50,6 +52,12 @@ from app.services.loyalty import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_PAYMENT_FAILURE_HOLD_MINUTES = 30
+
+
+def _payment_booking_conflict_detail(space: Space, req: BookingRequest) -> str:
+    if not booking_blocks_inventory(space, request_kind=req.request_kind):
+        return "Not enough shared desk seats are available for that date"
+    return "Booking overlaps existing booking"
 
 
 def _run_post_payment_side_effect(db: Session, label: str, callback) -> None:
@@ -512,9 +520,14 @@ def finalize_successful_booking_request_payment(
             booking_series_id=req.booking_series_id,
             status=BookingStatus.CONFIRMED,
             stripe_payment_intent_id=payment.stripe_payment_intent_id,
+            blocks_inventory=booking_blocks_inventory(space, request_kind=req.request_kind),
         )
         db.add(booking)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=_payment_booking_conflict_detail(space, req))
         req.booking_id = booking.id
 
     if req.booking_series_id:
@@ -765,9 +778,14 @@ def charge_booking_request(
                 booking_request_id=req.id,
                 booking_series_id=req.booking_series_id,
                 status=BookingStatus.CONFIRMED,
+                blocks_inventory=booking_blocks_inventory(space, request_kind=req.request_kind),
             )
             db.add(booking)
-            db.flush()
+            try:
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                raise HTTPException(status_code=409, detail=_payment_booking_conflict_detail(space, req))
             req.booking_id = booking.id
         if req.booking_series_id:
             db.query(Booking).filter(

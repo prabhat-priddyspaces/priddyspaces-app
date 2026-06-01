@@ -176,3 +176,76 @@ test("owner request email deep link opens approve confirmation", async ({ page }
   await expect(page.getByText("Confirmed")).toBeVisible();
   await expect(page.getByText("Booking book_email_1")).toBeVisible();
 });
+
+test("owner sees backend capacity error when approval exceeds shared desk seats", async ({ page }) => {
+  const requestState = {
+    public_id: "req_shared_capacity",
+    space_public_id: "space_shared_1",
+    space_name: "Shared Desk",
+    space_type: "shared_desk",
+    location_public_id: "loc_main",
+    location_name: "Main Street Hub",
+    location_city: "Miami",
+    member_public_id: "member_riley",
+    member_name: "Riley Ortiz",
+    member_email: "riley@example.com",
+    member_phone: "555-0100",
+    member_company_name: "Northstar Labs",
+    booking_id: null as number | null,
+    booking_public_id: null as string | null,
+    start_datetime: "2026-06-01T13:00:00.000Z",
+    end_datetime: "2026-06-01T22:00:00.000Z",
+    status: "requested",
+    payment_status: "not_charged",
+    payment_provider: "stripe",
+    cancellation_deadline_at: null,
+    estimated_amount: 500,
+    price_daily: 500,
+    price_monthly: null,
+    price_hourly: null,
+    base_amount_cents: 50000,
+    rate_basis: "daily",
+    units: 1,
+    operator_notes: null as string | null,
+    failure_reason: null,
+    request_kind: "daily_booking",
+    membership_plan_name: null,
+    is_guest_checkout: false,
+    guest_email: null,
+    guest_full_name: null,
+    guest_phone: null,
+    guest_company_name: null,
+    guest_notes: null,
+  };
+
+  await mockSession(page, "owner");
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("owner"));
+      return;
+    }
+
+    if (key === "GET /api/booking-requests") {
+      await json(route, [requestState]);
+      return;
+    }
+
+    if (key === "POST /api/booking-requests/req_shared_capacity/approve") {
+      await json(route, { detail: "Not enough shared desk seats are available for that date" }, 409);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/owner/requests");
+  await expect(page.getByTestId("request-space-req_shared_capacity")).toHaveText("Shared Desk");
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+
+  await expect(page.getByText("Not enough shared desk seats are available for that date")).toBeVisible();
+});

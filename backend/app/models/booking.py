@@ -16,6 +16,7 @@ class Booking(PublicIdMixin, TimestampMixin, Base):
     end_datetime = Column(DateTime(timezone=True), nullable=False)
     inventory_start_datetime = Column(DateTime(timezone=True), nullable=True)
     inventory_end_datetime = Column(DateTime(timezone=True), nullable=True)
+    blocks_inventory = Column(Boolean, nullable=False, server_default="true", default=True)
     booking_series_id = Column(Integer, nullable=True, index=True)
     booking_request_id = Column(Integer, nullable=True, index=True)
     recurrence_sequence = Column(Integer, nullable=True)

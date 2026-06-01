@@ -2,6 +2,8 @@ import json
 from datetime import datetime, time, timedelta, timezone
 from unittest.mock import MagicMock
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.config import settings
 from app.models.enums import (
     AvailabilityStatus,
@@ -1235,6 +1237,132 @@ def test_shared_desk_day_pass_approval_survives_confirmation_email_failure(
     booking = db_session.query(Booking).filter(Booking.id == approved["booking_id"]).first()
     assert booking is not None
     assert booking.status == BookingStatus.CONFIRMED
+
+
+def test_shared_desk_day_pass_approvals_use_pooled_capacity(db_session, client_factory, monkeypatch):
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
+    owner, space = _seed_owner_space(db_session)
+    space.space_type = SpaceType.SHARED_DESK
+    space.capacity = 4
+    space.price_daily = 200
+    space.price_hourly = None
+    space.availability_start_time = time(9, 0)
+    space.availability_end_time = time(18, 0)
+    db_session.add(space)
+    db_session.commit()
+
+    member = User(
+        email="shared-capacity@example.com",
+        auth_subject="sub-shared-capacity",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    payload = {
+        "space_public_id": space.public_id,
+        "start_datetime": datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc).isoformat(),
+        "end_datetime": datetime(2026, 6, 1, 18, 0, tzinfo=timezone.utc).isoformat(),
+        "booking_mode": "day_pass",
+        "full_day": True,
+        "seats_requested": 3,
+        "member_owner_payment_method_public_id": method.public_id,
+        "payment_authorization_consent": True,
+    }
+    first = member_client.post("/api/booking-requests", json=payload)
+    assert first.status_code == 200, first.text
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    first_approve = owner_client.post(
+        f"/api/booking-requests/{first.json()['public_id']}/approve",
+        json={"operator_notes": "first"},
+    )
+    assert first_approve.status_code == 200, first_approve.text
+    assert first_approve.json()["status"] == BookingRequestStatus.APPROVED.value
+
+    payload["seats_requested"] = 1
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    second = member_client.post("/api/booking-requests", json=payload)
+    assert second.status_code == 200, second.text
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    second_approve = owner_client.post(
+        f"/api/booking-requests/{second.json()['public_id']}/approve",
+        json={"operator_notes": "second"},
+    )
+    assert second_approve.status_code == 200, second_approve.text
+    assert second_approve.json()["status"] == BookingRequestStatus.APPROVED.value
+
+    bookings = db_session.query(Booking).filter(Booking.space_id == space.id).all()
+    assert len(bookings) == 2
+    assert [booking.blocks_inventory for booking in bookings] == [False, False]
+
+    payload["seats_requested"] = 1
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    third = member_client.post("/api/booking-requests", json=payload)
+    assert third.status_code == 409
+    assert "shared desk seats" in third.json()["detail"].lower()
+
+
+def test_approval_booking_hold_integrity_error_returns_conflict(db_session, client_factory, monkeypatch):
+    def raise_integrity_error(*_args, **_kwargs):
+        raise IntegrityError("insert", {}, Exception("overlap"))
+
+    monkeypatch.setattr("app.api.booking_requests.create_pending_booking_hold", raise_integrity_error)
+    owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="conflict@example.com",
+        auth_subject="sub-conflict",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=17))
+    assert create.status_code == 200, create.text
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    approve = owner_client.post(
+        f"/api/booking-requests/{create.json()['public_id']}/approve",
+        json={"operator_notes": "ok"},
+    )
+
+    assert approve.status_code == 409
+    assert approve.json()["detail"] == "Booking overlaps existing booking"
 
 
 def test_booking_request_approval_sends_one_calendar_email_and_audits_actor(

@@ -76,8 +76,10 @@ from app.services.booking_email_delivery import (
 )
 from app.services.availability import subscription_overlaps
 from app.services.booking_inventory import (
+    booking_blocks_inventory,
     create_pending_booking_hold,
     expand_occurrences,
+    is_shared_desk_day_pass,
     instant_booking_allowed,
     validate_occurrences_available,
 )
@@ -1092,6 +1094,42 @@ def _booking_for_request(db: Session, req: BookingRequest) -> Booking | None:
     return db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
 
 
+def _request_blocks_inventory(space: Space, req: BookingRequest) -> bool:
+    return booking_blocks_inventory(space, request_kind=req.request_kind)
+
+
+def _booking_insert_conflict_detail(space: Space, req: BookingRequest) -> str:
+    if is_shared_desk_day_pass(space, request_kind=req.request_kind):
+        return "Not enough shared desk seats are available for that date"
+    return "Booking overlaps existing booking"
+
+
+def _raise_booking_insert_conflict(db: Session, space: Space, req: BookingRequest):
+    db.rollback()
+    raise HTTPException(status_code=409, detail=_booking_insert_conflict_detail(space, req))
+
+
+def _create_pending_booking_hold_or_conflict(
+    db: Session,
+    *,
+    req: BookingRequest,
+    space: Space,
+    occurrence,
+) -> Booking:
+    try:
+        return create_pending_booking_hold(
+            db,
+            user_id=req.user_id,
+            space=space,
+            occurrence=occurrence,
+            booking_request_id=req.id,
+            booking_series_id=req.booking_series_id,
+            blocks_inventory=_request_blocks_inventory(space, req),
+        )
+    except IntegrityError:
+        _raise_booking_insert_conflict(db, space, req)
+
+
 def _activate_booking_series_if_needed(db: Session, req: BookingRequest) -> None:
     if not req.booking_series_id:
         return
@@ -1520,6 +1558,11 @@ def create_booking_request(
                     occurrence=occurrence,
                     booking_request_id=req.id,
                     booking_series_id=series.id if series else None,
+                    blocks_inventory=booking_blocks_inventory(
+                        space,
+                        booking_mode="day_pass" if is_day_pass else "hourly",
+                        full_day=is_day_pass,
+                    ),
                 )
                 if first_booking is None:
                     first_booking = booking_hold
@@ -1796,12 +1839,16 @@ def approve_booking_request(
             inventory_end_datetime=occurrences[0].inventory_end_datetime,
             booking_request_id=req.id,
             status=BookingStatus.CONFIRMED,
+            blocks_inventory=_request_blocks_inventory(space, req),
         )
-        db.add(booking)
-        db.flush()
-        req.booking_id = booking.id
-        db.add(req)
-        db.commit()
+        try:
+            db.add(booking)
+            db.flush()
+            req.booking_id = booking.id
+            db.add(req)
+            db.commit()
+        except IntegrityError:
+            _raise_booking_insert_conflict(db, space, req)
         db.refresh(booking)
         db.refresh(req)
         after_status = req.status
@@ -1824,16 +1871,18 @@ def approve_booking_request(
                 full_day=req.request_kind == BookingRequestKind.DAILY_BOOKING.value,
                 seats_requested=req.seats_requested or 1,
             )
-            booking_hold = create_pending_booking_hold(
+            booking_hold = _create_pending_booking_hold_or_conflict(
                 db,
-                user_id=req.user_id,
+                req=req,
                 space=space,
                 occurrence=occurrences[0],
-                booking_request_id=req.id,
             )
-            req.booking_id = booking_hold.id
-            db.add(req)
-            db.commit()
+            try:
+                req.booking_id = booking_hold.id
+                db.add(req)
+                db.commit()
+            except IntegrityError:
+                _raise_booking_insert_conflict(db, space, req)
             db.refresh(req)
         req, booking, payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
         after_status = req.status
@@ -1867,13 +1916,17 @@ def approve_booking_request(
             inventory_start_datetime=occurrences[0].inventory_start_datetime,
             inventory_end_datetime=occurrences[0].inventory_end_datetime,
             booking_request_id=req.id,
-            status=BookingStatus.PENDING
+            status=BookingStatus.PENDING,
+            blocks_inventory=_request_blocks_inventory(space, req),
         )
-        db.add(booking)
-        db.flush()
-        req.booking_id = booking.id
-        db.add(req)
-        db.commit()
+        try:
+            db.add(booking)
+            db.flush()
+            req.booking_id = booking.id
+            db.add(req)
+            db.commit()
+        except IntegrityError:
+            _raise_booking_insert_conflict(db, space, req)
         db.refresh(booking)
         db.refresh(req)
         after_status = req.status
@@ -2033,16 +2086,18 @@ def retry_booking_request_payment(
             full_day=req.request_kind == BookingRequestKind.DAILY_BOOKING.value,
             seats_requested=req.seats_requested or 1,
         )
-        booking_hold = create_pending_booking_hold(
+        booking_hold = _create_pending_booking_hold_or_conflict(
             db,
-            user_id=req.user_id,
+            req=req,
             space=space,
             occurrence=occurrences[0],
-            booking_request_id=req.id,
         )
-        req.booking_id = booking_hold.id
-        db.add(req)
-        db.commit()
+        try:
+            req.booking_id = booking_hold.id
+            db.add(req)
+            db.commit()
+        except IntegrityError:
+            _raise_booking_insert_conflict(db, space, req)
         db.refresh(req)
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
     if req.status == BookingRequestStatus.APPROVED:

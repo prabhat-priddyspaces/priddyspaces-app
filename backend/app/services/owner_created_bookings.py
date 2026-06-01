@@ -32,7 +32,13 @@ from app.schemas.owner_booking import OwnerBookingCreate, OwnerBookingPreviewCre
 from app.services.access_passes import ensure_access_passes_for_booking_request
 from app.services.audit import write_audit_log
 from app.services.authz import get_org_member, require_pricing_override
-from app.services.booking_inventory import as_utc, create_pending_booking_hold, expand_occurrences, validate_occurrences_available
+from app.services.booking_inventory import (
+    as_utc,
+    booking_blocks_inventory,
+    create_pending_booking_hold,
+    expand_occurrences,
+    validate_occurrences_available,
+)
 from app.services.booking_payments import (
     DEFAULT_PAYMENT_FAILURE_HOLD_MINUTES,
     finalize_successful_booking_request_payment,
@@ -411,6 +417,11 @@ def create_owner_booking(
         space=space,
         occurrence=occurrences[0],
         booking_request_id=req.id,
+        blocks_inventory=booking_blocks_inventory(
+            space,
+            booking_mode=payload.booking_mode,
+            full_day=payload.full_day,
+        ),
     )
     req.booking_id = booking.id
     db.add(req)
