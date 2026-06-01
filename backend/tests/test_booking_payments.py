@@ -336,6 +336,33 @@ def test_double_charge_short_circuits_after_success(db_session, monkeypatch):
     assert count["n"] == 1
 
 
+def test_charge_success_survives_access_pass_side_effect_failure(db_session, monkeypatch):
+    _, member, space, setting, method = _seed(db_session)
+    req = _make_request(db_session, member, space, setting, method)
+
+    class HappyProvider:
+        def charge_saved_method(self, **kwargs):
+            return ChargeResult(status="succeeded", provider_payment_id="pi_side_effect", raw_response={"ok": True})
+
+    def raise_access_pass_failure(*_args, **_kwargs):
+        raise RuntimeError("access pass unavailable")
+
+    monkeypatch.setattr(
+        "app.services.booking_payments.PaymentProviderFactory.get",
+        lambda setting: HappyProvider(),
+    )
+    monkeypatch.setattr(
+        "app.services.booking_payments.ensure_access_passes_for_booking_request",
+        raise_access_pass_failure,
+    )
+
+    req, booking, payment = charge_booking_request(db_session, req)
+
+    assert req.status == BookingRequestStatus.APPROVED
+    assert booking is not None and booking.status == BookingStatus.CONFIRMED
+    assert payment is not None and payment.status == PaymentStatus.SUCCEEDED
+
+
 # --------------------- refund void vs refund ---------------------
 
 

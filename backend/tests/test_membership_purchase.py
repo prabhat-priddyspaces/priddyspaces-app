@@ -202,7 +202,7 @@ def test_membership_purchase_request_create_and_approve(
         {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
 
-    desired_start = date(2026, 5, 1)
+    desired_start = date.today().replace(day=1)
     create_resp = member_client.post(
         "/api/booking-requests",
         json={
