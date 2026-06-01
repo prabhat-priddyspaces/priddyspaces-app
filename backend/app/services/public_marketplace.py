@@ -25,6 +25,7 @@ from app.services.amenities import get_location_amenities_map
 from app.services.booking_inventory import expand_occurrences, resolve_tz, validate_occurrences_available
 from app.services.booking_products import booking_products_for_space
 from app.services.money import CENT, to_money_decimal
+from app.services.owner_payments import space_payment_is_marketplace_ready
 
 
 CATEGORY_SPACE_TYPES = {
@@ -568,7 +569,11 @@ def _public_inventory_rows(
     )
     if require_coordinates:
         query = query.filter(Location.lat.isnot(None), Location.lng.isnot(None))
-    return query.all()
+    return [
+        (space, location, image)
+        for space, location, image in query.all()
+        if space_payment_is_marketplace_ready(db, space)
+    ]
 
 
 def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters) -> dict[str, object]:
@@ -909,7 +914,11 @@ def get_public_space_detail(
         raise HTTPException(status_code=404, detail="Marketplace space not found")
 
     space, location, organization = row
-    if not _space_publicly_visible(space, location) or organization.review_status != OrganizationReviewStatus.APPROVED:
+    if (
+        not _space_publicly_visible(space, location)
+        or organization.review_status != OrganizationReviewStatus.APPROVED
+        or not space_payment_is_marketplace_ready(db, space)
+    ):
         raise HTTPException(status_code=404, detail="Marketplace space not found")
 
     location_amenity_map = get_location_amenities_map(db, [location.id])

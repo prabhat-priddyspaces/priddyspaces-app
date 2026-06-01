@@ -13,11 +13,13 @@ from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingRequestStatus, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.space import Space
 from app.schemas.owner_payment import (
     MemberOwnerPaymentMethodCreate,
     MemberOwnerPaymentMethodOut,
+    OwnerMarketplaceReadinessOut,
     OwnerPaymentSettingOut,
     OwnerPaymentSettingUpsert,
     PaymentMethodResolveOut,
@@ -36,6 +38,7 @@ from app.services.owner_payments import (
     get_enabled_owner_payment_setting,
     import_platform_payment_method_for_owner,
     normalize_provider,
+    organization_marketplace_payment_readiness,
     payment_method_is_chargeable,
     resolve_payment_provider,
     set_default_payment_method,
@@ -120,6 +123,39 @@ def list_owner_payment_settings(
         .all()
     )
     return [_serialize_setting(setting, org) for setting in settings]
+
+
+@router.get("/owner/marketplace-readiness", response_model=list[OwnerMarketplaceReadinessOut])
+def list_owner_marketplace_readiness(
+    db: Session = Depends(get_db),
+    token: dict = Depends(get_current_user),
+):
+    user = get_or_create_user(db, token)
+    rows = (
+        db.query(Organization)
+        .join(OrganizationMember, OrganizationMember.organization_id == Organization.id)
+        .filter(
+            OrganizationMember.user_id == user.id,
+            OrganizationMember.is_active.is_(True),
+            OrganizationMember.role.in_([UserRole.OWNER, UserRole.ADMIN]),
+        )
+        .order_by(Organization.name.asc())
+        .all()
+    )
+    return [
+        OwnerMarketplaceReadinessOut(
+            organization_public_id=readiness.organization_public_id,
+            organization_name=readiness.organization_name,
+            provider=readiness.provider,
+            status=readiness.status,
+            blockers=readiness.blockers,
+            public_listing_count=readiness.public_listing_count,
+            marketplace_visible_listing_count=readiness.marketplace_visible_listing_count,
+            payment_hidden_listing_count=readiness.payment_hidden_listing_count,
+        )
+        for org in rows
+        for readiness in [organization_marketplace_payment_readiness(db, org)]
+    ]
 
 
 @router.post("/owner/payment-settings", response_model=OwnerPaymentSettingOut)

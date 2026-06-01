@@ -9,7 +9,17 @@ from app.main import app
 from app.core.password import verify_password
 from app.models.audit_log import AuditLog
 from app.models.booking_request import BookingRequest
-from app.models.enums import BookingRequestStatus, OrganizationReviewStatus, PlatformTeamRole, SpaceType, SpaceVisibility, UserAppRole, UserRole
+from app.models.enums import (
+    AvailabilityStatus,
+    BookingRequestStatus,
+    LocationStatus,
+    OrganizationReviewStatus,
+    PlatformTeamRole,
+    SpaceType,
+    SpaceVisibility,
+    UserAppRole,
+    UserRole,
+)
 from app.models.location import Location
 from app.models.marketing import OutboundMessage
 from app.models.organization import Organization
@@ -766,6 +776,28 @@ def test_admin_owner_company_search_matches_public_id(db_session, client_factory
     org.description = "Review-ready owner onboarding detail."
     db_session.add(org)
     db_session.commit()
+    location = Location(
+        organization_id=org.id,
+        tenant_id=org.id,
+        name="Review Hub",
+        address="123 Review Ave",
+        city="Testville",
+        timezone="UTC",
+        status=LocationStatus.ACTIVE,
+    )
+    db_session.add(location)
+    db_session.commit()
+    db_session.refresh(location)
+    db_session.add(
+        Space(
+            location_id=location.id,
+            tenant_id=org.id,
+            space_type=SpaceType.CONFERENCE_ROOM,
+            availability_status=AvailabilityStatus.AVAILABLE,
+            visibility=SpaceVisibility.PUBLIC,
+        )
+    )
+    db_session.commit()
     client = client_factory({
         "sub": str(admin.public_id),
         "email": admin.email,
@@ -784,3 +816,8 @@ def test_admin_owner_company_search_matches_public_id(db_session, client_factory
     assert rows[0]["business_email"] == "approval@workspace.example"
     assert rows[0]["business_phone"] == "+1 555 0101"
     assert rows[0]["description"] == "Review-ready owner onboarding detail."
+    assert rows[0]["payment_status"] == "blocked"
+    assert rows[0]["payment_provider"] == "stripe"
+    assert rows[0]["payment_hidden_listings"] == 1
+    assert rows[0]["marketplace_visible_listings"] == 0
+    assert rows[0]["payment_blockers"] == ["Stripe payment provider is not configured"]

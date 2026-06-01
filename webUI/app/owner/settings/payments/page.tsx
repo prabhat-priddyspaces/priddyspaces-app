@@ -37,6 +37,17 @@ interface OwnerPaymentSetting {
   last_tested_at: string | null;
 }
 
+interface MarketplaceReadiness {
+  organization_public_id: string;
+  organization_name: string;
+  provider: string | null;
+  status: string;
+  blockers: string[];
+  public_listing_count: number;
+  marketplace_visible_listing_count: number;
+  payment_hidden_listing_count: number;
+}
+
 const emptyForm = {
   provider: "stripe" as "stripe" | "cardpointe",
   is_enabled: false,
@@ -57,6 +68,7 @@ export default function OwnerPaymentSettingsPage() {
   const [orgId, setOrgId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [settings, setSettings] = useState<OwnerPaymentSetting[]>([]);
+  const [readiness, setReadiness] = useState<MarketplaceReadiness[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [orgOverride, setOrgOverride] = useState("");
   const [locationOverride, setLocationOverride] = useState("");
@@ -66,6 +78,16 @@ export default function OwnerPaymentSettingsPage() {
     () => settings.find((setting) => setting.provider === form.provider) || null,
     [settings, form.provider]
   );
+  const selectedReadiness = useMemo(
+    () => readiness.find((item) => item.organization_public_id === orgId) || null,
+    [orgId, readiness]
+  );
+
+  const loadReadiness = useCallback(async () => {
+    const token = getAccessToken() ?? undefined;
+    const list = await apiFetch<MarketplaceReadiness[]>("/api/owner/marketplace-readiness", { method: "GET" }, token);
+    setReadiness(Array.isArray(list) ? list : []);
+  }, []);
 
   const loadSettings = useCallback(async (nextOrgId?: string) => {
     const targetOrgId = nextOrgId ?? orgId;
@@ -103,18 +125,19 @@ export default function OwnerPaymentSettingsPage() {
     const token = getAccessToken() ?? undefined;
     Promise.all([
       loadSettings(orgId),
+      loadReadiness().catch(() => undefined),
       apiFetch<LocationOption[]>(
         `/api/locations?organization_public_id=${encodeURIComponent(orgId)}`,
         { method: "GET" },
         token
       ).catch(() => []),
     ])
-      .then(([, locationList]) => {
+      .then(([, , locationList]) => {
         setLocations(locationList);
         setLocationId(locationList[0]?.public_id || "");
       })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load payment settings"));
-  }, [orgId, loadSettings]);
+  }, [orgId, loadReadiness, loadSettings]);
 
   useEffect(() => {
     if (!selected) {
@@ -153,6 +176,7 @@ export default function OwnerPaymentSettingsPage() {
       setMessage(err instanceof Error ? err.message : "Unable to save payment settings");
     } finally {
       await loadSettings();
+      await loadReadiness().catch(() => undefined);
     }
   }
 
@@ -165,6 +189,7 @@ export default function OwnerPaymentSettingsPage() {
       setMessage(err instanceof Error ? err.message : "Connection test failed");
     } finally {
       await loadSettings();
+      await loadReadiness().catch(() => undefined);
     }
   }
 
@@ -177,6 +202,7 @@ export default function OwnerPaymentSettingsPage() {
       setMessage(err instanceof Error ? err.message : "Unable to update provider status");
     } finally {
       await loadSettings();
+      await loadReadiness().catch(() => undefined);
     }
   }
 
@@ -192,6 +218,7 @@ export default function OwnerPaymentSettingsPage() {
       token
     );
     setMessage("Organization payment provider saved");
+    await loadReadiness().catch(() => undefined);
   }
 
   async function saveLocationOverride() {
@@ -206,6 +233,7 @@ export default function OwnerPaymentSettingsPage() {
       token
     );
     setMessage("Location payment provider saved");
+    await loadReadiness().catch(() => undefined);
   }
 
   return (
@@ -217,6 +245,30 @@ export default function OwnerPaymentSettingsPage() {
         </div>
 
         {message ? <div className="text-sm text-textMuted">{message}</div> : null}
+
+        {selectedReadiness ? (
+          <Card className="grid gap-2 p-4">
+            <div className="text-sm font-semibold text-textPrimary">Marketplace payment status</div>
+            <div className="text-sm text-textSecondary">
+              {selectedReadiness.status === "ready"
+                ? "Payments are ready. Public listings can appear in marketplace search."
+                : selectedReadiness.status === "no_public_listings"
+                  ? "No public active listings need payment setup yet."
+                  : "Payment setup required. Your listings are hidden from search until payments are configured."}
+            </div>
+            <div className="text-xs text-textMuted">
+              Visible listings {selectedReadiness.marketplace_visible_listing_count} • Hidden listings{" "}
+              {selectedReadiness.payment_hidden_listing_count} • Public listings {selectedReadiness.public_listing_count}
+            </div>
+            {selectedReadiness.blockers.length ? (
+              <div className="grid gap-1 text-xs text-warning">
+                {selectedReadiness.blockers.map((blocker) => (
+                  <div key={blocker}>{blocker}</div>
+                ))}
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
 
         <Card className="grid gap-4 p-4">
           <div className="grid gap-4 md:grid-cols-3">

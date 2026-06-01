@@ -35,6 +35,12 @@ interface Organization {
   review_status: string;
 }
 
+interface MarketplaceReadiness {
+  organization_public_id: string;
+  status: string;
+  payment_hidden_listing_count: number;
+}
+
 interface ApprovalRequestResponse {
   public_id: string;
   review_status: string;
@@ -44,6 +50,7 @@ interface ApprovalRequestResponse {
 export function LocationList() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [organizations, setOrganizations] = useState<Record<string, Organization>>({});
+  const [paymentReadiness, setPaymentReadiness] = useState<Record<string, MarketplaceReadiness>>({});
   const [spacesByLocation, setSpacesByLocation] = useState<Record<string, Space[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,12 +62,16 @@ export function LocationList() {
     async function load() {
       try {
         const token = getAccessToken() ?? undefined;
-        const [list, orgList] = await Promise.all([
+        const [list, orgList, readinessList] = await Promise.all([
           apiFetch<Location[]>("/api/locations", { method: "GET" }, token),
           apiFetch<Organization[]>("/api/orgs", { method: "GET" }, token),
+          apiFetch<MarketplaceReadiness[]>("/api/owner/marketplace-readiness", { method: "GET" }, token).catch(() => []),
         ]);
         setLocations(list);
         setOrganizations(Object.fromEntries(orgList.map((org) => [org.public_id, org])));
+        setPaymentReadiness(
+          Object.fromEntries((Array.isArray(readinessList) ? readinessList : []).map((item) => [item.organization_public_id, item]))
+        );
         const spacesEntries = await Promise.all(
           list.map(async (loc) => {
             try {
@@ -180,6 +191,7 @@ export function LocationList() {
               (s) => s.availability_status !== "available"
             ).length;
             const org = organizations[location.organization_public_id];
+            const readiness = paymentReadiness[location.organization_public_id];
             return (
               <LocationCard
                 key={location.public_id}
@@ -193,6 +205,8 @@ export function LocationList() {
                 mtdNet={null}
                 status={location.status}
                 organizationReviewStatus={org?.review_status}
+                marketplacePaymentStatus={readiness?.status}
+                paymentHiddenListings={readiness?.payment_hidden_listing_count}
                 onRequestApproval={
                   org ? () => requestApproval(org.public_id).catch(() => null) : undefined
                 }

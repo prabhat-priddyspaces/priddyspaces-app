@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,11 @@ interface OwnerCompany {
   review_notes: string | null;
   commission_override_pct: number | null;
   stripe_connected: boolean;
+  payment_status: string;
+  payment_provider: string | null;
+  payment_blockers: string[];
+  marketplace_visible_listings: number;
+  payment_hidden_listings: number;
   locations: number;
   listings: number;
   owner: {
@@ -39,6 +45,13 @@ interface OwnerCompany {
     after_state: Record<string, unknown> | null;
     created_at: string | null;
   }>;
+}
+
+function paymentStatusMeta(status: string) {
+  if (status === "ready") return { label: "Payment ready", variant: "success" as const };
+  if (status === "partial") return { label: "Payment partial", variant: "warning" as const };
+  if (status === "blocked") return { label: "Payment missing", variant: "danger" as const };
+  return { label: "No public listings", variant: "default" as const };
 }
 
 function formatHistoryValue(value: unknown) {
@@ -138,7 +151,9 @@ export default function AdminOwnerCompaniesPage() {
         </Card>
         {message ? <div className="text-sm text-danger">{message}</div> : null}
         <div className="grid gap-4">
-          {companies.map((company) => (
+          {companies.map((company) => {
+            const payment = paymentStatusMeta(company.payment_status);
+            return (
             <Card
               key={company.public_id}
               className={`p-4 ${linkedCompanyId === company.public_id ? "border-brand" : ""}`}
@@ -146,8 +161,13 @@ export default function AdminOwnerCompaniesPage() {
               <div className="space-y-3">
                 <div>
                   <div className="font-semibold text-text">{company.name}</div>
-                  <div className="text-sm text-text-3">
-                    {company.owner.name || company.owner.email} • {formatAdminLabel(company.review_status)} • {company.locations} locations • {company.listings} listings
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-text-3">
+                    <span>
+                      {company.owner.name || company.owner.email} • {formatAdminLabel(company.review_status)} • {company.locations} locations • {company.listings} listings
+                    </span>
+                    <Badge variant={payment.variant} dot>
+                      {payment.label}
+                    </Badge>
                   </div>
                 </div>
                 <div className="grid gap-2 rounded-md border border-line bg-surface-2/40 p-3 text-sm md:grid-cols-2">
@@ -186,6 +206,22 @@ export default function AdminOwnerCompaniesPage() {
                     <span className="font-medium text-text">Description: </span>
                     <span className="text-text-2">{company.description || "—"}</span>
                   </div>
+                  <div>
+                    <span className="font-medium text-text">Payment provider: </span>
+                    <span className="text-text-2">{company.payment_provider ? formatAdminLabel(company.payment_provider) : "—"}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-text">Marketplace visibility: </span>
+                    <span className="text-text-2">
+                      {company.marketplace_visible_listings ?? 0} visible • {company.payment_hidden_listings ?? 0} hidden by payments
+                    </span>
+                  </div>
+                  {(company.payment_blockers ?? []).length ? (
+                    <div className="md:col-span-2 text-warning">
+                      <span className="font-medium">Payment blockers: </span>
+                      {(company.payment_blockers ?? []).join(" • ")}
+                    </div>
+                  ) : null}
                 </div>
                 {linkedCompanyId === company.public_id && linkedAction === "approve" ? (
                   <div className="rounded-[8px] border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">
@@ -241,7 +277,8 @@ export default function AdminOwnerCompaniesPage() {
                 ) : null}
               </div>
             </Card>
-          ))}
+            );
+          })}
           {companies.length === 0 ? <Card className="p-4 text-sm text-text-3">No owner companies found.</Card> : null}
         </div>
       </div>

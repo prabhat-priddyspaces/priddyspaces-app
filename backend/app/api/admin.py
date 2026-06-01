@@ -47,6 +47,7 @@ from app.services.audit import write_audit_log
 from app.services.booking_email_delivery import BOOKING_EMAIL_LABELS
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
 from app.services.notifications import send_email
+from app.services.owner_payments import organization_marketplace_payment_readiness
 from app.services.platform_auth import (
     build_default_route,
     ensure_not_platform_target,
@@ -876,6 +877,11 @@ def list_owner_companies(
             }
         )
 
+    payment_readiness_by_org = {
+        organization.id: organization_marketplace_payment_readiness(db, organization)
+        for organization in organizations
+    }
+
     return [
         {
             "public_id": organization.public_id,
@@ -891,6 +897,15 @@ def list_owner_companies(
             "reviewed_at": organization.reviewed_at.isoformat() if organization.reviewed_at else None,
             "commission_override_pct": organization.commission_override_pct,
             "stripe_connected": bool(organization.stripe_account_id),
+            "payment_status": payment_readiness_by_org[organization.id].status,
+            "payment_provider": payment_readiness_by_org[organization.id].provider,
+            "payment_blockers": payment_readiness_by_org[organization.id].blockers,
+            "marketplace_visible_listings": (
+                payment_readiness_by_org[organization.id].marketplace_visible_listing_count
+                if organization.review_status == OrganizationReviewStatus.APPROVED
+                else 0
+            ),
+            "payment_hidden_listings": payment_readiness_by_org[organization.id].payment_hidden_listing_count,
             "owner": {
                 "public_id": users.get(organization.owner_id).public_id if users.get(organization.owner_id) else None,
                 "email": users.get(organization.owner_id).email if users.get(organization.owner_id) else None,

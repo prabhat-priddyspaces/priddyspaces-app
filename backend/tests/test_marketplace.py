@@ -26,12 +26,29 @@ from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
 from app.models.organization_amenity import OrganizationAmenity
 from app.models.organization_member import OrganizationMember
+from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.location import Location
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.space_image import SpaceImage
 from app.models.subscription_plan import SubscriptionPlan
+
+
+def _add_ready_payment_setting(db, org: Organization, *, connection_status: str = "not_tested"):
+    setting = OwnerPaymentSetting(
+        organization_id=org.id,
+        tenant_id=org.id,
+        provider="stripe",
+        is_enabled=True,
+        stripe_publishable_key="pk_test_owner",
+        stripe_secret_key_encrypted="sk_test_owner",
+        connection_status=connection_status,
+    )
+    db.add(setting)
+    db.commit()
+    db.refresh(setting)
+    return setting
 
 
 def _seed_spaces(db):
@@ -54,6 +71,7 @@ def _seed_spaces(db):
     db.add(org)
     db.commit()
     db.refresh(org)
+    _add_ready_payment_setting(db, org)
 
     member = OrganizationMember(
         organization_id=org.id,
@@ -160,6 +178,7 @@ def _seed_public_location_marketplace(db):
     db.add(org)
     db.commit()
     db.refresh(org)
+    _add_ready_payment_setting(db, org)
 
     db.add(
         OrganizationMember(
@@ -444,6 +463,38 @@ def test_marketplace_search_hides_unavailable_inventory(db_session, client_facto
     public_space = _seed_spaces(db_session)
     public_space.availability_status = AvailabilityStatus.MAINTENANCE
     db_session.add(public_space)
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner", "email": "owner@example.com", "email_verified": True})
+
+    response = client.get("/api/marketplace/search")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_marketplace_search_hides_payment_blocked_inventory(db_session, client_factory):
+    public_space = _seed_spaces(db_session)
+    db_session.query(OwnerPaymentSetting).filter(
+        OwnerPaymentSetting.organization_id == public_space.tenant_id
+    ).delete()
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner", "email": "owner@example.com", "email_verified": True})
+
+    response = client.get("/api/marketplace/search")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    detail = client.get(f"/api/marketplace/spaces/{public_space.public_id}")
+    assert detail.status_code == 404
+
+
+def test_marketplace_search_hides_failed_payment_connection(db_session, client_factory):
+    public_space = _seed_spaces(db_session)
+    setting = db_session.query(OwnerPaymentSetting).filter(
+        OwnerPaymentSetting.organization_id == public_space.tenant_id
+    ).one()
+    setting.connection_status = "failed"
+    db_session.add(setting)
     db_session.commit()
     client = client_factory({"sub": "sub-owner", "email": "owner@example.com", "email_verified": True})
 

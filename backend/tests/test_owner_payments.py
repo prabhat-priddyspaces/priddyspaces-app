@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from app.core.config import settings
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
-from app.models.enums import AvailabilityStatus, SpaceType, UserAppRole, UserRole
+from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
@@ -80,6 +80,41 @@ def _stripe_setting(db, org: Organization, secret: str = "sk_test_owner") -> Own
     db.commit()
     db.refresh(setting)
     return setting
+
+
+def test_owner_marketplace_readiness_reports_payment_hidden_listings(db_session, client_factory):
+    owner, org, space = _owner_space(db_session)
+    space.visibility = SpaceVisibility.PUBLIC
+    db_session.add(space)
+    db_session.commit()
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    blocked = owner_client.get("/api/owner/marketplace-readiness")
+    assert blocked.status_code == 200
+    body = blocked.json()
+    assert body[0]["status"] == "blocked"
+    assert body[0]["public_listing_count"] == 1
+    assert body[0]["payment_hidden_listing_count"] == 1
+    assert body[0]["blockers"] == ["Stripe payment provider is not configured"]
+
+    setting = _stripe_setting(db_session, org)
+    ready = owner_client.get("/api/owner/marketplace-readiness")
+    assert ready.status_code == 200
+    assert ready.json()[0]["status"] == "ready"
+    assert ready.json()[0]["marketplace_visible_listing_count"] == 1
+    assert ready.json()[0]["payment_hidden_listing_count"] == 0
+
+    setting.connection_status = "failed"
+    db_session.add(setting)
+    db_session.commit()
+    failed = owner_client.get("/api/owner/marketplace-readiness")
+    assert failed.status_code == 200
+    assert failed.json()[0]["status"] == "blocked"
+    assert failed.json()[0]["blockers"] == ["Stripe connection test failed"]
 
 
 def test_owner_cannot_enable_incomplete_stripe_payment_setting(db_session, client_factory):

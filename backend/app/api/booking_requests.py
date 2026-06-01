@@ -94,7 +94,12 @@ from app.services.membership_subscriptions import (
     MembershipBillingError,
     create_subscription as create_stripe_subscription,
 )
-from app.services.owner_payments import ensure_payment_method_chargeable, require_payment_method_for_request
+from app.services.owner_payments import (
+    ensure_payment_method_chargeable,
+    require_payment_method_for_request,
+    require_space_payment_ready_for_booking,
+    require_space_payment_ready_for_public_surface,
+)
 from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.pricing import (
     EstimateResult,
@@ -650,6 +655,7 @@ def _create_membership_purchase_request(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
     _require_public_booking_space(db, space, location, allow_unlisted=True)
+    require_space_payment_ready_for_booking(db, space)
 
     mode_row = (
         db.query(SpaceBookingMode)
@@ -1141,6 +1147,7 @@ def create_guest_booking_request(
     if not location:
         raise HTTPException(status_code=404, detail="Space not found")
     _require_public_booking_space(db, space, location, allow_unlisted=False)
+    require_space_payment_ready_for_booking(db, space)
 
     start_dt = _as_utc(payload.start_datetime)
     end_dt = _as_utc(payload.end_datetime)
@@ -1264,6 +1271,7 @@ def preview_booking_request_price(
         if not location:
             raise HTTPException(status_code=404, detail="Location not found")
         _require_public_booking_space(db, space, location, allow_unlisted=True)
+        require_space_payment_ready_for_public_surface(db, space)
         return BookingPricePreviewOut(
             base_amount_cents=plan.price_cents,
             total_amount_cents=plan.price_cents,
@@ -1284,6 +1292,7 @@ def preview_booking_request_price(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
     _require_public_booking_space(db, space, location, allow_unlisted=True)
+    require_space_payment_ready_for_public_surface(db, space)
 
     start_dt = _as_utc(payload.start_datetime)
     end_dt = _as_utc(payload.end_datetime)
@@ -1373,6 +1382,7 @@ def create_booking_request(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
     organization = _require_public_booking_space(db, space, location, allow_unlisted=True)
+    require_space_payment_ready_for_booking(db, space)
 
     owner_payment_setting = None
     payment_method = None
