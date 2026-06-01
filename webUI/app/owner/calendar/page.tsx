@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { CalendarPlus } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { CalendarFilters } from "@/components/calendar/calendar-filter-bar";
 import { CalendarBoard, ViewMode, computeWindow } from "@/components/calendar/calendar-board";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { CalendarResponse, startOfDay } from "@/lib/calendar";
@@ -100,9 +103,17 @@ export default function OwnerCalendarPage() {
 
   return (
     <AppShell title="Calendar" breadcrumb={["Owner", "Operations"]}>
-      <p className="text-[13px] text-text-3 mb-4">
-        See bookings, requests, and active memberships across your locations.
-      </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <p className="text-[13px] text-text-3">
+          See bookings, requests, and active memberships across your locations.
+        </p>
+        <Link href="/owner/bookings/new">
+          <Button type="button" size="sm" variant="primary">
+            <CalendarPlus size={14} />
+            Create booking
+          </Button>
+        </Link>
+      </div>
       {error ? <div className="text-[13px] text-danger mb-4">{error}</div> : null}
       <CalendarBoard
         view={view}

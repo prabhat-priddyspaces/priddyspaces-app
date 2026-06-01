@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
+from app.models.booking_payment_link import BookingPaymentLink
 from app.models.booking_series import BookingSeries
 from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
@@ -170,7 +171,41 @@ def expire_payment_holds(db: Session, *, limit: int = 100) -> dict[str, int]:
                 emails_attempted += 1
             except Exception:  # noqa: BLE001
                 logger.exception("Failed to send owner hold-expiry email request_public_id=%s", req.public_id)
-    return {"expired_payment_holds": expired, "emails_attempted": emails_attempted}
+
+    owner_link_requests = (
+        db.query(BookingRequest)
+        .filter(
+            BookingRequest.source == "owner_created",
+            BookingRequest.payment_collection_mode == "payment_link",
+            BookingRequest.status == BookingRequestStatus.REQUESTED,
+            BookingRequest.payment_hold_expires_at.isnot(None),
+            BookingRequest.payment_hold_expires_at <= now,
+        )
+        .order_by(BookingRequest.payment_hold_expires_at.asc())
+        .limit(limit)
+        .all()
+    )
+    expired_owner_links = 0
+    for req in owner_link_requests:
+        booking = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+        if booking and booking.status != BookingStatus.CANCELED:
+            booking.status = BookingStatus.CANCELED
+            db.add(booking)
+        req.status = BookingRequestStatus.CANCELLED
+        req.payment_status = "expired"
+        req.cancelled_at = now
+        db.add(req)
+        db.query(BookingPaymentLink).filter(
+            BookingPaymentLink.booking_request_id == req.id,
+            BookingPaymentLink.status == "sent",
+        ).update({"status": "expired"}, synchronize_session=False)
+        db.commit()
+        expired_owner_links += 1
+    return {
+        "expired_payment_holds": expired,
+        "expired_owner_payment_links": expired_owner_links,
+        "emails_attempted": emails_attempted,
+    }
 
 
 def get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:

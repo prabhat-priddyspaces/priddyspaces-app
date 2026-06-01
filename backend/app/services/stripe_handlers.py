@@ -4,20 +4,24 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
+from app.models.booking_payment_link import BookingPaymentLink
 from app.models.booking_request import BookingRequest
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.enums import BookingStatus, PaymentStatus
 from app.models.invoice import Invoice
+from app.models.location import Location
 from app.models.organization import Organization
 from app.models.payment import Payment
 from app.models.payment_event import PaymentEvent
+from app.models.space import Space
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.services.booking_email_delivery import BOOKING_EMAIL_PAYMENT_FAILED
 from app.services.booking_payments import finalize_successful_booking_request_payment
+from app.services.owner_created_bookings import PAYMENT_LINK_STATUS_PAID
 from app.services.invoices import generate_invoice_pdf
 from app.services.loyalty import record_earned_for_payment, reverse_for_payment_refund
-from app.services.notifications import send_booking_transactional_email, send_invoice_receipt_email
+from app.services.notifications import send_booking_confirmed_email, send_booking_transactional_email, send_invoice_receipt_email
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.access_passes import ensure_access_pass_for_booking
 from app.services.storage import upload_invoice_pdf
@@ -187,6 +191,15 @@ def _handle_booking_request_payment_success(db: Session, req: BookingRequest, da
         provider_reference_id=data.get("latest_charge"),
         raw_response=data,
     )
+    db.query(BookingPaymentLink).filter(
+        BookingPaymentLink.booking_request_id == req.id,
+        BookingPaymentLink.status == "sent",
+    ).update({"status": PAYMENT_LINK_STATUS_PAID}, synchronize_session=False)
+    space = db.query(Space).filter(Space.id == req.space_id).first()
+    location = db.query(Location).filter(Location.id == space.location_id).first() if space else None
+    if space and location:
+        send_booking_confirmed_email(db, req, booking, space, location)
+    db.commit()
     return payment
 
 

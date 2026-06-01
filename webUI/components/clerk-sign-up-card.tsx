@@ -2,6 +2,9 @@
 
 import { SignUp } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+
+import { stashOauthNext } from "@/lib/auth-redirect";
 
 interface ClerkSignUpCardProps {
   owner?: boolean;
@@ -12,7 +15,12 @@ export function ClerkSignUpCard({ owner = false }: ClerkSignUpCardProps) {
   const role = owner ? "owner" : "member";
   const onboardingUrl = owner ? "/onboarding/owner" : "/onboarding/member";
   const email = searchParams.get("email")?.trim().toLowerCase();
+  const redirectUrl = searchParams.get("redirect_url");
   const initialValues = email && email.includes("@") ? { emailAddress: email } : undefined;
+
+  useEffect(() => {
+    if (!owner) stashOauthNext(redirectUrl);
+  }, [owner, redirectUrl]);
 
   return (
     <SignUp

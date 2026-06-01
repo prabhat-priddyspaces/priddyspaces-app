@@ -42,6 +42,9 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     payment_authorization_consent_at = Column(DateTime(timezone=True), nullable=True)
     payment_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     operator_notes = Column(String(1024), nullable=True)
+    source = Column(String(32), nullable=False, default="member", server_default="member")
+    created_by_user_id = Column(Integer, nullable=True)
+    payment_collection_mode = Column(String(32), nullable=True)
 
     request_kind = Column(
         String(32),
