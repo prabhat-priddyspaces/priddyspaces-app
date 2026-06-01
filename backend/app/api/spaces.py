@@ -9,6 +9,7 @@ from app.models.organization import Organization
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.space_image import SpaceImage
+from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.schemas.space import SpaceCreate, SpaceOut, SpaceUpdate
 from app.schemas.space_override import SpacePriceOverride
@@ -259,6 +260,18 @@ def duplicate_space(
                 min_hours=discount.min_hours,
                 discount_percent=discount.discount_percent,
                 is_active=discount.is_active,
+            )
+        )
+
+    for setup_fee in db.query(SpaceSetupFeeItem).filter(SpaceSetupFeeItem.space_id == source.id).all():
+        db.add(
+            SpaceSetupFeeItem(
+                tenant_id=setup_fee.tenant_id,
+                space_id=duplicate.id,
+                label=setup_fee.label,
+                amount_cents=setup_fee.amount_cents,
+                is_active=setup_fee.is_active,
+                sort_order=setup_fee.sort_order,
             )
         )
 

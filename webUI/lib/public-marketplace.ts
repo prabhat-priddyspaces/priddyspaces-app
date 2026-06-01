@@ -71,6 +71,7 @@ export interface MarketplaceLocationSpace {
   price_monthly: MoneyValue | null;
   hourly_price: MoneyValue | null;
   membership_price: number | null;
+  setup_fee_amount_cents?: number;
   amenities: string[];
   image_url: string | null;
 }
@@ -89,6 +90,11 @@ export interface MarketplaceSpaceImage {
 export interface MarketplaceVolumeDiscountTier {
   min_hours: number;
   discount_percent: number;
+}
+
+export interface MarketplaceSetupFeeItem {
+  label: string;
+  amount_cents: number;
 }
 
 export interface MarketplaceBookingProduct {
@@ -124,6 +130,8 @@ export interface MarketplaceSpaceDetailSpace {
   amenities: string[];
   volume_discounts?: MarketplaceVolumeDiscountTier[];
   booking_products?: MarketplaceBookingProduct[];
+  setup_fee_items?: MarketplaceSetupFeeItem[];
+  setup_fee_amount_cents?: number;
 }
 
 export interface MarketplaceSpaceDetailLocation {
@@ -474,5 +482,6 @@ export function getSpacePriceChips(
       chips.push(`Day Rate ${formatUsd(space.price_daily, "/day")}`);
     }
   }
+  if ((space.setup_fee_amount_cents ?? 0) > 0) chips.push("setup fees apply");
   return chips;
 }

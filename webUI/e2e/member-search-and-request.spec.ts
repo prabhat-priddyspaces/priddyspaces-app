@@ -92,6 +92,11 @@ test("member can submit a booking request from a space detail page", async ({ pa
           price_monthly: null,
           hourly_price: 60,
           membership_price: null,
+          setup_fee_items: [
+            { label: "Room setup", amount_cents: 2000 },
+            { label: "AV kit", amount_cents: 1000 },
+          ],
+          setup_fee_amount_cents: 3000,
           amenities: ["whiteboard", "coffee"],
         },
         images: [],
@@ -125,6 +130,32 @@ test("member can submit a booking request from a space detail page", async ({ pa
 
     if (key === "GET /api/membership-plans/public") {
       await json(route, []);
+      return;
+    }
+
+    if (key === "POST /api/booking-requests/preview") {
+      const payload = route.request().postDataJSON() as {
+        booking_mode: string;
+        full_day: boolean;
+      };
+      expect(payload.booking_mode).toBe("hourly");
+      expect(payload.full_day).toBe(false);
+      await json(route, {
+        currency: "USD",
+        base_amount_cents: 12000,
+        setup_fee_amount_cents: 3000,
+        discount_amount_cents: 0,
+        tax_amount_cents: 0,
+        total_amount_cents: 15000,
+        rate_basis: "hourly",
+        units: 2,
+        quantity: 1,
+        line_items: [
+          { label: "Hourly reservation", amount_cents: 12000 },
+          { label: "Room setup", amount_cents: 2000 },
+          { label: "AV kit", amount_cents: 1000 },
+        ],
+      });
       return;
     }
 
@@ -212,6 +243,12 @@ test("member can submit a booking request from a space detail page", async ({ pa
   await expect(page.getByRole("button", { name: "Reserve & Pay" })).toBeEnabled();
   await page.getByLabel("I authorize Downtown Cowork to charge my card now for this booking.").check();
   await page.getByRole("button", { name: "Reserve & Pay" }).click();
+  await expect(page.getByRole("heading", { name: "Checkout summary" })).toBeVisible();
+  await expect(page.getByText("Hourly reservation")).toBeVisible();
+  await expect(page.getByText("Room setup")).toBeVisible();
+  await expect(page.getByText("AV kit")).toBeVisible();
+  await expect(page.getByText("$150")).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests$/);
   await expect(page.getByText("Conference 14-B").first()).toBeVisible();
@@ -406,6 +443,28 @@ test("member can submit an all-day conference booking without granularity blocki
       return;
     }
 
+    if (key === "POST /api/booking-requests/preview") {
+      const payload = route.request().postDataJSON() as {
+        booking_mode: string;
+        full_day: boolean;
+      };
+      expect(payload.booking_mode).toBe("day_pass");
+      expect(payload.full_day).toBe(true);
+      await json(route, {
+        currency: "USD",
+        base_amount_cents: 35000,
+        setup_fee_amount_cents: 0,
+        discount_amount_cents: 0,
+        tax_amount_cents: 0,
+        total_amount_cents: 35000,
+        rate_basis: "daily",
+        units: 1,
+        quantity: 1,
+        line_items: [{ label: "Day Rate", amount_cents: 35000 }],
+      });
+      return;
+    }
+
     if (key === "POST /api/booking-requests") {
       const payload = route.request().postDataJSON() as {
         start_datetime: string;
@@ -439,6 +498,8 @@ test("member can submit an all-day conference booking without granularity blocki
   await page.getByLabel("All day").check();
   await page.getByLabel("I authorize Aligned Cowork to charge my card now for this booking.").check();
   await page.getByRole("button", { name: "Reserve & Pay" }).click();
+  await expect(page.getByRole("heading", { name: "Checkout summary" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests$/);
   await expect(page.getByText("Austin Conference Room").first()).toBeVisible();
@@ -626,6 +687,28 @@ test("member can redeem Priddy Points for a full day pass without a card", async
       return;
     }
 
+    if (key === "POST /api/booking-requests/preview") {
+      const payload = route.request().postDataJSON() as {
+        booking_mode: string;
+        full_day: boolean;
+      };
+      expect(payload.booking_mode).toBe("day_pass");
+      expect(payload.full_day).toBe(true);
+      await json(route, {
+        currency: "USD",
+        base_amount_cents: 1000,
+        setup_fee_amount_cents: 0,
+        discount_amount_cents: 0,
+        tax_amount_cents: 0,
+        total_amount_cents: 1000,
+        rate_basis: "daily",
+        units: 1,
+        quantity: 1,
+        line_items: [{ label: "Day Pass", amount_cents: 1000 }],
+      });
+      return;
+    }
+
     if (key === "GET /api/payment-methods/resolve") {
       paymentResolveCalls += 1;
       await json(route, { detail: "Payment method should not be resolved for fully covered points bookings" }, 500);
@@ -666,6 +749,11 @@ test("member can redeem Priddy Points for a full day pass without a card", async
   await expect(page.getByText("$10").last()).toBeVisible();
 
   await page.getByRole("button", { name: "Reserve & Pay" }).click();
+  const checkoutDialog = page.getByRole("dialog");
+  await expect(checkoutDialog.getByRole("heading", { name: "Checkout summary" })).toBeVisible();
+  await expect(checkoutDialog.getByText("Rewards")).toBeVisible();
+  await expect(checkoutDialog.getByText("$0")).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page).toHaveURL(/\/member\/requests$/);
   await expect(page.getByText("Open Desk Day Pass").first()).toBeVisible();

@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LeaseTermsManager } from "@/components/lease-terms-manager";
+import { SetupFeeManager } from "@/components/setup-fee-manager";
 import { VolumeDiscountManager } from "@/components/volume-discount-manager";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
@@ -410,6 +411,7 @@ export function EditSpaceClient() {
         {form.space_type === "conference_room" || form.space_type === "shared_desk" ? (
           <VolumeDiscountManager spacePublicId={spaceId} />
         ) : null}
+        <SetupFeeManager spacePublicId={spaceId} />
       </div>
     </AppShell>
   );

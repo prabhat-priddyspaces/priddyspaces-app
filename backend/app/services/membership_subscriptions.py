@@ -70,6 +70,7 @@ class StripeSubscriptionClient:
         plan: MembershipPlan,
         payment_method: MemberOwnerPaymentMethod,
         commitment_months: int | None,
+        setup_fee_items: list[dict[str, Any]] | None = None,
         metadata: dict[str, str] | None = None,
     ) -> StripeSubscriptionResult:
         if not payment_method.provider_customer_id or not payment_method.provider_payment_method_id:
@@ -82,6 +83,12 @@ class StripeSubscriptionClient:
             "metadata": metadata or {},
             "api_key": self.secret_key,
         }
+        setup_invoice_items = self._setup_fee_invoice_items(
+            setup_fee_items or [],
+            metadata=metadata or {},
+        )
+        if setup_invoice_items:
+            kwargs["add_invoice_items"] = setup_invoice_items
         if commitment_months and commitment_months > 1:
             # Stripe doesn't enforce minimums natively; we record it as metadata
             # and enforce on the member cancellation path.
@@ -91,6 +98,44 @@ class StripeSubscriptionClient:
             }
         sub = stripe.Subscription.create(**kwargs)
         return _stripe_subscription_result(sub)
+
+    def _setup_fee_invoice_items(
+        self,
+        setup_fee_items: list[dict[str, Any]],
+        *,
+        metadata: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        invoice_items: list[dict[str, Any]] = []
+        for index, item in enumerate(setup_fee_items):
+            amount_cents = _optional_int(item.get("amount_cents")) or 0
+            label = str(item.get("label") or "Setup fee").strip() or "Setup fee"
+            if amount_cents <= 0:
+                continue
+            product = stripe.Product.create(
+                name=label,
+                metadata={
+                    **metadata,
+                    "setup_fee_index": str(index),
+                    "setup_fee_label": label,
+                },
+                api_key=self.secret_key,
+            )
+            invoice_items.append(
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product": product.id,
+                        "unit_amount": amount_cents,
+                    },
+                    "quantity": 1,
+                    "metadata": {
+                        **metadata,
+                        "setup_fee": "true",
+                        "setup_fee_label": label,
+                    },
+                }
+            )
+        return invoice_items
 
     def find_existing_by_booking_request(
         self,
@@ -148,6 +193,7 @@ def create_subscription(
     plan: MembershipPlan,
     payment_method: MemberOwnerPaymentMethod,
     commitment_months: int | None,
+    setup_fee_items: list[dict[str, Any]] | None = None,
     metadata: dict[str, str] | None = None,
 ) -> StripeSubscriptionResult:
     """Indirection point: tests monkeypatch this whole function."""
@@ -166,6 +212,7 @@ def create_subscription(
         plan=plan,
         payment_method=payment_method,
         commitment_months=commitment_months,
+        setup_fee_items=setup_fee_items,
         metadata=metadata,
     )
     # Cache the price id back onto the plan for next purchase.

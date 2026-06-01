@@ -36,6 +36,7 @@ from app.models.space import Space
 from app.models.space_access_pass import SpaceAccessPass
 from app.models.space_attendance_record import SpaceAttendanceRecord
 from app.models.space_image import SpaceImage
+from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.models.pricing_rule import PricingRule
 from app.models.promo_code import PromoCode
@@ -111,6 +112,7 @@ __all__ = [
     "SpaceAccessPass",
     "SpaceAttendanceRecord",
     "SpaceImage",
+    "SpaceSetupFeeItem",
     "SpaceVolumeDiscount",
     "PricingRule",
     "PromoCode",

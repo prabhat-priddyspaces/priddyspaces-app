@@ -33,6 +33,7 @@ from app.models.user import User
 from app.services.org_member_stats import interacted_user_ids
 from app.services.platform_auth import get_or_create_platform_settings
 from app.services.pricing import VolumeDiscount, estimate_booking_price
+from app.services.setup_fees import setup_fee_amount_cents
 
 POINT_VALUE_CENTS_MIN = 1
 POINT_VALUE_CENTS_MAX = 10
@@ -628,7 +629,9 @@ def calculate_booking_subtotal_cents(
     )
     if result is None:
         raise HTTPException(status_code=400, detail="Unable to calculate booking amount")
-    return max(0, int(result.total_cents))
+    setup_fee_cents = setup_fee_amount_cents(db, space.id)
+    setup_fee_tax_cents = int(round(setup_fee_cents * (tax.rate_percent / 100.0))) if tax else 0
+    return max(0, int(result.total_cents) + setup_fee_cents + setup_fee_tax_cents)
 
 
 def _owner_points_allowed(

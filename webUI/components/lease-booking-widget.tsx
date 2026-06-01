@@ -26,6 +26,7 @@ import {
   isDayBookable,
 } from "@/lib/space-availability";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
+import { CheckoutSummaryModal } from "@/components/checkout-summary-modal";
 
 const DATE_INPUT_FALLBACK = () => new Date().toISOString().slice(0, 10);
 
@@ -43,6 +44,7 @@ export interface LeaseBookingWidgetProps {
   organizationName?: string | null;
   bookingMode: LeaseBookingMode;
   spaceMonthlyPrice: MoneyValue | null;
+  setupFeeAmountCents?: number;
   buildLoginNextHref: (params: { planPublicId: string | null; moveInDate: string }) => string;
   initialPlanPublicId?: string;
   initialMoveInDate?: string;
@@ -55,6 +57,7 @@ export function LeaseBookingWidget({
   organizationName,
   bookingMode,
   spaceMonthlyPrice,
+  setupFeeAmountCents = 0,
   buildLoginNextHref,
   initialPlanPublicId,
   initialMoveInDate,
@@ -69,6 +72,8 @@ export function LeaseBookingWidget({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const chargeOwnerName = organizationName?.trim() || "this owner";
 
   useEffect(() => {
@@ -171,6 +176,50 @@ export function LeaseBookingWidget({
     }
   }
 
+  async function continueAfterSummary() {
+    if (!selectedPlan) {
+      setError("Choose a term before continuing.");
+      return;
+    }
+    if (!moveInDate) {
+      setError("Choose a move-in date.");
+      return;
+    }
+    if (moveInBlocked) {
+      setError(
+        nextAvailableMoveIn
+          ? `That move-in date is unavailable. Next available date is ${formatDateLong(nextAvailableMoveIn)}.`
+          : "That move-in date is unavailable.",
+      );
+      return;
+    }
+    setCheckoutSubmitting(true);
+    setSubmitting(true);
+    setCheckoutOpen(false);
+    setError("");
+    try {
+      const token = getAccessToken() ?? undefined;
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(spacePublicId)}`,
+        { method: "GET" },
+        token,
+      );
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
+      }
+      if (!resolved.has_payment_method) {
+        setPaymentMethodOpen(true);
+        return;
+      }
+      await submitLeaseRequest(resolved.payment_method_public_id!);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Lease request failed");
+    } finally {
+      setSubmitting(false);
+      setCheckoutSubmitting(false);
+    }
+  }
+
   async function handleContinue() {
     if (!selectedPlan) {
       setError("Choose a term before continuing.");
@@ -202,27 +251,7 @@ export function LeaseBookingWidget({
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const token = getAccessToken() ?? undefined;
-      const resolved = await apiFetch<PaymentMethodResolve>(
-        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(spacePublicId)}`,
-        { method: "GET" },
-        token,
-      );
-      if (!resolved.is_configured) {
-        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
-      }
-      if (!resolved.has_payment_method) {
-        setPaymentMethodOpen(true);
-        return;
-      }
-      await submitLeaseRequest(resolved.payment_method_public_id!);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Lease request failed");
-    } finally {
-      setSubmitting(false);
-    }
+    setCheckoutOpen(true);
   }
 
   if (loading) {
@@ -336,6 +365,11 @@ export function LeaseBookingWidget({
               ) : null}
             </div>
           </div>
+          {setupFeeAmountCents > 0 ? (
+            <div className="mt-3 border-t border-line pt-3 text-xs text-text-3">
+              One-time setup fees are shown before checkout.
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -365,6 +399,21 @@ export function LeaseBookingWidget({
           setPaymentMethodOpen(false);
           submitLeaseRequest(paymentMethodPublicId);
         }}
+      />
+      <CheckoutSummaryModal
+        open={checkoutOpen}
+        payload={
+          selectedPlan
+            ? {
+                membership_plan_public_id: selectedPlan.public_id,
+                desired_start_date: moveInDate,
+              }
+            : null
+        }
+        confirmLabel="Continue to payment"
+        submitting={checkoutSubmitting || submitting}
+        onClose={() => setCheckoutOpen(false)}
+        onConfirm={() => continueAfterSummary().catch(() => null)}
       />
     </div>
   );

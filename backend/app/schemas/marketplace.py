@@ -79,6 +79,7 @@ class MarketplaceLocationSpaceOut(BaseModel):
     price_monthly: MoneyAmount | None = None
     hourly_price: MoneyAmount | None = None
     membership_price: int | None = None
+    setup_fee_amount_cents: int = 0
     amenities: list[str]
     image_url: str | None = None
 
@@ -97,6 +98,11 @@ class MarketplaceSpaceImageOut(BaseModel):
 class MarketplaceVolumeDiscountTierOut(BaseModel):
     min_hours: float
     discount_percent: int
+
+
+class MarketplaceSetupFeeItemOut(BaseModel):
+    label: str
+    amount_cents: int
 
 
 class MarketplaceBookingProductOut(BaseModel):
@@ -132,6 +138,8 @@ class MarketplaceSpaceDetailSpaceOut(BaseModel):
     amenities: list[str]
     volume_discounts: list[MarketplaceVolumeDiscountTierOut] = []
     booking_products: list[MarketplaceBookingProductOut] = Field(default_factory=list)
+    setup_fee_items: list[MarketplaceSetupFeeItemOut] = Field(default_factory=list)
+    setup_fee_amount_cents: int = 0
 
 
 class MarketplaceSpaceDetailLocationOut(BaseModel):
