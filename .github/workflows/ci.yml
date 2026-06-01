@@ -31,6 +31,7 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - '.github/workflows/ci.yml'
               - '.github/workflows/deploy-backend.yml'
             webui:
               - 'webUI/**'
@@ -42,11 +43,26 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: priddyspaces
+          POSTGRES_PASSWORD: priddyspaces
+          POSTGRES_DB: priddyspaces_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U priddyspaces -d priddyspaces_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: sqlite://
+      DATABASE_URL: postgresql+psycopg2://priddyspaces:priddyspaces@localhost:5432/priddyspaces_test
+      TEST_DATABASE_URL: postgresql+psycopg2://priddyspaces:priddyspaces@localhost:5432/priddyspaces_test
       SECRET_KEY: ci-test-secret
       CORS_ALLOW_ORIGINS: http://localhost:3000
       REDIS_URL: redis://localhost:6379/0
@@ -67,6 +83,9 @@ jobs:
 
       - name: Install backend dependencies
         run: pip install -r requirements.txt
+
+      - name: Run database migrations
+        run: python -m alembic upgrade head
 
       - name: Run backend tests
         run: pytest -q

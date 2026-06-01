@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, literal
+from sqlalchemy import String, cast, func, literal
 
 from app.db.deps import get_db
 from app.models.location import Location
@@ -121,6 +121,7 @@ def search_marketplace(
 
     if q:
         q = q.strip()
+        space_type_text = cast(Space.space_type, String)
         if dialect == "postgresql":
             vector = func.to_tsvector(
                 "english",
@@ -130,7 +131,7 @@ def search_marketplace(
                 + " "
                 + func.coalesce(Location.city, "")
                 + " "
-                + func.coalesce(Space.space_type, "")
+                + func.coalesce(space_type_text, "")
                 + " "
                 + amenity_text
             )
@@ -141,7 +142,7 @@ def search_marketplace(
                 Location.name.ilike(ilike)
                 | Location.address.ilike(ilike)
                 | Location.city.ilike(ilike)
-                | Space.space_type.ilike(ilike)
+                | space_type_text.ilike(ilike)
                 | amenity_text.ilike(ilike)
             )
 
