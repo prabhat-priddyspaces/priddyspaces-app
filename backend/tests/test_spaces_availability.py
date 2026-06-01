@@ -10,6 +10,7 @@ from app.models.membership_plan import MembershipPlan
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.space_image import SpaceImage
+from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.space_volume_discount import SpaceVolumeDiscount
 
 
@@ -97,6 +98,102 @@ def test_space_availability_hours(db_session, client_factory):
     assert fetched.json()["name"] == "Conference Room"
     assert fetched.json()["availability_start_time"] == "09:00:00"
     assert fetched.json()["price_hourly"] == "19.99"
+
+
+def test_create_space_saves_setup_fee_items(db_session, client_factory):
+    owner, location = _seed_owner_location(db_session)
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    created = client.post(
+        "/api/spaces",
+        json={
+            "location_public_id": location.public_id,
+            "space_type": SpaceType.CONFERENCE_ROOM.value,
+            "capacity": 6,
+            "visibility": "public",
+            "price_hourly": "50",
+            "setup_fee_items": [
+                {"label": "  Room   setup ", "amount_cents": 7500, "is_active": True, "sort_order": 0},
+                {"label": "AV kit", "amount_cents": 2500, "is_active": True, "sort_order": 1},
+            ],
+        },
+    )
+
+    assert created.status_code == 200, created.text
+    fees = client.get(f"/api/spaces/{created.json()['public_id']}/setup-fees")
+    assert fees.status_code == 200, fees.text
+    assert fees.json() == [
+        {
+            "public_id": fees.json()[0]["public_id"],
+            "label": "Room setup",
+            "amount_cents": 7500,
+            "is_active": True,
+            "sort_order": 0,
+        },
+        {
+            "public_id": fees.json()[1]["public_id"],
+            "label": "AV kit",
+            "amount_cents": 2500,
+            "is_active": True,
+            "sort_order": 1,
+        },
+    ]
+
+
+def test_create_space_rejects_duplicate_setup_fee_labels_atomically(db_session, client_factory):
+    owner, location = _seed_owner_location(db_session)
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True,
+    })
+    before_count = db_session.query(Space).count()
+
+    response = client.post(
+        "/api/spaces",
+        json={
+            "location_public_id": location.public_id,
+            "space_type": SpaceType.CONFERENCE_ROOM.value,
+            "capacity": 6,
+            "visibility": "public",
+            "setup_fee_items": [
+                {"label": "Room setup", "amount_cents": 7500},
+                {"label": " room SETUP ", "amount_cents": 2500},
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Duplicate setup fee label: room SETUP"
+    assert db_session.query(Space).count() == before_count
+    assert db_session.query(SpaceSetupFeeItem).count() == 0
+
+
+def test_create_space_with_setup_fees_requires_location_role(db_session, client_factory):
+    _, location = _seed_owner_location(db_session)
+    client = client_factory({
+        "sub": "sub-outsider",
+        "email": "outsider@example.com",
+        "email_verified": True,
+    })
+
+    response = client.post(
+        "/api/spaces",
+        json={
+            "location_public_id": location.public_id,
+            "space_type": SpaceType.CONFERENCE_ROOM.value,
+            "capacity": 6,
+            "visibility": "public",
+            "setup_fee_items": [{"label": "Room setup", "amount_cents": 7500}],
+        },
+    )
+
+    assert response.status_code == 403
+    assert db_session.query(SpaceSetupFeeItem).count() == 0
 
 
 def test_space_visibility_enum_uses_database_values():
