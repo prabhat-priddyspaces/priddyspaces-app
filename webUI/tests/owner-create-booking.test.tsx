@@ -32,6 +32,12 @@ const locations = [
   },
 ];
 
+const organizations = [{ public_id: "org_1", name: "Owner Org" }];
+const multiOrgOrganizations = [
+  { public_id: "org_1", name: "Owner Org" },
+  { public_id: "org_2", name: "Second Org" },
+];
+
 const spaces = [
   {
     public_id: "space_1",
@@ -45,9 +51,20 @@ const spaces = [
   },
 ];
 
+const secondOrgLocations = [
+  {
+    public_id: "loc_2",
+    organization_public_id: "org_2",
+    name: "Dallas Hub",
+    city: "Dallas",
+    timezone: "UTC",
+  },
+];
+
 function mockApi() {
   vi.mocked(apiFetch).mockImplementation((path: string, options?: RequestInit) => {
-    if (path === "/api/locations") return Promise.resolve(locations);
+    if (path === "/api/orgs") return Promise.resolve(organizations);
+    if (path === "/api/locations?organization_public_id=org_1") return Promise.resolve(locations);
     if (path === "/api/locations/loc_1/spaces") return Promise.resolve(spaces);
     if (path.startsWith("/api/owner/spaces/space_1/availability")) {
       return Promise.resolve({
@@ -59,7 +76,7 @@ function mockApi() {
         days: [{ date: "2026-07-15", busy_intervals: [] }],
       });
     }
-    if (path === "/api/owner/members?search=case") {
+    if (path === "/api/owner/members?organization_public_id=org_1&search=case") {
       return Promise.resolve([
         {
           user_public_id: "member_1",
@@ -149,6 +166,11 @@ describe("NewOwnerBookingPage", () => {
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 300));
     });
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/owner/members?organization_public_id=org_1&search=case",
+      { method: "GET" },
+      "token",
+    );
     fireEvent.click(await screen.findByTestId("owner-booking-member-option-member_1"));
 
     fireEvent.click(screen.getByTestId("owner-booking-preview-button"));
@@ -164,6 +186,72 @@ describe("NewOwnerBookingPage", () => {
       member_public_id: "member_1",
       payment_collection_mode: "cash_collected",
     });
+  });
+
+  it("scopes locations and member search to the selected organization", async () => {
+    vi.mocked(apiFetch).mockReset();
+    vi.mocked(apiFetch).mockImplementation((path: string) => {
+      if (path === "/api/orgs") return Promise.resolve(multiOrgOrganizations);
+      if (path === "/api/locations?organization_public_id=org_1") return Promise.resolve(locations);
+      if (path === "/api/locations?organization_public_id=org_2") return Promise.resolve(secondOrgLocations);
+      if (path === "/api/locations/loc_1/spaces" || path === "/api/locations/loc_2/spaces") {
+        return Promise.resolve(spaces);
+      }
+      if (path.startsWith("/api/owner/spaces/space_1/availability")) {
+        return Promise.resolve({
+          space_public_id: "space_1",
+          timezone: "UTC",
+          granularity_minutes: 60,
+          availability_start_time: "09:00:00",
+          availability_end_time: "18:00:00",
+          days: [{ date: "2026-07-15", busy_intervals: [] }],
+        });
+      }
+      if (path === "/api/owner/members?organization_public_id=org_2&search=case") {
+        return Promise.resolve([
+          {
+            user_public_id: "member_2",
+            name: "Casey Dallas",
+            email: "casey.dallas@example.com",
+            status: "active",
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled API path: ${path}`));
+    });
+
+    render(<NewOwnerBookingPage />);
+
+    const organizationSelect = await screen.findByTestId("owner-booking-organization");
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/locations?organization_public_id=org_1",
+        { method: "GET" },
+        "token",
+      ),
+    );
+
+    fireEvent.change(organizationSelect, { target: { value: "org_2" } });
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/locations?organization_public_id=org_2",
+        { method: "GET" },
+        "token",
+      ),
+    );
+
+    fireEvent.change(screen.getByTestId("owner-booking-member-search"), {
+      target: { value: "case" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/owner/members?organization_public_id=org_2&search=case",
+      { method: "GET" },
+      "token",
+    );
   });
 
   it("submits a new member payment-link booking and shows link state", async () => {

@@ -44,6 +44,11 @@ interface LocationOption {
   timezone: string;
 }
 
+interface OrganizationOption {
+  public_id: string;
+  name: string;
+}
+
 interface SpaceOption {
   public_id: string;
   name: string;
@@ -151,10 +156,12 @@ function describeOpenIntervals(intervals: OpenInterval[]): string {
 }
 
 export default function NewOwnerBookingPage() {
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [spaces, setSpaces] = useState<SpaceOption[]>([]);
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
+  const [organizationId, setOrganizationId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [spaceId, setSpaceId] = useState("");
   const [bookingDate, setBookingDate] = useState(today);
@@ -184,6 +191,7 @@ export default function NewOwnerBookingPage() {
 
   const token = getAccessToken() ?? undefined;
   const selectedLocation = locations.find((location) => location.public_id === locationId) || null;
+  const selectedOrganizationPublicId = organizationId || selectedLocation?.organization_public_id || "";
   const selectedSpace = spaces.find((space) => space.public_id === spaceId) || null;
   const selectedAvailabilityDay = availability?.days.find((day) => day.date === bookingDate);
   const openWindow = getDayOpenWindow({
@@ -274,11 +282,40 @@ export default function NewOwnerBookingPage() {
       return;
     }
     setLoading(true);
-    apiFetch<LocationOption[]>("/api/locations", { method: "GET" }, token)
+    apiFetch<OrganizationOption[]>("/api/orgs", { method: "GET" }, token)
+      .then((rows) => {
+        if (!active) return;
+        setOrganizations(rows);
+        setOrganizationId((current) => current || rows[0]?.public_id || "");
+      })
+      .catch((err) => {
+        if (active) setMessage(err instanceof Error ? err.message : "Failed to load organizations");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || !organizationId) {
+      setLocations([]);
+      setLocationId("");
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    apiFetch<LocationOption[]>(
+      `/api/locations?organization_public_id=${encodeURIComponent(organizationId)}`,
+      { method: "GET" },
+      token,
+    )
       .then((rows) => {
         if (!active) return;
         setLocations(rows);
-        if (rows.length === 1) setLocationId(rows[0].public_id);
+        setLocationId((current) => (rows.some((row) => row.public_id === current) ? current : rows[0]?.public_id || ""));
       })
       .catch((err) => {
         if (active) setMessage(err instanceof Error ? err.message : "Failed to load locations");
@@ -289,7 +326,7 @@ export default function NewOwnerBookingPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [organizationId, token]);
 
   useEffect(() => {
     if (!token || !locationId) {
@@ -340,6 +377,11 @@ export default function NewOwnerBookingPage() {
 
   useEffect(() => {
     if (!token || memberMode !== "existing") return;
+    if (!selectedOrganizationPublicId) {
+      setMembers([]);
+      setMemberPublicId("");
+      return;
+    }
     const trimmed = memberSearch.trim();
     if (trimmed.length < 2) {
       setMembers([]);
@@ -348,13 +390,19 @@ export default function NewOwnerBookingPage() {
     let active = true;
     const timer = window.setTimeout(() => {
       setMembersLoading(true);
+      const params = new URLSearchParams({
+        organization_public_id: selectedOrganizationPublicId,
+        search: trimmed,
+      });
       apiFetch<MemberOption[]>(
-        `/api/owner/members?search=${encodeURIComponent(trimmed)}`,
+        `/api/owner/members?${params.toString()}`,
         { method: "GET" },
         token,
       )
         .then((rows) => {
-          if (active) setMembers(rows);
+          if (!active) return;
+          setMembers(rows);
+          setMessage("");
         })
         .catch((err) => {
           if (active) setMessage(err instanceof Error ? err.message : "Failed to search members");
@@ -367,7 +415,7 @@ export default function NewOwnerBookingPage() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [memberMode, memberSearch, token]);
+  }, [memberMode, memberSearch, selectedOrganizationPublicId, token]);
 
   async function handlePreview() {
     if (!token) return;
@@ -491,12 +539,46 @@ export default function NewOwnerBookingPage() {
                 <h2 className="text-[15px] font-semibold text-text">Space and time</h2>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
+                {organizations.length > 1 ? (
+                  <label className="grid gap-1.5 text-[12px] font-medium text-text-2">
+                    Organization
+                    <select
+                      value={organizationId}
+                      onChange={(event) => {
+                        setOrganizationId(event.target.value);
+                        setLocationId("");
+                        setSpaceId("");
+                        setMembers([]);
+                        setMemberPublicId("");
+                        setMemberSearch("");
+                        setPreview(null);
+                        setResult(null);
+                      }}
+                      className="h-9 rounded-xl border border-line-strong bg-surface px-3 text-[13px] outline-none focus:border-brand"
+                      data-testid="owner-booking-organization"
+                    >
+                      {organizations.map((organization) => (
+                        <option key={organization.public_id} value={organization.public_id}>
+                          {organization.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="grid gap-1.5 text-[12px] font-medium text-text-2">
                   Location
                   <select
                     value={locationId}
-                    onChange={(event) => setLocationId(event.target.value)}
+                    onChange={(event) => {
+                      setLocationId(event.target.value);
+                      setMemberPublicId("");
+                      setMemberSearch("");
+                      setMembers([]);
+                      setPreview(null);
+                      setResult(null);
+                    }}
                     className="h-9 rounded-xl border border-line-strong bg-surface px-3 text-[13px] outline-none focus:border-brand"
+                    disabled={!selectedOrganizationPublicId}
                     data-testid="owner-booking-location"
                   >
                     <option value="">Select location</option>
@@ -636,8 +718,13 @@ export default function NewOwnerBookingPage() {
                       <Input
                         value={memberSearch}
                         onChange={(event) => setMemberSearch(event.target.value)}
-                        placeholder="Search by name, email, or company"
+                        placeholder={
+                          selectedOrganizationPublicId
+                            ? "Search by name, email, or company"
+                            : "Select a location first"
+                        }
                         className="pl-9"
+                        disabled={!selectedOrganizationPublicId}
                         data-testid="owner-booking-member-search"
                       />
                     </div>
@@ -645,6 +732,8 @@ export default function NewOwnerBookingPage() {
                   <div className="grid gap-2">
                     {membersLoading ? (
                       <div className="text-[12px] text-text-3">Searching members...</div>
+                    ) : !selectedOrganizationPublicId ? (
+                      <div className="text-[12px] text-text-3">Select a location before searching members.</div>
                     ) : members.length === 0 ? (
                       <div className="text-[12px] text-text-3">Type at least two characters to find a member.</div>
                     ) : (
