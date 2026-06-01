@@ -124,6 +124,7 @@ docker compose down -v         # stop + remove volumes (resets DB)
 - `docs/api.md`
 - `docs/db.md`
 - `docs/auth.md`
+- `docs/priddyspaces-role-flow-guide.md`
 - `docs/static-web-hosting.md`
 
 ## Notes
