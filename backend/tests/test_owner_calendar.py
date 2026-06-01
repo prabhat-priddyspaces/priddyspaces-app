@@ -126,6 +126,7 @@ def test_calendar_returns_booking_event(db_session, client_factory):
     assert data["truncated"] is False
     assert len(data["spaces"]) == 1
     assert data["spaces"][0]["public_id"] == space.public_id
+    assert data["spaces"][0]["capacity"] == 4
     events = data["events"]
     assert len(events) == 1
     ev = events[0]
@@ -296,6 +297,80 @@ def test_calendar_excludes_approved_request_to_avoid_double_render(db_session, c
     assert kinds == ["booking", "request"]
     request_event = next(e for e in events if e["kind"] == "request")
     assert request_event["status"] == "request.requested"
+
+
+def test_calendar_suppresses_pending_hold_when_request_represents_slot(db_session, client_factory):
+    owner, _org, _loc, space = _seed_owner_with_space(db_session)
+    member = _seed_member(db_session)
+    request = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=member.id,
+        space_id=space.id,
+        start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc),
+        status=BookingRequestStatus.REQUESTED,
+        seats_requested=2,
+    )
+    db_session.add(request)
+    db_session.flush()
+    booking_hold = Booking(
+        user_id=member.id,
+        space_id=space.id,
+        tenant_id=space.tenant_id,
+        booking_request_id=request.id,
+        start_datetime=request.start_datetime,
+        end_datetime=request.end_datetime,
+        status=BookingStatus.PENDING,
+    )
+    db_session.add(booking_hold)
+    db_session.flush()
+    request.booking_id = booking_hold.id
+    db_session.add(request)
+    db_session.commit()
+
+    client = client_factory(_owner_token(owner))
+    start, end = _window()
+    resp = client.get(f"/api/owner/calendar?{_qs(start, end)}")
+
+    assert resp.status_code == 200
+    events = resp.json()["events"]
+    assert len(events) == 1
+    assert events[0]["kind"] == "request"
+    assert events[0]["status"] == "request.requested"
+    assert events[0]["seats_requested"] == 2
+
+
+def test_calendar_suppresses_pending_request_covered_by_confirmed_booking(db_session, client_factory):
+    owner, _org, _loc, space = _seed_owner_with_space(db_session)
+    member = _seed_member(db_session)
+    booking = Booking(
+        user_id=member.id,
+        space_id=space.id,
+        tenant_id=space.tenant_id,
+        start_datetime=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc),
+        status=BookingStatus.CONFIRMED,
+    )
+    duplicate_request = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=member.id,
+        space_id=space.id,
+        start_datetime=booking.start_datetime,
+        end_datetime=booking.end_datetime,
+        status=BookingRequestStatus.REQUESTED,
+    )
+    db_session.add_all([booking, duplicate_request])
+    db_session.commit()
+
+    client = client_factory(_owner_token(owner))
+    start, end = _window()
+    resp = client.get(f"/api/owner/calendar?{_qs(start, end)}")
+
+    assert resp.status_code == 200
+    events = resp.json()["events"]
+    assert len(events) == 1
+    assert events[0]["kind"] == "booking"
+    assert events[0]["status"] == "booking.confirmed"
 
 
 def test_subscription_emits_block_for_private_office_only(db_session, client_factory):

@@ -13,6 +13,7 @@ import { WeekGrid } from "@/components/calendar/week-grid";
 import {
   CalendarEvent,
   CalendarResponse,
+  CalendarSlotGroup,
   addDays,
   endOfMonth,
   isoDateOnly,
@@ -90,6 +91,7 @@ export function CalendarBoard({
   headerExtra,
 }: CalendarBoardProps) {
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<CalendarSlotGroup | null>(null);
   const window = useMemo(() => computeWindow(view, anchor), [view, anchor]);
 
   const filteredEvents = useMemo(() => {
@@ -201,17 +203,24 @@ export function CalendarBoard({
           spaces={displaySpaces}
           events={filteredEvents}
           onEventClick={setSelected}
+          onSlotClick={setSelectedSlot}
+          groupSlots={viewer !== "member"}
         />
       )}
 
-      {selected ? (
+      {selected || selectedSlot ? (
         <EventQuickActionPopover
           event={selected}
+          slot={selectedSlot}
           viewer={viewer}
           memberHref={memberHref}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null);
+            setSelectedSlot(null);
+          }}
           onChanged={() => {
             setSelected(null);
+            setSelectedSlot(null);
             onChanged();
           }}
         />

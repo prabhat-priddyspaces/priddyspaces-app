@@ -651,10 +651,77 @@ def test_shared_desk_day_pass_uses_pooled_capacity(db_session, client_factory):
     first = member_client.post("/api/booking-requests", json=payload)
     assert first.status_code == 200, first.text
 
+    second_member = User(
+        email="desk-capacity-two@example.com",
+        auth_subject="sub-desk-capacity-two",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(second_member)
+    db_session.commit()
+    db_session.refresh(second_member)
+    second_method = _seed_extra_payment_method(
+        db_session,
+        second_member,
+        space,
+        method.owner_payment_setting_id,
+        provider_payment_method_id="pm_shared_capacity_two",
+        last4="2222",
+    )
+    second_client = client_factory({
+        "sub": second_member.auth_subject,
+        "email": second_member.email,
+        "email_verified": True,
+    })
     payload["seats_requested"] = 1
-    second = member_client.post("/api/booking-requests", json=payload)
+    payload["member_owner_payment_method_public_id"] = second_method.public_id
+    second = second_client.post("/api/booking-requests", json=payload)
     assert second.status_code == 409
     assert "shared desk seats" in second.json()["detail"].lower()
+
+
+def test_same_member_cannot_duplicate_shared_desk_slot_when_capacity_remains(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    space.space_type = SpaceType.SHARED_DESK
+    space.capacity = 4
+    space.price_daily = 25
+    space.price_hourly = None
+    db_session.add(space)
+
+    member = User(
+        email="desk-duplicate@example.com",
+        auth_subject="sub-desk-duplicate",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    payload = {
+        "space_public_id": space.public_id,
+        "start_datetime": datetime(2026, 3, 10, 9, 0, tzinfo=timezone.utc).isoformat(),
+        "end_datetime": datetime(2026, 3, 10, 18, 0, tzinfo=timezone.utc).isoformat(),
+        "booking_mode": "day_pass",
+        "full_day": True,
+        "seats_requested": 1,
+        "payment_authorization_consent": True,
+        "member_owner_payment_method_public_id": method.public_id,
+    }
+    first = member_client.post("/api/booking-requests", json=payload)
+    assert first.status_code == 200, first.text
+
+    second = member_client.post("/api/booking-requests", json=payload)
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Booking request already exists for that time"
 
 
 def test_owner_can_update_organization_booking_settings(db_session, client_factory):
@@ -1291,10 +1358,29 @@ def test_shared_desk_day_pass_approvals_use_pooled_capacity(db_session, client_f
     assert first_approve.status_code == 200, first_approve.text
     assert first_approve.json()["status"] == BookingRequestStatus.APPROVED.value
 
+    second_member = User(
+        email="shared-capacity-two@example.com",
+        auth_subject="sub-shared-capacity-two",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(second_member)
+    db_session.commit()
+    db_session.refresh(second_member)
+    second_method = _seed_extra_payment_method(
+        db_session,
+        second_member,
+        space,
+        method.owner_payment_setting_id,
+        provider_payment_method_id="pm_shared_capacity_two",
+        last4="2222",
+    )
     payload["seats_requested"] = 1
+    payload["member_owner_payment_method_public_id"] = second_method.public_id
     member_client = client_factory({
-        "sub": member.auth_subject,
-        "email": member.email,
+        "sub": second_member.auth_subject,
+        "email": second_member.email,
         "email_verified": True,
     })
     second = member_client.post("/api/booking-requests", json=payload)
@@ -1315,10 +1401,29 @@ def test_shared_desk_day_pass_approvals_use_pooled_capacity(db_session, client_f
     assert len(bookings) == 2
     assert [booking.blocks_inventory for booking in bookings] == [False, False]
 
+    third_member = User(
+        email="shared-capacity-three@example.com",
+        auth_subject="sub-shared-capacity-three",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(third_member)
+    db_session.commit()
+    db_session.refresh(third_member)
+    third_method = _seed_extra_payment_method(
+        db_session,
+        third_member,
+        space,
+        method.owner_payment_setting_id,
+        provider_payment_method_id="pm_shared_capacity_three",
+        last4="3333",
+    )
     payload["seats_requested"] = 1
+    payload["member_owner_payment_method_public_id"] = third_method.public_id
     member_client = client_factory({
-        "sub": member.auth_subject,
-        "email": member.email,
+        "sub": third_member.auth_subject,
+        "email": third_member.email,
         "email_verified": True,
     })
     third = member_client.post("/api/booking-requests", json=payload)
@@ -2124,3 +2229,95 @@ def test_double_approval_charges_once(db_session, client_factory, monkeypatch):
     assert second.status_code == 200
     assert first.json()["booking_id"] == second.json()["booking_id"]
     assert charge_count["count"] == 1
+
+
+def test_approved_request_supersedes_dirty_duplicate_pending_request(
+    db_session,
+    client_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
+    owner, space = _seed_owner_space(db_session)
+    member = User(
+        email="dirty-duplicate@example.com",
+        auth_subject="sub-dirty-duplicate",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, 9))
+    assert create.status_code == 200, create.text
+    req_id = create.json()["public_id"]
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    approve = owner_client.post(f"/api/booking-requests/{req_id}/approve", json={"operator_notes": "ok"})
+    assert approve.status_code == 200, approve.text
+
+    approved_req = db_session.query(BookingRequest).filter(BookingRequest.public_id == req_id).one()
+    duplicate = BookingRequest(
+        tenant_id=space.tenant_id,
+        user_id=member.id,
+        space_id=space.id,
+        owner_payment_setting_id=method.owner_payment_setting_id,
+        member_owner_payment_method_id=method.id,
+        payment_provider="stripe",
+        payment_status="not_charged",
+        start_datetime=approved_req.start_datetime,
+        end_datetime=approved_req.end_datetime,
+        status=BookingRequestStatus.REQUESTED,
+    )
+    db_session.add(duplicate)
+    db_session.flush()
+    duplicate_hold = Booking(
+        user_id=member.id,
+        space_id=space.id,
+        tenant_id=space.tenant_id,
+        start_datetime=approved_req.start_datetime,
+        end_datetime=approved_req.end_datetime,
+        inventory_start_datetime=approved_req.start_datetime,
+        inventory_end_datetime=approved_req.end_datetime,
+        booking_request_id=duplicate.id,
+        status=BookingStatus.PENDING,
+        blocks_inventory=True,
+    )
+    db_session.add(duplicate_hold)
+    db_session.flush()
+    duplicate.booking_id = duplicate_hold.id
+    db_session.add(duplicate)
+    db_session.commit()
+    duplicate_public_id = duplicate.public_id
+    duplicate_booking_id = duplicate_hold.id
+
+    repeat = owner_client.post(f"/api/booking-requests/{req_id}/approve", json={"operator_notes": "ok"})
+
+    assert repeat.status_code == 200, repeat.text
+    db_session.expire_all()
+    duplicate = db_session.query(BookingRequest).filter(BookingRequest.public_id == duplicate_public_id).one()
+    duplicate_hold = db_session.query(Booking).filter(Booking.id == duplicate_booking_id).one()
+    assert duplicate.status == BookingRequestStatus.CANCELLED
+    assert duplicate.cancelled_at is not None
+    assert duplicate.payment_status == "not_charged"
+    assert f"Superseded by confirmed booking request {req_id}" in duplicate.operator_notes
+    assert duplicate_hold.status == BookingStatus.CANCELED
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.entity_public_id == duplicate_public_id,
+            AuditLog.action == "booking_request_superseded",
+        )
+        .one()
+    )
+    assert audit.actor_id == owner.id
+    assert audit.after_state["superseded_by"] == req_id

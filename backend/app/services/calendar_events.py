@@ -107,6 +107,7 @@ def build_calendar_events(
     space_id_set = set(space_by_id.keys())
     user_ids: set[int] = set()
     events: list[CalendarEvent] = []
+    bookings: list[Booking] = []
     truncated = False
 
     def _location_for(space: Space) -> Location | None:
@@ -138,6 +139,7 @@ def build_calendar_events(
         bookings = booking_q.all()
         booking_ids = [b.id for b in bookings]
         booking_user_ids = {b.user_id for b in bookings}
+        booking_request_ids = {b.booking_request_id for b in bookings if b.booking_request_id}
         user_ids.update(booking_user_ids)
         # Prefetch successful payments by booking_id for amount lookup.
         booking_payments: dict[int, Payment] = {}
@@ -152,12 +154,33 @@ def build_calendar_events(
             )
             for p in payments:
                 booking_payments.setdefault(p.booking_id, p)
+        booking_requests_by_id = (
+            {
+                req.id: req
+                for req in db.query(BookingRequest)
+                .filter(BookingRequest.id.in_(booking_request_ids))
+                .all()
+            }
+            if booking_request_ids
+            else {}
+        )
         users_by_id = (
             {u.id: u for u in db.query(User).filter(User.id.in_(booking_user_ids)).all()}
             if booking_user_ids
             else {}
         )
         for booking in bookings:
+            linked_request = (
+                booking_requests_by_id.get(booking.booking_request_id)
+                if booking.booking_request_id
+                else None
+            )
+            if (
+                booking.status == BookingStatus.PENDING
+                and linked_request
+                and linked_request.status in {BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED}
+            ):
+                continue
             space = space_by_id.get(booking.space_id)
             if not space:
                 continue
@@ -181,6 +204,7 @@ def build_calendar_events(
                 amount_cents=(payment.amount_cents or payment.amount * 100) if payment else None,
                 checked_in=booking.checked_in_at is not None,
                 no_show=bool(booking.no_show),
+                seats_requested=linked_request.seats_requested if linked_request else 1,
             )
             if not _push(event):
                 truncated = True
@@ -208,6 +232,23 @@ def build_calendar_events(
             else {}
         )
         for req in requests:
+            covering_booking = next(
+                (
+                    booking
+                    for booking in bookings
+                    if booking.user_id == req.user_id
+                    and booking.space_id == req.space_id
+                    and _as_utc(booking.start_datetime) == _as_utc(req.start_datetime)
+                    and _as_utc(booking.end_datetime) == _as_utc(req.end_datetime)
+                    and booking.status in {BookingStatus.PENDING, BookingStatus.CONFIRMED}
+                ),
+                None,
+            )
+            if covering_booking and (
+                covering_booking.booking_request_id != req.id
+                or covering_booking.status == BookingStatus.CONFIRMED
+            ):
+                continue
             space = space_by_id.get(req.space_id)
             if not space:
                 continue
@@ -229,6 +270,7 @@ def build_calendar_events(
                 member=_make_member(users_by_id.get(req.user_id)),
                 amount_cents=None,
                 request_kind=req.request_kind,
+                seats_requested=req.seats_requested or 1,
             )
             if not _push(event):
                 truncated = True
@@ -294,6 +336,7 @@ def build_calendar_events(
                     member=_make_member(users_by_id.get(sub.user_id)),
                     amount_cents=plan.price_cents if plan else None,
                     plan_name=plan.name if plan else None,
+                    seats_requested=1,
                 )
                 if not _push(event):
                     truncated = True
@@ -324,6 +367,7 @@ def _render_spaces(spaces: list[Space], locations_by_id: dict[int, Location]) ->
                 location_public_id=location.public_id,
                 location_name=location.name,
                 location_timezone=location.timezone,
+                capacity=space.capacity,
             )
         )
     return out
