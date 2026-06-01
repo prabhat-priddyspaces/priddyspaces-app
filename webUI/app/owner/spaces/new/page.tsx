@@ -262,7 +262,7 @@ export default function NewSpacePage() {
           space_type: form.space_type,
           capacity,
         });
-        setMessage("Space saved. Add terms below, or return to inventory when finished.");
+        setMessage("Space saved. Add terms below, or return to rooms and spaces when finished.");
       } else {
         router.push(`/owner/locations/spaces?locationId=${encodeURIComponent(form.location_public_id)}`);
       }
@@ -278,7 +278,7 @@ export default function NewSpacePage() {
       <div className="grid gap-6">
         <div>
           <h2 className="text-2xl font-semibold">Create a Space</h2>
-          <p className="text-textSecondary">Add product-specific inventory for a location.</p>
+          <p className="text-textSecondary">Add rooms, desks, and bookable spaces for a location.</p>
         </div>
         <Card>
           <div className="grid gap-5">
@@ -301,7 +301,7 @@ export default function NewSpacePage() {
               </select>
               {!loadingLocations && locations.length === 0 ? (
                 <div className="text-xs text-textMuted">
-                  No owner locations are ready for inventory yet. Create one first from{" "}
+                  No owner locations are ready yet. Create one first from{" "}
                   <Link href="/owner/locations/new" className="text-accent hover:underline">
                     the location setup page
                   </Link>

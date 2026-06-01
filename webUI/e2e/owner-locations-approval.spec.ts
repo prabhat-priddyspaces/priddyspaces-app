@@ -5,6 +5,8 @@ import { json, meResponse, mockSession } from "./helpers/mock-api";
 test("owner sees company review status on locations and can request approval", async ({ page }) => {
   let approvalRequested = false;
   let approvalAttempts = 0;
+  const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   await mockSession(page, "owner");
   await page.route("**/api/**", async (route) => {
@@ -65,6 +67,16 @@ test("owner sees company review status on locations and can request approval", a
       return;
     }
 
+    if (key === "GET /api/booking-requests") {
+      expect(url.searchParams.get("status")).toBe("approved");
+      await json(route, [
+        { public_id: "req_1", location_public_id: "loc_1", end_datetime: future },
+        { public_id: "req_2", location_public_id: "loc_1", end_datetime: future },
+        { public_id: "req_3", location_public_id: "loc_1", end_datetime: past },
+      ]);
+      return;
+    }
+
     if (key === "GET /api/locations/loc_1/spaces") {
       await json(route, [{ public_id: "space_1", availability_status: "available" }]);
       return;
@@ -94,6 +106,20 @@ test("owner sees company review status on locations and can request approval", a
   await expect(page.getByText("Payment setup required.")).toBeVisible();
   await expect(page.getByText("Your listings are hidden from search until payments are configured.")).toBeVisible();
   await expect(page.getByText("Downtown")).toBeVisible();
+  await expect(page.locator("span").filter({ hasText: /^Active$/ })).toBeVisible();
+  await expect(page.getByText("Upcoming approved")).toBeVisible();
+  await expect(page.getByText("2", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Map view" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "More" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Manage rooms" })).toHaveAttribute(
+    "href",
+    "/owner/locations/spaces?locationId=loc_1",
+  );
+  await expect(page.getByRole("link", { name: "Edit" })).toHaveAttribute("href", "/owner/locations/loc_1/edit");
+  await expect(page.getByRole("link", { name: "Add space" })).toHaveAttribute(
+    "href",
+    "/owner/spaces/new?locationId=loc_1",
+  );
   await expect(page.getByText("Marketplace in review")).toBeVisible();
   await expect(page.getByText("Hidden from search until payment setup is complete.")).toBeVisible();
   await page.getByRole("button", { name: "Request approval" }).click();

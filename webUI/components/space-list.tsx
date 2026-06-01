@@ -137,7 +137,7 @@ export function SpaceList({ locationPublicId }: { locationPublicId: string }) {
       {spaces.length === 0 ? (
         <div className="text-sm text-textMuted">No rooms or desks have been added for this location.</div>
       ) : filteredSpaces.length === 0 ? (
-        <div className="text-sm text-textMuted">No rooms or desks match these inventory filters.</div>
+        <div className="text-sm text-textMuted">No rooms or desks match these filters.</div>
       ) : (
         filteredSpaces.map((space) => (
           <SpaceRow

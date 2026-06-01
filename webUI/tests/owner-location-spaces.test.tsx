@@ -41,10 +41,12 @@ describe("LocationSpaces", () => {
     });
   });
 
-  it("links back to location settings while managing inventory", async () => {
+  it("links back to location settings while managing rooms", async () => {
     render(<LocationSpaces />);
 
     expect(await screen.findByText("Austin Hub")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Manage rooms" })).toBeInTheDocument();
+    expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Location settings" })).toHaveAttribute(
       "href",
       "/owner/locations/loc_1/edit",

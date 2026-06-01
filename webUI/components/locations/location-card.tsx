@@ -6,9 +6,7 @@ import {
   Building2,
   Car,
   Coffee,
-  Globe,
   MapPin,
-  MoreHorizontal,
   Plus,
   Printer,
   Wifi,
@@ -41,9 +39,9 @@ export interface LocationCardProps {
   city: string | null;
   address: string;
   rooms: number;
-  occupancy: number | null;
+  upcomingApprovedCount: number;
   mtdNet: number | null;
-  status: "active" | "onboarding" | string;
+  status: "active" | "inactive" | string;
   organizationReviewStatus?: string | null;
   marketplacePaymentStatus?: string | null;
   paymentHiddenListings?: number | null;
@@ -86,13 +84,36 @@ function reviewStatusMeta(status?: string | null) {
   }
 }
 
+function locationStatusMeta(status: string) {
+  switch (status) {
+    case "active":
+      return {
+        label: "Active",
+        variant: "success" as const,
+        heroClassName: "from-[var(--ps-violet-100)] to-[var(--ps-mint-100)]",
+      };
+    case "inactive":
+      return {
+        label: "Inactive",
+        variant: "default" as const,
+        heroClassName: "from-surface-2 to-line",
+      };
+    default:
+      return {
+        label: status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown",
+        variant: "warning" as const,
+        heroClassName: "from-warning-soft to-surface-2",
+      };
+  }
+}
+
 export function LocationCard({
   publicId,
   name,
   city,
   address,
   rooms,
-  occupancy,
+  upcomingApprovedCount,
   mtdNet,
   status,
   organizationReviewStatus,
@@ -103,16 +124,8 @@ export function LocationCard({
   primary,
   amenities = [],
 }: LocationCardProps) {
-  const isOnboarding = status === "onboarding";
   const review = reviewStatusMeta(organizationReviewStatus);
-  const occupancyColor =
-    occupancy == null
-      ? "text-text"
-      : occupancy > 0.8
-      ? "text-success"
-      : occupancy > 0.5
-      ? "text-text"
-      : "text-warning";
+  const locationStatus = locationStatusMeta(status);
   const visibleAmenities = amenities.slice(0, 4);
   const hiddenCount = Math.max(0, amenities.length - visibleAmenities.length);
   const paymentBlocked = (paymentHiddenListings ?? 0) > 0;
@@ -128,12 +141,7 @@ export function LocationCard({
     >
       {/* Hero strip */}
       <div
-        className="relative h-20"
-        style={{
-          background: isOnboarding
-            ? "linear-gradient(135deg, #FFF4E5, #FFE4C9)"
-            : "linear-gradient(135deg, var(--ps-violet-100), var(--ps-mint-100))",
-        }}
+        className={cn("relative h-20 bg-gradient-to-br", locationStatus.heroClassName)}
       >
         <div
           className="absolute inset-0"
@@ -151,15 +159,9 @@ export function LocationCard({
               Primary
             </Badge>
           )}
-          {isOnboarding ? (
-            <Badge variant="warning" dot>
-              Onboarding
-            </Badge>
-          ) : (
-            <Badge variant="success" dot>
-              Live
-            </Badge>
-          )}
+          <Badge variant={locationStatus.variant} dot>
+            {locationStatus.label}
+          </Badge>
         </div>
         <div className="absolute left-4 bottom-3 flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-surface text-brand grid place-items-center shadow-sm">
@@ -194,22 +196,13 @@ export function LocationCard({
               ) : null}
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-7 p-0 justify-center flex-none"
-            aria-label="More"
-          >
-            <MoreHorizontal size={14} />
-          </Button>
         </div>
 
         <div className="grid grid-cols-3 gap-1 p-3 bg-surface-2 rounded-[10px] mb-3">
           <Metric label="Rooms" value={rooms.toString()} />
           <Metric
-            label="Occupancy"
-            value={occupancy != null ? `${Math.round(occupancy * 100)}%` : "—"}
-            valueClassName={occupancyColor}
+            label="Upcoming approved"
+            value={upcomingApprovedCount.toString()}
           />
           <Metric
             label="MTD net"
@@ -268,28 +261,23 @@ export function LocationCard({
           </div>
         ) : null}
 
-        <div className="flex gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           <Link
             href={`/owner/locations/spaces?locationId=${publicId}`}
-            className="flex-1"
+            className="min-w-0"
           >
             <Button variant="primary" size="sm" className="w-full justify-center">
               Manage rooms
             </Button>
           </Link>
-          <Link href={`/owner/locations/${publicId}/edit`}>
-            <Button variant="default" size="sm">
+          <Link href={`/owner/locations/${publicId}/edit`} className="min-w-0">
+            <Button variant="default" size="sm" className="w-full justify-center">
               Edit
             </Button>
           </Link>
-          <Link href={`/owner/spaces/new?locationId=${publicId}`}>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-[30px] p-0 justify-center"
-              aria-label="View on marketplace"
-            >
-              <Globe size={13} />
+          <Link href={`/owner/spaces/new?locationId=${publicId}`} className="min-w-0">
+            <Button variant="default" size="sm" className="w-full justify-center">
+              Add space
             </Button>
           </Link>
         </div>

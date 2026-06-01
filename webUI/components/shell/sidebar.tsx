@@ -84,7 +84,6 @@ const ownerSections: SidebarSection[] = [
       { href: "/owner/access-scanner", icon: ScanLine, label: "Scanner" },
       { href: "/owner/attendance", icon: ClipboardList, label: "Attendance" },
       { href: "/owner/locations", icon: MapPin, label: "Locations" },
-      { href: "/owner/locations/spaces", icon: Box, label: "Inventory" },
       { href: "/owner/team", icon: User, label: "Team" },
     ],
   },
