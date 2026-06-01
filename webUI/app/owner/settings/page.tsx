@@ -60,12 +60,6 @@ interface BookingSettings {
   payment_failure_hold_minutes: number;
 }
 
-interface FeatureFlag {
-  public_id: string;
-  flag_key: string;
-  flag_value: boolean;
-}
-
 interface CancellationPolicy {
   public_id: string;
   space_type: string;
@@ -107,7 +101,6 @@ export default function OwnerSettingsPage() {
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [taxConfig, setTaxConfig] = useState<TaxConfig | null>(null);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
-  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [connectStatus, setConnectStatus] = useState("");
@@ -124,12 +117,6 @@ export default function OwnerSettingsPage() {
     booking_approval_mode: "manual" as "manual" | "auto",
     membership_lease_approval_mode: "manual" as "manual" | "auto",
     payment_failure_hold_minutes: "30",
-  });
-  const [flagForm, setFlagForm] = useState({
-    flag_key: "instant_booking_enabled",
-    flag_value: false,
-    scope_type: "tenant",
-    scope_public_id: "",
   });
   const [policyForm, setPolicyForm] = useState({
     space_type: "conference_room",
@@ -210,18 +197,6 @@ export default function OwnerSettingsPage() {
     );
   }, [orgId]);
 
-  useEffect(() => {
-    setFlagForm((current) => ({
-      ...current,
-      scope_public_id:
-        current.scope_type === "tenant"
-          ? orgId
-          : current.scope_public_id && spaces.some((space) => space.public_id === current.scope_public_id)
-            ? current.scope_public_id
-            : spaceId,
-    }));
-  }, [orgId, spaceId, spaces]);
-
   async function loadPricingRules() {
     if (!spaceId) {
       setPricingRules([]);
@@ -292,20 +267,6 @@ export default function OwnerSettingsPage() {
       membership_lease_approval_mode: settings.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(settings.payment_failure_hold_minutes),
     });
-  }
-
-  async function loadFeatureFlags() {
-    if (!flagForm.scope_public_id) {
-      setFeatureFlags([]);
-      return;
-    }
-    const token = getAccessToken() ?? undefined;
-    const list = await apiFetch<FeatureFlag[]>(
-      `/api/feature-flags?scope_type=${encodeURIComponent(flagForm.scope_type)}&scope_public_id=${encodeURIComponent(flagForm.scope_public_id)}`,
-      { method: "GET" },
-      token
-    );
-    setFeatureFlags(list);
   }
 
   async function loadPolicies() {
@@ -402,10 +363,6 @@ export default function OwnerSettingsPage() {
     loadConnectStatus().catch(() => null);
   }, [orgId]);
 
-  useEffect(() => {
-    loadFeatureFlags().catch(() => null);
-  }, [flagForm.scope_public_id, flagForm.scope_type]);
-
   async function createPricingRule() {
     if (!spaceId) return;
     const token = getAccessToken() ?? undefined;
@@ -482,25 +439,6 @@ export default function OwnerSettingsPage() {
       payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes),
     });
     setMessage("Booking approval settings saved");
-  }
-
-  async function createFeatureFlag() {
-    const token = getAccessToken() ?? undefined;
-    await apiFetch(
-      "/api/feature-flags",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          flag_key: flagForm.flag_key,
-          flag_value: flagForm.flag_value,
-          scope_type: flagForm.scope_type,
-          scope_public_id: flagForm.scope_public_id,
-        }),
-      },
-      token
-    );
-    setMessage("Feature flag saved");
-    await loadFeatureFlags();
   }
 
   function updatePolicyTier(
@@ -597,7 +535,7 @@ export default function OwnerSettingsPage() {
     <AppShell title="Organization settings" breadcrumb={["Owner", "Organization"]}>
       <div className="grid gap-6">
         <p className="text-[13px] text-text-3 max-w-xl">
-          Pricing, promotions, tax, flags, cancellation rules, plans, and payouts.
+          Pricing, promotions, tax, cancellation rules, plans, and payouts.
         </p>
 
         {message ? <div className="text-[13px] text-text-3">{message}</div> : null}
@@ -855,63 +793,6 @@ export default function OwnerSettingsPage() {
                 Save booking approval
               </Button>
             </div>
-          </div>
-        </Card>
-
-        <Card className="grid gap-4 p-4">
-          <div className="text-sm font-semibold">Feature flags</div>
-          <div className="grid gap-2 md:grid-cols-4">
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              value={flagForm.scope_type}
-              onChange={(e) =>
-                setFlagForm((current) => ({
-                  ...current,
-                  scope_type: e.target.value,
-                  scope_public_id: e.target.value === "tenant" ? orgId : spaceId,
-                }))
-              }
-            >
-              <option value="tenant">Tenant</option>
-              <option value="space">Space</option>
-            </select>
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              value={flagForm.scope_public_id}
-              onChange={(e) => setFlagForm({ ...flagForm, scope_public_id: e.target.value })}
-            >
-              <option value="">Select scope</option>
-              {flagForm.scope_type === "tenant"
-                ? orgs.map((org) => (
-                    <option key={org.public_id} value={org.public_id}>
-                      {org.name}
-                    </option>
-                  ))
-                : spaces.map((space) => (
-                    <option key={space.public_id} value={space.public_id}>
-                      {space.location_name} • {space.space_type}
-                    </option>
-                  ))}
-            </select>
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              value={flagForm.flag_value ? "true" : "false"}
-              onChange={(e) => setFlagForm({ ...flagForm, flag_value: e.target.value === "true" })}
-            >
-              <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
-            </select>
-            <Button type="button" onClick={createFeatureFlag} disabled={!flagForm.scope_public_id}>
-              Save flag
-            </Button>
-          </div>
-          <div className="grid gap-2 text-xs text-textMuted">
-            {featureFlags.map((flag) => (
-              <div key={flag.public_id}>
-                {flag.flag_key} • {flag.flag_value ? "Enabled" : "Disabled"}
-              </div>
-            ))}
-            {featureFlags.length === 0 ? <div>No flags configured for this scope.</div> : null}
           </div>
         </Card>
 

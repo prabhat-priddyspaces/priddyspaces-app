@@ -76,7 +76,6 @@ async function routeOwnerSettingsApi(page: Page) {
     if (
       key === "GET /api/pricing-rules" ||
       key === "GET /api/promo-codes" ||
-      key === "GET /api/feature-flags" ||
       key === "GET /api/cancellation-policies" ||
       key === "GET /api/subscription-plans" ||
       key === "GET /api/orgs/org_1/amenities"
@@ -141,6 +140,7 @@ test("owner settings scroll main content while sidebar stays fixed", async ({ pa
   await page.goto("/owner/settings");
 
   await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible();
+  await expect(page.getByText("Feature flags")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Account" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Organization" })).toBeVisible();
 

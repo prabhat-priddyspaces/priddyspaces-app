@@ -75,6 +75,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
 
     expect(await screen.findByRole("link", { name: "Open loyalty settings" })).toHaveAttribute("href", "/owner/loyalty");
     expect(await screen.findByText("Booking approval")).toBeInTheDocument();
+    expect(screen.queryByText("Feature flags")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Hourly/day-pass approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Membership & lease approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Payment failure recovery"), { target: { value: "15" } });
