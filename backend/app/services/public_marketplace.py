@@ -29,6 +29,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.space_image import SpaceImage
+from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.subscription import Subscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
@@ -497,6 +498,43 @@ def _subscription_price_map(
     return dict(prices)
 
 
+def _setup_fee_amount_map(db: Session, space_ids: list[int]) -> dict[int, int]:
+    if not space_ids:
+        return {}
+    rows = (
+        db.query(SpaceSetupFeeItem)
+        .filter(
+            SpaceSetupFeeItem.space_id.in_(space_ids),
+            SpaceSetupFeeItem.is_active.is_(True),
+        )
+        .all()
+    )
+    amounts: dict[int, int] = defaultdict(int)
+    for row in rows:
+        amounts[row.space_id] += int(row.amount_cents or 0)
+    return dict(amounts)
+
+
+def _setup_fee_items_payload(db: Session, space_id: int) -> list[dict[str, object]]:
+    rows = (
+        db.query(SpaceSetupFeeItem)
+        .filter(
+            SpaceSetupFeeItem.space_id == space_id,
+            SpaceSetupFeeItem.is_active.is_(True),
+        )
+        .order_by(SpaceSetupFeeItem.sort_order.asc(), SpaceSetupFeeItem.id.asc())
+        .all()
+    )
+    return [
+        {
+            "label": row.label,
+            "amount_cents": int(row.amount_cents or 0),
+        }
+        for row in rows
+        if (row.amount_cents or 0) > 0
+    ]
+
+
 def _best_space_price(space_payload: dict[str, object], *, category: str) -> int | None:
     if category == "coworking":
         return (
@@ -657,6 +695,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
     } if tenant_ids else {}
     location_amenity_map = get_location_amenities_map(db, location_ids)
     hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
+    setup_fee_amounts = _setup_fee_amount_map(db, space_ids)
     subscription_prices = _subscription_price_map(
         db,
         tenant_ids,
@@ -789,6 +828,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
                 "price_monthly": space.price_monthly,
                 "hourly_price": min(hourly_prices) if hourly_prices else None,
                 "membership_price": min(membership_prices) if membership_prices else None,
+                "setup_fee_amount_cents": setup_fee_amounts.get(space.id, 0),
                 "amenities": location_amenities or space_amenities,
                 "image_url": image.image_url if image else None,
             }
@@ -843,6 +883,7 @@ def get_public_location_detail(
     location_amenity_map = get_location_amenities_map(db, [location.id])
     location_amenities = _location_amenity_names(location, location_amenity_map)
     hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
+    setup_fee_amounts = _setup_fee_amount_map(db, space_ids)
     subscription_prices = _subscription_price_map(
         db,
         tenant_ids,
@@ -947,6 +988,7 @@ def get_public_location_detail(
                 "price_monthly": space.price_monthly,
                 "hourly_price": min(hourly_prices) if hourly_prices else None,
                 "membership_price": min(membership_prices) if membership_prices else None,
+                "setup_fee_amount_cents": setup_fee_amounts.get(space.id, 0),
                 "amenities": location_amenities or space_amenities,
                 "image_url": image.image_url if image else None,
             }
@@ -1047,6 +1089,8 @@ def get_public_space_detail(
         {"min_hours": tier.min_hours, "discount_percent": tier.discount_percent}
         for tier in volume_tiers
     ]
+    setup_fee_items = _setup_fee_items_payload(db, space.id)
+    setup_fee_amount_cents = sum(int(item["amount_cents"]) for item in setup_fee_items)
 
     cancellation_policy = (
         db.query(CancellationPolicy)
@@ -1118,6 +1162,8 @@ def get_public_space_detail(
             "amenities": amenities,
             "volume_discounts": volume_discount_payload,
             "booking_products": booking_products,
+            "setup_fee_items": setup_fee_items,
+            "setup_fee_amount_cents": setup_fee_amount_cents,
         },
         "images": [
             {

@@ -125,6 +125,7 @@ class BookingPricePreviewLineItem(BaseModel):
 class BookingPricePreviewOut(BaseModel):
     currency: str = "usd"
     base_amount_cents: int
+    setup_fee_amount_cents: int = 0
     discount_amount_cents: int = 0
     tax_amount_cents: int = 0
     total_amount_cents: int

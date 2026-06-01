@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRoute } from "@react-navigation/native";
 
 import { apiFetch } from "../../lib/api";
@@ -74,6 +74,15 @@ type ReservationPayload = {
   seats_requested?: number;
 };
 
+type CheckoutPreview = {
+  base_amount_cents: number;
+  setup_fee_amount_cents: number;
+  discount_amount_cents: number;
+  tax_amount_cents: number;
+  total_amount_cents: number;
+  line_items: Array<{ label: string; amount_cents: number }>;
+};
+
 function toDateIso(date: Date) {
   return date.toISOString().slice(0, 10);
 }
@@ -84,6 +93,10 @@ function nextDateOptions() {
     date.setDate(date.getDate() + index);
     return toDateIso(date);
   });
+}
+
+function formatCents(cents: number) {
+  return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 
 export function SpaceDetailScreen() {
@@ -105,6 +118,10 @@ export function SpaceDetailScreen() {
   const [paymentSetupOpen, setPaymentSetupOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
   const [pendingMembershipPlan, setPendingMembershipPlan] = useState<MembershipPlan | null>(null);
+  const [checkoutReservation, setCheckoutReservation] = useState<ReservationPayload | null>(null);
+  const [checkoutMembershipPlan, setCheckoutMembershipPlan] = useState<MembershipPlan | null>(null);
+  const [checkoutPreview, setCheckoutPreview] = useState<CheckoutPreview | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [seatQuantity, setSeatQuantity] = useState("1");
 
   useEffect(() => {
@@ -210,6 +227,44 @@ export function SpaceDetailScreen() {
         }))
   );
   const fullDayDisabled = !space?.price_daily || selectedDayHasConflict || (availability ? !selectedDay : false);
+  const checkoutPayload = useMemo(
+    () =>
+      checkoutReservation
+        ? checkoutReservation
+        : checkoutMembershipPlan
+          ? {
+              membership_plan_public_id: checkoutMembershipPlan.public_id,
+              desired_start_date: bookingDate
+            }
+          : null,
+    [bookingDate, checkoutMembershipPlan, checkoutReservation],
+  );
+
+  useEffect(() => {
+    if (!token || !checkoutPayload) {
+      setCheckoutPreview(null);
+      return;
+    }
+    let active = true;
+    setCheckoutLoading(true);
+    apiFetch<CheckoutPreview>(
+      "/api/booking-requests/preview",
+      { method: "POST", body: JSON.stringify(checkoutPayload) },
+      token
+    )
+      .then((preview) => {
+        if (active) setCheckoutPreview(preview);
+      })
+      .catch((err) => {
+        if (active) setMessage(err instanceof Error ? err.message : "Unable to load checkout summary");
+      })
+      .finally(() => {
+        if (active) setCheckoutLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [checkoutPayload, token]);
 
   useEffect(() => {
     if (isSharedDesk) setFullDay(true);
@@ -281,6 +336,34 @@ export function SpaceDetailScreen() {
     }
   }
 
+  async function continueBookingAfterSummary(payload: ReservationPayload) {
+    if (!token || !space) return;
+    setSubmitting(true);
+    setCheckoutReservation(null);
+    setMessage("");
+    try {
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(space.public_id)}`,
+        { method: "GET" },
+        token
+      );
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || "This owner has not configured payments.");
+      }
+      if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
+        setPendingReservation(payload);
+        setPaymentSetupOpen(true);
+        setMessage("Add a booking card to continue.");
+        return;
+      }
+      await submitBooking(payload, resolved.payment_method_public_id);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to send booking request");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleRequest() {
     if (!token || !space) return;
     if (!isConferenceRoom && !isSharedDesk) return;
@@ -305,37 +388,15 @@ export function SpaceDetailScreen() {
       setMessage("Choose a valid booking window");
       return;
     }
-    setSubmitting(true);
     setMessage("");
-    try {
-      const resolved = await apiFetch<PaymentMethodResolve>(
-        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(space.public_id)}`,
-        { method: "GET" },
-        token
-      );
-      if (!resolved.is_configured) {
-        throw new Error(resolved.message || "This owner has not configured payments.");
-      }
-      const payload: ReservationPayload = {
-        space_public_id: space.public_id,
-        start_datetime: start.toISOString(),
-        end_datetime: end.toISOString(),
-        booking_mode: dayPass ? "day_pass" : "hourly",
-        full_day: dayPass,
-        seats_requested: isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1
-      };
-      if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
-        setPendingReservation(payload);
-        setPaymentSetupOpen(true);
-        setMessage("Add a booking card to continue.");
-        return;
-      }
-      await submitBooking(payload, resolved.payment_method_public_id);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Unable to send booking request");
-    } finally {
-      setSubmitting(false);
-    }
+    setCheckoutReservation({
+      space_public_id: space.public_id,
+      start_datetime: start.toISOString(),
+      end_datetime: end.toISOString(),
+      booking_mode: dayPass ? "day_pass" : "hourly",
+      full_day: dayPass,
+      seats_requested: isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1
+    });
   }
 
   async function submitMembership(plan: MembershipPlan, paymentMethodPublicId: string) {
@@ -357,9 +418,10 @@ export function SpaceDetailScreen() {
     setMessage("Membership request submitted for owner review.");
   }
 
-  async function handleSubscribe(plan: MembershipPlan) {
+  async function continueMembershipAfterSummary(plan: MembershipPlan) {
     if (!token || !space) return;
     setSubscribing(true);
+    setCheckoutMembershipPlan(null);
     setMessage("");
     try {
       const resolved = await apiFetch<PaymentMethodResolve>(
@@ -382,6 +444,12 @@ export function SpaceDetailScreen() {
     } finally {
       setSubscribing(false);
     }
+  }
+
+  async function handleSubscribe(plan: MembershipPlan) {
+    if (!token || !space) return;
+    setMessage("");
+    setCheckoutMembershipPlan(plan);
   }
 
   return (
@@ -573,6 +641,65 @@ export function SpaceDetailScreen() {
               ))}
             </View>
           ) : null}
+          <Modal visible={Boolean(checkoutReservation || checkoutMembershipPlan)} transparent animationType="fade">
+            <View style={styles.modalBackdrop}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Checkout summary</Text>
+                <Text style={styles.modalSubtitle}>Review the full amount before checkout.</Text>
+                {checkoutLoading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
+                {checkoutPreview ? (
+                  <View style={styles.summaryRows}>
+                    {checkoutPreview.line_items.map((item, index) => (
+                      <View key={`${item.label}-${index}`} style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>{item.label}</Text>
+                        <Text style={styles.summaryValue}>{formatCents(item.amount_cents)}</Text>
+                      </View>
+                    ))}
+                    {checkoutPreview.discount_amount_cents < 0 ? (
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryDiscount}>Discount</Text>
+                        <Text style={styles.summaryDiscount}>-{formatCents(Math.abs(checkoutPreview.discount_amount_cents))}</Text>
+                      </View>
+                    ) : null}
+                    {checkoutPreview.tax_amount_cents > 0 ? (
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>Tax</Text>
+                        <Text style={styles.summaryValue}>{formatCents(checkoutPreview.tax_amount_cents)}</Text>
+                      </View>
+                    ) : null}
+                    <View style={[styles.summaryRow, styles.summaryTotal]}>
+                      <Text style={styles.summaryTotalText}>Total due</Text>
+                      <Text style={styles.summaryTotalText}>{formatCents(checkoutPreview.total_amount_cents)}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.modalSecondary}
+                    onPress={() => {
+                      setCheckoutReservation(null);
+                      setCheckoutMembershipPlan(null);
+                    }}
+                  >
+                    <Text style={styles.modalSecondaryText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalPrimary, !checkoutPreview || checkoutLoading ? styles.chipDisabled : null]}
+                    disabled={!checkoutPreview || checkoutLoading}
+                    onPress={() => {
+                      if (checkoutReservation) {
+                        continueBookingAfterSummary(checkoutReservation);
+                      } else if (checkoutMembershipPlan) {
+                        continueMembershipAfterSummary(checkoutMembershipPlan);
+                      }
+                    }}
+                  >
+                    <Text style={styles.modalPrimaryText}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       ) : null}
     </View>
@@ -725,6 +852,86 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: "#111827",
+    fontWeight: "600"
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.55)",
+    justifyContent: "center",
+    padding: 20
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 18
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827"
+  },
+  modalSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#6B7280"
+  },
+  summaryRows: {
+    marginTop: 16,
+    gap: 10
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  summaryLabel: {
+    color: "#4B5563",
+    flex: 1
+  },
+  summaryValue: {
+    color: "#111827",
+    fontWeight: "600"
+  },
+  summaryDiscount: {
+    color: "#047857",
+    fontWeight: "600"
+  },
+  summaryTotal: {
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 12
+  },
+  summaryTotalText: {
+    color: "#111827",
+    fontWeight: "700",
+    fontSize: 15
+  },
+  modalActions: {
+    marginTop: 18,
+    flexDirection: "row",
+    gap: 10
+  },
+  modalSecondary: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center"
+  },
+  modalSecondaryText: {
+    color: "#111827",
+    fontWeight: "600"
+  },
+  modalPrimary: {
+    flex: 1,
+    backgroundColor: "#111827",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center"
+  },
+  modalPrimaryText: {
+    color: "#FFFFFF",
     fontWeight: "600"
   }
 });

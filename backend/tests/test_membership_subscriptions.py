@@ -97,6 +97,81 @@ def test_create_subscription_serializes_to_dict_only_subscription(monkeypatch):
     assert captured["metadata"]["commitment_months"] == "12"
 
 
+def test_create_subscription_adds_setup_fees_to_first_invoice(monkeypatch):
+    captured: dict = {}
+    products: list[dict] = []
+
+    class Product:
+        id = "prod_setup"
+
+    class Subscription:
+        id = "sub_with_setup"
+        status = "active"
+
+        def to_dict(self):
+            return {"id": self.id, "status": self.status}
+
+    def fake_product_create(**kwargs):
+        products.append(kwargs)
+        return Product()
+
+    def fake_subscription_create(**kwargs):
+        captured.update(kwargs)
+        return Subscription()
+
+    monkeypatch.setattr(
+        "app.services.membership_subscriptions.stripe.Product.create",
+        fake_product_create,
+    )
+    monkeypatch.setattr(
+        "app.services.membership_subscriptions.stripe.Subscription.create",
+        fake_subscription_create,
+    )
+
+    result = create_subscription(
+        setting=_stripe_setting(),
+        plan=_plan(),
+        payment_method=_method(),
+        commitment_months=12,
+        setup_fee_items=[
+            {"label": "Office setup", "amount_cents": 15000, "type": "setup_fee"},
+            {"label": "Keys", "amount_cents": 5000, "type": "setup_fee"},
+        ],
+        metadata={"membership_plan_public_id": "plan_1"},
+    )
+
+    assert result.subscription_id == "sub_with_setup"
+    assert [product["name"] for product in products] == ["Office setup", "Keys"]
+    assert captured["add_invoice_items"] == [
+        {
+            "price_data": {
+                "currency": "usd",
+                "product": "prod_setup",
+                "unit_amount": 15000,
+            },
+            "quantity": 1,
+            "metadata": {
+                "membership_plan_public_id": "plan_1",
+                "setup_fee": "true",
+                "setup_fee_label": "Office setup",
+            },
+        },
+        {
+            "price_data": {
+                "currency": "usd",
+                "product": "prod_setup",
+                "unit_amount": 5000,
+            },
+            "quantity": 1,
+            "metadata": {
+                "membership_plan_public_id": "plan_1",
+                "setup_fee": "true",
+                "setup_fee_label": "Keys",
+            },
+        },
+    ]
+
+
 def test_create_subscription_reuses_existing_subscription_by_booking_request(monkeypatch):
     plan = _plan(stripe_price_id=None)
 

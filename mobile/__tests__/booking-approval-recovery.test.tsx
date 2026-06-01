@@ -231,6 +231,19 @@ describe("booking approval and recovery mobile flows", () => {
           message: null,
         });
       }
+      if (path === "/api/booking-requests/preview") {
+        return Promise.resolve({
+          base_amount_cents: 20000,
+          setup_fee_amount_cents: 2500,
+          discount_amount_cents: 0,
+          tax_amount_cents: 0,
+          total_amount_cents: 22500,
+          line_items: [
+            { label: "Day Rate", amount_cents: 20000 },
+            { label: "Room setup", amount_cents: 2500 },
+          ],
+        });
+      }
       if (path === "/api/booking-requests") {
         return Promise.resolve({ public_id: "req_1", status: "approved", payment_status: "succeeded" });
       }
@@ -243,6 +256,10 @@ describe("booking approval and recovery mobile flows", () => {
     fireEvent.press(screen.getByText("All day"));
     expect(await screen.findByText(/All day from/)).toBeTruthy();
     fireEvent.press(screen.getByText("Reserve & Pay"));
+    expect(await screen.findByText("Checkout summary")).toBeTruthy();
+    expect(screen.getByText("Room setup")).toBeTruthy();
+    expect(screen.getByText("$225")).toBeTruthy();
+    fireEvent.press(screen.getByText("Continue"));
 
     await waitFor(() => {
       expect(apiFetch).toHaveBeenCalledWith(

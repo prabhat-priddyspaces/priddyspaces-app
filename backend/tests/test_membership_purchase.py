@@ -31,6 +31,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
+from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.services.availability import subscription_overlaps
@@ -183,6 +184,15 @@ def test_membership_purchase_request_create_and_approve(
     plan = _enable_mode_and_make_plan(
         db_session, space, booking_mode=BookingMode.PRIVATE_OFFICE_LEASE
     )
+    db_session.add(
+        SpaceSetupFeeItem(
+            tenant_id=space.tenant_id,
+            space_id=space.id,
+            label="Office setup",
+            amount_cents=15000,
+        )
+    )
+    db_session.commit()
 
     captured: dict = {}
 
@@ -218,7 +228,7 @@ def test_membership_purchase_request_create_and_approve(
     assert data["membership_plan_public_id"] == plan.public_id
     assert data["status"] == BookingRequestStatus.REQUESTED.value
     assert data["commitment_months_snapshot"] == 12
-    assert data["estimated_amount"] == "2000.00"
+    assert data["estimated_amount"] == "2150.00"
 
     req_public_id = data["public_id"]
 
@@ -233,6 +243,9 @@ def test_membership_purchase_request_create_and_approve(
     assert approved["status"] == BookingRequestStatus.APPROVED.value
     assert captured["plan"].id == plan.id
     assert captured["commitment_months"] == 12
+    assert captured["setup_fee_items"] == [
+        {"label": "Office setup", "amount_cents": 15000, "type": "setup_fee"}
+    ]
 
     # Subscription created
     sub = (

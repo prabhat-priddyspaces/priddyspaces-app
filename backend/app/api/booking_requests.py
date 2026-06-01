@@ -83,7 +83,13 @@ from app.services.booking_inventory import (
 )
 from app.services.booking_modes import RECURRING_BOOKING_MODES
 from app.services.booking_products import validate_direct_booking_product
-from app.services.booking_payments import cancellation_deadline_for_request, charge_booking_request, refund_booking_payment
+from app.services.booking_payments import (
+    build_direct_booking_pricing_snapshot,
+    build_membership_pricing_snapshot,
+    cancellation_deadline_for_request,
+    charge_booking_request,
+    refund_booking_payment,
+)
 from app.services.booking_payments import cancel_payment_hold_for_request
 from app.services.meeting_room_balance import (
     add_months,
@@ -421,6 +427,11 @@ def _to_out(
             payment_breakdown = json.loads(req.pricing_snapshot)
         except json.JSONDecodeError:
             payment_breakdown = None
+    if isinstance(payment_breakdown, dict):
+        try:
+            estimated = cents_to_money(int(payment_breakdown["total_cents"]))
+        except (KeyError, TypeError, ValueError):
+            pass
     if req.refund_policy_snapshot:
         try:
             refund_policy_snapshot = json.loads(req.refund_policy_snapshot)
@@ -506,12 +517,32 @@ def _to_out(
         price_monthly=price_monthly,
         price_hourly=price_hourly,
         estimated_amount=estimated,
-        base_amount_cents=estimate.base_cents * estimate_quantity if estimate else None,
+        base_amount_cents=(
+            int(payment_breakdown["base_cents"])
+            if isinstance(payment_breakdown, dict) and payment_breakdown.get("base_cents") is not None
+            else estimate.base_cents * estimate_quantity if estimate else None
+        ),
         discount_percent=estimate.discount_percent if estimate else 0,
-        discount_amount_cents=estimate.discount_cents * estimate_quantity if estimate else 0,
-        tax_amount_cents=estimate.tax_cents * estimate_quantity if estimate else 0,
-        rate_basis=estimate.rate_basis if estimate else None,
-        units=estimate.units if estimate else None,
+        discount_amount_cents=(
+            int(payment_breakdown["discount_cents"])
+            if isinstance(payment_breakdown, dict) and payment_breakdown.get("discount_cents") is not None
+            else estimate.discount_cents * estimate_quantity if estimate else 0
+        ),
+        tax_amount_cents=(
+            int(payment_breakdown["tax_cents"])
+            if isinstance(payment_breakdown, dict) and payment_breakdown.get("tax_cents") is not None
+            else estimate.tax_cents * estimate_quantity if estimate else 0
+        ),
+        rate_basis=(
+            str(payment_breakdown["rate_basis"])
+            if isinstance(payment_breakdown, dict) and payment_breakdown.get("rate_basis") is not None
+            else estimate.rate_basis if estimate else None
+        ),
+        units=(
+            float(payment_breakdown["units"])
+            if isinstance(payment_breakdown, dict) and payment_breakdown.get("units") is not None
+            else estimate.units if estimate else None
+        ),
         payment_attempt_count=req.payment_attempt_count,
         failure_reason=failure_reason,
         last_payment=last_payment_summary,
@@ -571,12 +602,26 @@ def _approve_membership_request(
             ignore_booking_request_id=req.id,
         )
 
+    setup_fee_items: list[dict] = []
+    if req.pricing_snapshot:
+        try:
+            parsed_snapshot = json.loads(req.pricing_snapshot)
+            if isinstance(parsed_snapshot, dict):
+                setup_fee_items = [
+                    item
+                    for item in parsed_snapshot.get("line_items", [])
+                    if isinstance(item, dict) and item.get("type") == "setup_fee"
+                ]
+        except json.JSONDecodeError:
+            setup_fee_items = []
+
     try:
         result = create_stripe_subscription(
             setting=setting,
             plan=plan,
             payment_method=method,
             commitment_months=plan.commitment_months,
+            setup_fee_items=setup_fee_items,
             metadata={
                 "booking_request_public_id": req.public_id,
                 "membership_plan_public_id": plan.public_id,
@@ -719,6 +764,7 @@ def _create_membership_purchase_request(
 
     start_dt = datetime.combine(desired_start, time.min, tzinfo=timezone.utc)
     end_dt = datetime.combine(commitment_end, time.min, tzinfo=timezone.utc)
+    pricing_snapshot = build_membership_pricing_snapshot(db, plan=plan, space=space)
 
     req = BookingRequest(
         tenant_id=space.tenant_id,
@@ -737,6 +783,7 @@ def _create_membership_purchase_request(
         desired_start_date=desired_start,
         seats_requested=payload.seats_requested,
         commitment_months_snapshot=plan.commitment_months,
+        pricing_snapshot=json.dumps(pricing_snapshot),
     )
     db.add(req)
     db.commit()
@@ -1182,6 +1229,16 @@ def create_guest_booking_request(
     chosen_kind = (
         BookingRequestKind.DAILY_BOOKING.value if is_day_pass else BookingRequestKind.HOURLY_BOOKING.value
     )
+    pricing_snapshot = build_direct_booking_pricing_snapshot(
+        db,
+        space,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
+        booking_mode="day_pass" if is_day_pass else "hourly",
+        full_day=is_day_pass,
+        seats_requested=1,
+        occurrence_count=1,
+    )
     guest_token = secrets.token_urlsafe(32)
     token_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
@@ -1199,6 +1256,8 @@ def create_guest_booking_request(
         guest_phone=payload.guest_phone,
         guest_company_name=payload.guest_company_name,
         guest_notes=payload.guest_notes,
+        pricing_snapshot=json.dumps(pricing_snapshot),
+        refund_policy_snapshot=json.dumps(pricing_snapshot.get("refund_policy") or {}),
         guest_token=guest_token,
         guest_token_expires_at=token_expires_at,
     )
@@ -1206,35 +1265,6 @@ def create_guest_booking_request(
     db.add(req)
     db.commit()
     db.refresh(req)
-
-    # Price estimate for the confirmation response
-    estimated: int | None = None
-    try:
-        tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
-        tax_rate = tax.rate_percent if tax else None
-        granularity_minutes = 60
-        if location.booking_granularity:
-            granularity_minutes = _granularity_to_minutes(location.booking_granularity)
-        rule = _get_active_pricing_rule(db, space.id)
-        rate_type = rule.rate_type if rule else None
-        rate_amount = rule.rate_amount if rule else None
-        est = estimate_booking_price(
-            start_dt,
-            end_dt,
-            price_hourly=space.price_hourly,
-            price_daily=space.price_daily,
-            price_monthly=space.price_monthly,
-            rate_type=rate_type,
-            rate_amount=rate_amount,
-            booking_mode="day_pass" if is_day_pass else "hourly",
-            full_day=is_day_pass,
-            volume_discounts=_active_volume_discounts(db, space.id),
-            granularity_minutes=granularity_minutes,
-            tax_rate_percent=tax_rate,
-        )
-        estimated = cents_to_money(est.total_cents) if est else None
-    except Exception:
-        pass
 
     _send_booking_request_notifications(db, req, space, location)
 
@@ -1244,7 +1274,7 @@ def create_guest_booking_request(
         start_datetime=req.start_datetime,
         end_datetime=req.end_datetime,
         space_public_id=space.public_id,
-        estimated_amount=estimated,
+        estimated_amount=cents_to_money(pricing_snapshot["total_cents"]),
     )
 
 
@@ -1272,16 +1302,21 @@ def preview_booking_request_price(
             raise HTTPException(status_code=404, detail="Location not found")
         _require_public_booking_space(db, space, location, allow_unlisted=True)
         require_space_payment_ready_for_public_surface(db, space)
+        snapshot = build_membership_pricing_snapshot(db, plan=plan, space=space)
         return BookingPricePreviewOut(
-            base_amount_cents=plan.price_cents,
-            total_amount_cents=plan.price_cents,
-            rate_basis=plan.booking_mode,
-            quantity=1,
+            base_amount_cents=snapshot["base_cents"],
+            setup_fee_amount_cents=snapshot["setup_fee_cents"],
+            discount_amount_cents=snapshot["discount_cents"],
+            tax_amount_cents=snapshot["tax_cents"],
+            total_amount_cents=snapshot["total_cents"],
+            rate_basis=snapshot["rate_basis"],
+            quantity=snapshot["quantity"],
             line_items=[
                 BookingPricePreviewLineItem(
-                    label=plan.name,
-                    amount_cents=plan.price_cents,
+                    label=str(item["label"]),
+                    amount_cents=int(item["amount_cents"]),
                 )
+                for item in snapshot.get("line_items", [])
             ],
         )
 
@@ -1307,50 +1342,30 @@ def preview_booking_request_price(
         seats_requested=payload.seats_requested,
     )
 
-    tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
-    rule = _get_active_pricing_rule(db, space.id)
-    estimate = estimate_booking_price(
-        start_dt,
-        end_dt,
-        price_hourly=space.price_hourly,
-        price_daily=space.price_daily,
-        price_monthly=space.price_monthly,
-        rate_type=rule.rate_type if rule else None,
-        rate_amount=rule.rate_amount if rule else None,
+    snapshot = build_direct_booking_pricing_snapshot(
+        db,
+        space,
+        start_datetime=start_dt,
+        end_datetime=end_dt,
         booking_mode="day_pass" if is_day_pass else "hourly",
         full_day=is_day_pass,
-        volume_discounts=_active_volume_discounts(db, space.id),
-        granularity_minutes=_granularity_to_minutes(location.booking_granularity) if location.booking_granularity else 60,
-        tax_rate_percent=tax.rate_percent if tax else None,
+        seats_requested=payload.seats_requested,
     )
-    if estimate is None:
-        raise HTTPException(status_code=400, detail="Unable to calculate booking amount")
-
-    quantity = (
-        max(1, payload.seats_requested or 1)
-        if is_day_pass and _space_type_value(space) == SpaceType.SHARED_DESK.value
-        else 1
-    )
-    multiplier = quantity
-    if is_day_pass and _space_type_value(space) == SpaceType.CONFERENCE_ROOM.value:
-        label = "Day Rate"
-    elif is_day_pass:
-        label = "Day Pass"
-    else:
-        label = "Hourly reservation"
     return BookingPricePreviewOut(
-        base_amount_cents=estimate.base_cents * multiplier,
-        discount_amount_cents=estimate.discount_cents * multiplier,
-        tax_amount_cents=estimate.tax_cents * multiplier,
-        total_amount_cents=estimate.total_cents * multiplier,
-        rate_basis=estimate.rate_basis,
-        units=estimate.units,
-        quantity=quantity,
+        base_amount_cents=snapshot["base_cents"],
+        setup_fee_amount_cents=snapshot["setup_fee_cents"],
+        discount_amount_cents=snapshot["discount_cents"],
+        tax_amount_cents=snapshot["tax_cents"],
+        total_amount_cents=snapshot["total_cents"],
+        rate_basis=snapshot["rate_basis"],
+        units=snapshot["units"],
+        quantity=snapshot["quantity"],
         line_items=[
             BookingPricePreviewLineItem(
-                label=label,
-                amount_cents=estimate.base_cents * multiplier,
+                label=str(item["label"]),
+                amount_cents=int(item["amount_cents"]),
             )
+            for item in snapshot.get("line_items", [])
         ],
     )
 
@@ -1421,35 +1436,20 @@ def create_booking_request(
         seats_requested=payload.seats_requested,
     )
 
+    pricing_snapshot = build_direct_booking_pricing_snapshot(
+        db,
+        space,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
+        booking_mode="day_pass" if is_day_pass else "hourly",
+        full_day=is_day_pass,
+        seats_requested=payload.seats_requested,
+        occurrence_count=len(occurrences),
+    )
     lock = active_lock_by_public_id(db, payload.redemption_lock_public_id, user, space) if payload.redemption_lock_public_id else None
     points_cover_total = False
     if lock:
-        estimated_total_cents = 0
-        try:
-            tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
-            tax_rate = tax.rate_percent if tax else None
-            granularity_minutes = _granularity_to_minutes(location.booking_granularity) if location.booking_granularity else 60
-            rule = _get_active_pricing_rule(db, space.id)
-            est = estimate_booking_price(
-                occurrences[0].start_datetime,
-                occurrences[0].end_datetime,
-                price_hourly=space.price_hourly,
-                price_daily=space.price_daily,
-                price_monthly=space.price_monthly,
-                rate_type=rule.rate_type if rule else None,
-                rate_amount=rule.rate_amount if rule else None,
-                booking_mode="day_pass" if is_day_pass else "hourly",
-                full_day=is_day_pass,
-                volume_discounts=_active_volume_discounts(db, space.id),
-                granularity_minutes=granularity_minutes,
-                tax_rate_percent=tax_rate,
-            )
-            estimated_total_cents = int(est.total_cents) if est else 0
-        except Exception:
-            estimated_total_cents = 0
-        if is_day_pass and _space_type_value(space) == SpaceType.SHARED_DESK.value:
-            estimated_total_cents *= max(1, payload.seats_requested or 1)
-        estimated_total_cents *= max(1, len(occurrences))
+        estimated_total_cents = int(pricing_snapshot.get("total_cents") or 0)
         points_cover_total = estimated_total_cents > 0 and (lock.discount_cents or 0) >= estimated_total_cents
 
     if settings.PAYMENT_METHOD_REQUIRED_FOR_REQUEST and not points_cover_total:
@@ -1484,6 +1484,8 @@ def create_booking_request(
         recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
         occurrence_count=len(occurrences),
         seats_requested=max(1, payload.seats_requested or 1),
+        pricing_snapshot=json.dumps(pricing_snapshot),
+        refund_policy_snapshot=json.dumps(pricing_snapshot.get("refund_policy") or {}),
     )
     req.cancellation_deadline_at = cancellation_deadline_for_request(db, req, space)
     db.add(req)

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, time, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -19,6 +20,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.location_admin import LocationAdmin
 from app.models.location import Location
 from app.models.space import Space
+from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.booking_request import BookingRequest
 from app.models.booking import Booking
 from app.models.audit_log import AuditLog
@@ -147,6 +149,15 @@ def _seed_owner_payment_setting(db, space: Space) -> OwnerPaymentSetting:
     return setting
 
 
+def _publish_space_for_preview(db, space: Space) -> None:
+    location = db.query(Location).filter(Location.id == space.location_id).one()
+    location.status = LocationStatus.ACTIVE
+    space.visibility = SpaceVisibility.PUBLIC
+    db.add_all([location, space])
+    _seed_owner_payment_setting(db, space)
+    db.commit()
+
+
 def _seed_extra_payment_method(
     db,
     member: User,
@@ -229,7 +240,7 @@ def _request_payload(space: Space, method: MemberOwnerPaymentMethod | None, day:
 
 def test_conference_day_rate_preview_uses_day_rate_label(db_session, client_factory):
     _, space = _seed_owner_space(db_session)
-    _seed_owner_payment_setting(db_session, space)
+    _publish_space_for_preview(db_session, space)
     client = client_factory({})
 
     response = client.post(
@@ -247,8 +258,173 @@ def test_conference_day_rate_preview_uses_day_rate_label(db_session, client_fact
     assert response.json()["line_items"][0]["label"] == "Day Rate"
 
 
+def test_owner_can_replace_setup_fee_items(db_session, client_factory):
+    owner, space = _seed_owner_space(db_session)
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    response = owner_client.put(
+        f"/api/spaces/{space.public_id}/setup-fees",
+        json={
+            "items": [
+                {"label": "Room setup", "amount_cents": 7500, "sort_order": 0},
+                {"label": "After-hours access", "amount_cents": 2500, "sort_order": 1},
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["label"] for item in response.json()] == ["Room setup", "After-hours access"]
+    assert sum(item["amount_cents"] for item in response.json()) == 10000
+
+
+def test_member_cannot_replace_setup_fee_items(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    member = User(
+        email="setup-fee-member@example.com",
+        auth_subject="sub-setup-fee-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    response = member_client.put(
+        f"/api/spaces/{space.public_id}/setup-fees",
+        json={"items": [{"label": "Room setup", "amount_cents": 7500}]},
+    )
+
+    assert response.status_code == 403
+
+
+def test_booking_preview_includes_setup_fee_items_once(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    _publish_space_for_preview(db_session, space)
+    db_session.add_all(
+        [
+            SpaceSetupFeeItem(tenant_id=space.tenant_id, space_id=space.id, label="Room setup", amount_cents=7500),
+            SpaceSetupFeeItem(tenant_id=space.tenant_id, space_id=space.id, label="Cleaning", amount_cents=2500, sort_order=1),
+        ]
+    )
+    db_session.commit()
+    client = client_factory({})
+
+    response = client.post(
+        "/api/booking-requests/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 3, 10, 10, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["base_amount_cents"] == 10000
+    assert body["setup_fee_amount_cents"] == 10000
+    assert body["total_amount_cents"] == 20000
+    assert [item["label"] for item in body["line_items"]] == ["Hourly reservation", "Room setup", "Cleaning"]
+
+
+def test_shared_desk_preview_applies_setup_fee_once_per_checkout_not_seat(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    _publish_space_for_preview(db_session, space)
+    space.space_type = SpaceType.SHARED_DESK
+    space.price_hourly = None
+    space.price_daily = 25
+    space.capacity = 4
+    db_session.add(
+        SpaceSetupFeeItem(tenant_id=space.tenant_id, space_id=space.id, label="Desk setup", amount_cents=1000)
+    )
+    db_session.commit()
+    client = client_factory({})
+
+    response = client.post(
+        "/api/booking-requests/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 3, 10, 9, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 3, 10, 17, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "day_pass",
+            "full_day": True,
+            "seats_requested": 2,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["base_amount_cents"] == 5000
+    assert body["setup_fee_amount_cents"] == 1000
+    assert body["total_amount_cents"] == 6000
+
+
+def test_manual_booking_charge_uses_setup_fee_snapshot_after_fee_changes(db_session, client_factory, monkeypatch):
+    owner, space = _seed_owner_space(db_session)
+    db_session.add(
+        SpaceSetupFeeItem(tenant_id=space.tenant_id, space_id=space.id, label="Original setup", amount_cents=7500)
+    )
+    db_session.commit()
+    member = User(
+        email="snapshot-member@example.com",
+        auth_subject="sub-snapshot-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(member)
+    db_session.commit()
+    method = _seed_payment_method(db_session, member, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    create = member_client.post("/api/booking-requests", json=_request_payload(space, method, day=21))
+    assert create.status_code == 200, create.text
+    req = db_session.query(BookingRequest).filter(BookingRequest.public_id == create.json()["public_id"]).one()
+    snapshot = json.loads(req.pricing_snapshot)
+    assert snapshot["setup_fee_cents"] == 7500
+
+    db_session.query(SpaceSetupFeeItem).filter(SpaceSetupFeeItem.space_id == space.id).delete()
+    db_session.add(
+        SpaceSetupFeeItem(tenant_id=space.tenant_id, space_id=space.id, label="Changed setup", amount_cents=99900)
+    )
+    db_session.commit()
+    captured: dict[str, int] = {}
+
+    class CapturingProvider:
+        def charge_saved_method(self, **kwargs):
+            captured["amount_cents"] = kwargs["amount_cents"]
+            return ChargeResult(status="succeeded", provider_payment_id="pi_snapshot", raw_response={"ok": True})
+
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda _setting: CapturingProvider())
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+
+    approved = owner_client.post(f"/api/booking-requests/{req.public_id}/approve", json={})
+
+    assert approved.status_code == 200, approved.text
+    assert captured["amount_cents"] == 17500
+
+
 def test_booking_preview_hides_pending_owner_inventory(db_session, client_factory):
     _, space = _seed_owner_space(db_session)
+    _publish_space_for_preview(db_session, space)
     org = db_session.query(Organization).filter(Organization.id == space.tenant_id).one()
     org.review_status = OrganizationReviewStatus.PENDING
     db_session.add(org)
@@ -1316,12 +1492,27 @@ def test_explicit_instant_booking_confirms_and_blocks_overlap(db_session, client
 
 
 def test_recurring_instant_booking_creates_confirmed_series(db_session, client_factory, monkeypatch):
-    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: FakeProvider())
     _owner, space = _seed_owner_space(db_session)
     org = db_session.query(Organization).filter(Organization.id == space.tenant_id).first()
     org.booking_approval_mode = "auto"
+    db_session.add(
+        SpaceSetupFeeItem(
+            tenant_id=space.tenant_id,
+            space_id=space.id,
+            label="Recurring setup",
+            amount_cents=5000,
+        )
+    )
     db_session.add(org)
     db_session.commit()
+    captured: dict[str, int] = {}
+
+    class CapturingProvider:
+        def charge_saved_method(self, **kwargs):
+            captured["amount_cents"] = kwargs["amount_cents"]
+            return ChargeResult(status="succeeded", provider_payment_id="pi_recurring", raw_response={"ok": True})
+
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda setting: CapturingProvider())
     member = User(
         email="recurring@example.com",
         auth_subject="sub-recurring",
@@ -1348,6 +1539,10 @@ def test_recurring_instant_booking_creates_confirmed_series(db_session, client_f
     assert body["status"] == BookingRequestStatus.APPROVED.value
     assert body["occurrence_count"] == 3
     assert body["booking_series_public_id"] is not None
+    assert body["payment_breakdown"]["base_cents"] == 30000
+    assert body["payment_breakdown"]["setup_fee_cents"] == 5000
+    assert body["payment_breakdown"]["total_cents"] == 35000
+    assert captured["amount_cents"] == 35000
 
     series = db_session.query(BookingSeries).filter(BookingSeries.public_id == body["booking_series_public_id"]).first()
     assert series is not None

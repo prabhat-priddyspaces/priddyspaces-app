@@ -30,6 +30,7 @@ import {
   SpaceAvailabilityResponse,
 } from "@/lib/public-marketplace";
 import { LeaseBookingWidget } from "@/components/lease-booking-widget";
+import { CheckoutSummaryModal } from "@/components/checkout-summary-modal";
 import { PublicImageWithFallback } from "@/components/public-image-with-fallback";
 import { PublicTopbar } from "@/components/public-topbar";
 import {
@@ -168,6 +169,9 @@ export function PublicSpaceDetailView({
   const [pendingMembershipPlan, setPendingMembershipPlan] = useState<MembershipPlanPublic | null>(null);
   const [paymentMethodOpen, setPaymentMethodOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState<ReservationPayload | null>(null);
+  const [checkoutReservation, setCheckoutReservation] = useState<ReservationPayload | null>(null);
+  const [checkoutMembershipPlan, setCheckoutMembershipPlan] = useState<MembershipPlanPublic | null>(null);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const [authorizationConsent, setAuthorizationConsent] = useState(false);
   const [seatQuantity, setSeatQuantity] = useState("1");
   const [guestCheckoutOpen, setGuestCheckoutOpen] = useState(false);
@@ -706,6 +710,45 @@ export function PublicSpaceDetailView({
     }
   }
 
+  async function continueReservationAfterSummary(payload: ReservationPayload) {
+    const token = getAccessToken() ?? undefined;
+    setCheckoutSubmitting(true);
+    setCheckoutReservation(null);
+    if (!token) {
+      setGuestPayload(payload);
+      setGuestCheckoutOpen(true);
+      setCheckoutSubmitting(false);
+      return;
+    }
+    setRequesting(true);
+    setError("");
+    try {
+      if (pointsCoverTotal) {
+        await submitReservation(payload, null);
+        return;
+      }
+      const resolved = await apiFetch<PaymentMethodResolve>(
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(payload.space_public_id)}`,
+        { method: "GET" },
+        token,
+      );
+      if (!resolved.is_configured) {
+        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
+      }
+      if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
+        setPendingReservation(payload);
+        setPaymentMethodOpen(true);
+        return;
+      }
+      await submitReservation(payload, resolved.payment_method_public_id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Reservation failed");
+    } finally {
+      setRequesting(false);
+      setCheckoutSubmitting(false);
+    }
+  }
+
   async function handleReserve() {
     if (!detail) {
       return;
@@ -741,8 +784,8 @@ export function PublicSpaceDetailView({
 
     const token = getAccessToken() ?? undefined;
     if (!token) {
-      setGuestPayload(payload);
-      setGuestCheckoutOpen(true);
+      setError("");
+      setCheckoutReservation(payload);
       return;
     }
     if (!authorizationConsent && !pointsCoverTotal) {
@@ -750,32 +793,8 @@ export function PublicSpaceDetailView({
       return;
     }
 
-    setRequesting(true);
     setError("");
-    try {
-      if (pointsCoverTotal) {
-        await submitReservation(payload, null);
-        return;
-      }
-      const resolved = await apiFetch<PaymentMethodResolve>(
-        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(detail.space.public_id)}`,
-        { method: "GET" },
-        token,
-      );
-      if (!resolved.is_configured) {
-        throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
-      }
-      if (!resolved.has_payment_method) {
-        setPendingReservation(payload);
-        setPaymentMethodOpen(true);
-        return;
-      }
-      await submitReservation(payload, resolved.payment_method_public_id);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Reservation failed");
-    } finally {
-      setRequesting(false);
-    }
+    setCheckoutReservation(payload);
   }
 
   async function submitMembershipRequest(plan: MembershipPlanPublic, paymentMethodPublicId: string) {
@@ -796,23 +815,10 @@ export function PublicSpaceDetailView({
     router.push("/member/requests");
   }
 
-  async function handleMembershipClick(plan: MembershipPlanPublic) {
+  async function continueMembershipAfterSummary(plan: MembershipPlanPublic) {
     if (!detail) return;
-    if (!getAccessToken()) {
-      router.push(
-        buildLoginHref(
-          buildSelfNextHref({
-            planPublicId: plan.public_id,
-            moveInDate: membershipStartDate,
-          }),
-        ),
-      );
-      return;
-    }
-    if (!membershipStartDate) {
-      setError("Choose a start date before continuing.");
-      return;
-    }
+    setCheckoutSubmitting(true);
+    setCheckoutMembershipPlan(null);
     setRequesting(true);
     setError("");
     try {
@@ -835,7 +841,29 @@ export function PublicSpaceDetailView({
       setError(err instanceof Error ? err.message : "Membership request failed");
     } finally {
       setRequesting(false);
+      setCheckoutSubmitting(false);
     }
+  }
+
+  async function handleMembershipClick(plan: MembershipPlanPublic) {
+    if (!detail) return;
+    if (!getAccessToken()) {
+      router.push(
+        buildLoginHref(
+          buildSelfNextHref({
+            planPublicId: plan.public_id,
+            moveInDate: membershipStartDate,
+          }),
+        ),
+      );
+      return;
+    }
+    if (!membershipStartDate) {
+      setError("Choose a start date before continuing.");
+      return;
+    }
+    setError("");
+    setCheckoutMembershipPlan(plan);
   }
 
   const requestedPriddyPoints = Math.max(0, Number(priddyPoints || 0));
@@ -846,13 +874,13 @@ export function PublicSpaceDetailView({
   const ownerDiscountCents = loyaltyPreview
     ? Math.min(requestedOwnerPoints * loyaltyPreview.owner.point_value_cents, loyaltyPreview.owner.max_redeemable_points * loyaltyPreview.owner.point_value_cents)
     : 0;
-  const loyaltyDiscountCents = Math.min(
-    (breakdown ? Math.round(breakdown.total * 100) : loyaltyPreview?.subtotal_cents || 0),
-    priddyDiscountCents + ownerDiscountCents,
-  );
+  const bookingTotalCentsForRewards =
+    loyaltyPreview?.subtotal_cents ??
+    (breakdown ? Math.round(breakdown.total * 100) + (detail?.space.setup_fee_amount_cents ?? 0) : 0);
+  const loyaltyDiscountCents = Math.min(bookingTotalCentsForRewards, priddyDiscountCents + ownerDiscountCents);
   const pointsCoverTotal =
     loyaltyDiscountCents > 0 &&
-    loyaltyDiscountCents >= (breakdown ? Math.round(breakdown.total * 100) : loyaltyPreview?.subtotal_cents || 0);
+    loyaltyDiscountCents >= bookingTotalCentsForRewards;
 
   const membershipPanel = membershipBookingMode ? (
     <div className="rounded-2xl border border-line p-5">
@@ -893,6 +921,11 @@ export function PublicSpaceDetailView({
               <span>Monthly price</span>
               <span className="font-semibold text-text">{formatCents(selectedMembershipPlan.price_cents)}</span>
             </div>
+            {(detail?.space.setup_fee_amount_cents ?? 0) > 0 ? (
+              <div className="mt-2 text-xs text-text-3">
+                One-time setup fees are shown before checkout.
+              </div>
+            ) : null}
             {selectedMembershipPlan.included_meeting_room_hours_per_month > 0 ? (
               <div className="mt-2 text-xs text-text-3">
                 Includes {selectedMembershipPlan.included_meeting_room_hours_per_month} meeting-room hours per month.
@@ -1168,6 +1201,7 @@ export function PublicSpaceDetailView({
                   organizationName={organizationName}
                   bookingMode={leaseBookingMode}
                   spaceMonthlyPrice={detail.space.price_monthly ?? null}
+                  setupFeeAmountCents={detail.space.setup_fee_amount_cents ?? 0}
                   buildLoginNextHref={({ planPublicId, moveInDate }) =>
                     buildSelfNextHref({ planPublicId, moveInDate })
                   }
@@ -1323,6 +1357,12 @@ export function PublicSpaceDetailView({
                     </div>
                   ) : null}
 
+                  {(detail.space.setup_fee_amount_cents ?? 0) > 0 ? (
+                    <div className="rounded-[18px] border border-line bg-surface-2 px-4 py-3 text-xs leading-5 text-text-2">
+                      One-time setup fees apply and will be shown before checkout.
+                    </div>
+                  ) : null}
+
                   {error ? <div className="text-sm text-danger">{error}</div> : null}
 
                   {!isAuthenticated ? (
@@ -1461,6 +1501,13 @@ export function PublicSpaceDetailView({
                       </div>
                     ) : null}
 
+                    {(detail.space.setup_fee_amount_cents ?? 0) > 0 ? (
+                      <div className="flex items-center justify-between text-text-3">
+                        <span>Setup fees</span>
+                        <span>shown before checkout</span>
+                      </div>
+                    ) : null}
+
                     <div className="border-t border-line" />
                     <div className="flex items-center justify-between font-semibold text-text">
                       <span>Estimated due on approval</span>
@@ -1487,6 +1534,33 @@ export function PublicSpaceDetailView({
           </aside>
         </div>
       </div>
+
+      <CheckoutSummaryModal
+        open={Boolean(checkoutReservation || checkoutMembershipPlan)}
+        payload={
+          checkoutReservation ??
+          (checkoutMembershipPlan
+            ? {
+                membership_plan_public_id: checkoutMembershipPlan.public_id,
+                desired_start_date: membershipStartDate,
+              }
+            : null)
+        }
+        rewardsDiscountCents={checkoutReservation ? loyaltyDiscountCents : 0}
+        submitting={checkoutSubmitting || requesting}
+        confirmLabel={checkoutMembershipPlan ? "Continue to payment" : "Continue"}
+        onClose={() => {
+          setCheckoutReservation(null);
+          setCheckoutMembershipPlan(null);
+        }}
+        onConfirm={() => {
+          if (checkoutReservation) {
+            continueReservationAfterSummary(checkoutReservation).catch(() => null);
+          } else if (checkoutMembershipPlan) {
+            continueMembershipAfterSummary(checkoutMembershipPlan).catch(() => null);
+          }
+        }}
+      />
 
       <PaymentMethodModal
         open={paymentMethodOpen}
