@@ -33,8 +33,20 @@ export function OwnerBookingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Booking Requests</Text>
-      <Text style={styles.subtitle}>Approve booking requests or follow up on failed payment holds.</Text>
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Booking Requests</Text>
+          <Text style={styles.subtitle}>Approve booking requests or follow up on failed payment holds.</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => navigation.navigate("OwnerCreateBooking")}
+          accessibilityRole="button"
+          accessibilityLabel="Create booking"
+        >
+          <Text style={styles.createButtonText}>Create</Text>
+        </TouchableOpacity>
+      </View>
       {loading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <View style={styles.list}>
@@ -71,6 +83,11 @@ export function OwnerBookingsScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 24
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12
   },
   title: {
     fontSize: 20,
@@ -121,5 +138,16 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: 12,
     color: "#6B7280"
+  },
+  createButton: {
+    borderRadius: 10,
+    backgroundColor: "#4F46E5",
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  createButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700"
   }
 });

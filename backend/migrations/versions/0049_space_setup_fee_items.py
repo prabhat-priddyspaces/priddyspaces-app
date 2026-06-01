@@ -1,15 +1,15 @@
 """space setup fee items
 
-Revision ID: 0048_space_setup_fee_items
-Revises: 0047_owner_business_details
+Revision ID: 0049_space_setup_fee_items
+Revises: 0048_owner_created_bookings
 Create Date: 2026-06-01
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0048_space_setup_fee_items"
-down_revision = "0047_owner_business_details"
+revision = "0049_space_setup_fee_items"
+down_revision = "0048_owner_created_bookings"
 branch_labels = None
 depends_on = None
 

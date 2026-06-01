@@ -9,6 +9,7 @@ from app.models.assistant import (
     SupportTicket,
 )
 from app.models.booking import Booking
+from app.models.booking_payment_link import BookingPaymentLink
 from app.models.booking_request import BookingRequest
 from app.models.booking_series import BookingSeries
 from app.models.cancellation_policy_tier import CancellationPolicyTier
@@ -85,6 +86,7 @@ __all__ = [
     "SpaceAlert",
     "SupportTicket",
     "Booking",
+    "BookingPaymentLink",
     "BookingRequest",
     "BookingSeries",
     "CancellationPolicyTier",

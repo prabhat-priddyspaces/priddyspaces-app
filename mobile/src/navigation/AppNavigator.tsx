@@ -17,6 +17,7 @@ import { ProfileScreen } from "../screens/ProfileScreen";
 import { OwnerDashboardScreen } from "../screens/owner/OwnerDashboardScreen";
 import { OwnerLocationsScreen } from "../screens/owner/OwnerLocationsScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
+import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
 import { OwnerSettingsScreen } from "../screens/owner/OwnerSettingsScreen";
 import { OwnerTeamScreen } from "../screens/owner/OwnerTeamScreen";
 import { LocationSpacesScreen } from "../screens/member/LocationSpacesScreen";
@@ -201,6 +202,7 @@ function MainApp() {
       <Stack.Screen name="AccessScanner" component={AccessScannerScreen} options={{ title: "Scanner" }} />
       <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: "Attendance" }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
+      <Stack.Screen name="OwnerCreateBooking" component={OwnerCreateBookingScreen} options={{ title: "Create booking" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
       <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
       <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} />

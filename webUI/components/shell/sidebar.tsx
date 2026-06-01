@@ -7,6 +7,7 @@ import {
   Box,
   Building2,
   Calendar,
+  CalendarPlus,
   ChevronDown,
   CreditCard,
   FileText,
@@ -78,6 +79,7 @@ const ownerSections: SidebarSection[] = [
   {
     label: "Operations",
     items: [
+      { href: "/owner/bookings/new", icon: CalendarPlus, label: "Create booking" },
       { href: "/owner/members", icon: Users, label: "Members" },
       { href: "/owner/access-scanner", icon: ScanLine, label: "Scanner" },
       { href: "/owner/attendance", icon: ClipboardList, label: "Attendance" },

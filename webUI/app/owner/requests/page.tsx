@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Building2,
+  CalendarPlus,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -539,8 +541,16 @@ export default function OwnerRequestsPage() {
       title="Requests"
       breadcrumb={["Owner", "Inbox"]}
     >
-      <div className="text-[13px] text-text-3 mb-3.5">
-        Review booking requests, capture operator notes, and decide what should be approved.
+      <div className="mb-3.5 flex flex-wrap items-start justify-between gap-3">
+        <div className="text-[13px] text-text-3">
+          Review booking requests, capture operator notes, and decide what should be approved.
+        </div>
+        <Link href="/owner/bookings/new">
+          <Button type="button" size="sm" variant="primary">
+            <CalendarPlus size={14} />
+            Create booking
+          </Button>
+        </Link>
       </div>
       <div className="flex items-center gap-1 mb-3.5 border-b border-line">
         {FILTER_OPTIONS.map((option) => {
