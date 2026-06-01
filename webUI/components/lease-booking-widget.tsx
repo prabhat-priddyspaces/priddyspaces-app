@@ -43,6 +43,7 @@ export interface LeaseBookingWidgetProps {
   spaceCapacity: number;
   organizationName?: string | null;
   bookingMode: LeaseBookingMode;
+  approvalMode?: "manual" | "auto" | string;
   spaceMonthlyPrice: MoneyValue | null;
   setupFeeAmountCents?: number;
   buildLoginNextHref: (params: { planPublicId: string | null; moveInDate: string }) => string;
@@ -56,6 +57,7 @@ export function LeaseBookingWidget({
   spaceCapacity,
   organizationName,
   bookingMode,
+  approvalMode = "manual",
   spaceMonthlyPrice,
   setupFeeAmountCents = 0,
   buildLoginNextHref,
@@ -75,6 +77,7 @@ export function LeaseBookingWidget({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const chargeOwnerName = organizationName?.trim() || "this owner";
+  const autoApproval = approvalMode === "auto";
 
   useEffect(() => {
     setLoading(true);
@@ -399,7 +402,9 @@ export function LeaseBookingWidget({
           : leaseUnavailableForSelection
             ? "Currently leased"
             : isAuthenticated
-              ? "Continue to Checkout Summary"
+              ? autoApproval
+                ? "Reserve & Pay"
+                : "Request to Book"
               : "Sign in to continue"}
       </button>
 
@@ -423,7 +428,7 @@ export function LeaseBookingWidget({
               }
             : null
         }
-        confirmLabel="Continue to payment"
+        confirmLabel={autoApproval ? "Continue to payment" : "Request to book"}
         submitting={checkoutSubmitting || submitting}
         onClose={() => setCheckoutOpen(false)}
         onConfirm={() => continueAfterSummary().catch(() => null)}

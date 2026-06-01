@@ -49,6 +49,10 @@ def _serialize_space(
         public_id=space.public_id,
         organization_name=org_name,
         booking_approval_mode=(organization.booking_approval_mode if organization else "manual") or "manual",
+        membership_lease_approval_mode=(
+            organization.membership_lease_approval_mode if organization else "manual"
+        )
+        or "manual",
         payment_failure_hold_minutes=organization.payment_failure_hold_minutes if organization else None,
         name=_space_display_name(space.name, space.space_type.value),
         space_type=space.space_type,

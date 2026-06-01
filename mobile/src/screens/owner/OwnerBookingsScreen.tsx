@@ -12,8 +12,18 @@ type BookingRequest = {
   status: string;
   payment_hold_expires_at?: string | null;
   booking_approval_mode?: string | null;
+  membership_lease_approval_mode?: string | null;
+  request_kind?: string | null;
   failure_reason?: string | null;
 };
+
+function approvalModeLabel(request: BookingRequest) {
+  const mode = request.booking_approval_mode === "auto" ? "auto approve" : "manual approval";
+  if (request.request_kind === "membership_purchase" || request.request_kind === "lease_purchase") {
+    return `Membership & lease ${mode}`;
+  }
+  return `Hourly/day-pass ${mode}`;
+}
 
 export function OwnerBookingsScreen() {
   const { token } = useAuth();
@@ -61,7 +71,7 @@ export function OwnerBookingsScreen() {
             >
               <Text style={styles.cardTitle}>{booking.status}</Text>
               {booking.booking_approval_mode ? (
-                <Text style={styles.cardMuted}>{booking.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval"}</Text>
+                <Text style={styles.cardMuted}>{approvalModeLabel(booking)}</Text>
               ) : null}
               <Text style={styles.cardSubtitle}>{booking.start_datetime}</Text>
               <Text style={styles.cardMuted}>{booking.end_datetime}</Text>

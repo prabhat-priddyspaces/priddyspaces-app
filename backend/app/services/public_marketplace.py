@@ -617,6 +617,10 @@ def _build_location_payload(
     return {
         "location_public_id": location.public_id,
         "booking_approval_mode": (organization.booking_approval_mode if organization else "manual") or "manual",
+        "membership_lease_approval_mode": (
+            organization.membership_lease_approval_mode if organization else "manual"
+        )
+        or "manual",
         "payment_failure_hold_minutes": organization.payment_failure_hold_minutes if organization else None,
         "name": location.name,
         "address": location.address,
@@ -1178,6 +1182,7 @@ def get_public_space_detail(
             "location_public_id": location.public_id,
             "organization_name": organization.name,
             "booking_approval_mode": organization.booking_approval_mode or "manual",
+            "membership_lease_approval_mode": organization.membership_lease_approval_mode or "manual",
             "payment_failure_hold_minutes": organization.payment_failure_hold_minutes,
             "name": location.name,
             "address": location.address,

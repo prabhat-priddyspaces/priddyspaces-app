@@ -736,15 +736,21 @@ def test_owner_can_update_organization_booking_settings(db_session, client_facto
     current = owner_client.get(f"/api/orgs/{org.public_id}/booking-settings")
     assert current.status_code == 200
     assert current.json()["booking_approval_mode"] == "manual"
+    assert current.json()["membership_lease_approval_mode"] == "manual"
     assert current.json()["payment_failure_hold_minutes"] == 30
 
     updated = owner_client.patch(
         f"/api/orgs/{org.public_id}/booking-settings",
-        json={"booking_approval_mode": "auto", "payment_failure_hold_minutes": 15},
+        json={
+            "booking_approval_mode": "auto",
+            "membership_lease_approval_mode": "auto",
+            "payment_failure_hold_minutes": 15,
+        },
     )
 
     assert updated.status_code == 200
     assert updated.json()["booking_approval_mode"] == "auto"
+    assert updated.json()["membership_lease_approval_mode"] == "auto"
     assert updated.json()["payment_failure_hold_minutes"] == 15
 
 

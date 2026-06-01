@@ -182,10 +182,13 @@ def update_org_booking_settings(
 
     before = {
         "booking_approval_mode": org.booking_approval_mode,
+        "membership_lease_approval_mode": org.membership_lease_approval_mode,
         "payment_failure_hold_minutes": org.payment_failure_hold_minutes,
     }
     if payload.booking_approval_mode is not None:
         org.booking_approval_mode = payload.booking_approval_mode
+    if payload.membership_lease_approval_mode is not None:
+        org.membership_lease_approval_mode = payload.membership_lease_approval_mode
     if payload.payment_failure_hold_minutes is not None:
         org.payment_failure_hold_minutes = payload.payment_failure_hold_minutes
     db.add(org)
@@ -202,6 +205,7 @@ def update_org_booking_settings(
         before_state=before,
         after_state={
             "booking_approval_mode": org.booking_approval_mode,
+            "membership_lease_approval_mode": org.membership_lease_approval_mode,
             "payment_failure_hold_minutes": org.payment_failure_hold_minutes,
         },
         acting_as_user_id=acting_as_user_id,

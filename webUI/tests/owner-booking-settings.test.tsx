@@ -37,6 +37,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
             review_status: "approved",
             review_notes: null,
             booking_approval_mode: "manual",
+            membership_lease_approval_mode: "manual",
             payment_failure_hold_minutes: 30,
           },
         ]);
@@ -47,6 +48,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
           public_id: "org_1",
           name: "North Loop",
           booking_approval_mode: "manual",
+          membership_lease_approval_mode: "manual",
           payment_failure_hold_minutes: 30,
         });
       }
@@ -55,6 +57,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
           public_id: "org_1",
           name: "North Loop",
           booking_approval_mode: "auto",
+          membership_lease_approval_mode: "auto",
           payment_failure_hold_minutes: 15,
         });
       }
@@ -72,7 +75,8 @@ describe("OwnerSettingsPage booking approval settings", () => {
 
     expect(await screen.findByRole("link", { name: "Open loyalty settings" })).toHaveAttribute("href", "/owner/loyalty");
     expect(await screen.findByText("Booking approval")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Approval mode"), { target: { value: "auto" } });
+    fireEvent.change(screen.getByLabelText("Hourly/day-pass approval"), { target: { value: "auto" } });
+    fireEvent.change(screen.getByLabelText("Membership & lease approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Payment failure recovery"), { target: { value: "15" } });
     fireEvent.click(screen.getByRole("button", { name: "Save booking approval" }));
 
@@ -83,6 +87,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
           method: "PATCH",
           body: JSON.stringify({
             booking_approval_mode: "auto",
+            membership_lease_approval_mode: "auto",
             payment_failure_hold_minutes: 15,
           }),
         },

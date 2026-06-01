@@ -20,6 +20,7 @@ type Space = {
   public_id: string;
   organization_name?: string | null;
   booking_approval_mode?: string | null;
+  membership_lease_approval_mode?: string | null;
   payment_failure_hold_minutes?: number | null;
   space_type: string;
   capacity: number;
@@ -173,6 +174,7 @@ export function SpaceDetailScreen() {
   const hero = images.find((img) => img.is_primary) || images[0];
   const dateOptions = nextDateOptions();
   const actionLabel = space?.booking_approval_mode === "auto" ? "Reserve & Pay" : "Request to book";
+  const membershipActionLabel = space?.membership_lease_approval_mode === "auto" ? "Reserve & Pay" : "Request membership";
   const isConferenceRoom = space?.space_type === "conference_room";
   const isSharedDesk = space?.space_type === "shared_desk";
   const isMembershipOnly = ["private_office", "suite", "virtual_office"].includes(space?.space_type || "");
@@ -634,7 +636,7 @@ export function SpaceDetailScreen() {
                     disabled={subscribing}
                   >
                     <Text style={styles.secondaryButtonText}>
-                      {subscribing ? "Sending membership request..." : "Request membership"}
+                      {subscribing ? "Sending membership request..." : membershipActionLabel}
                     </Text>
                   </TouchableOpacity>
                 </View>

@@ -49,10 +49,18 @@ describe("booking approval and recovery mobile flows", () => {
   it("saves owner booking approval settings", async () => {
     (apiFetch as jest.Mock).mockImplementation((path: string, init?: RequestInit) => {
       if (path === "/api/orgs/org_1/booking-settings" && init?.method === "GET") {
-        return Promise.resolve({ booking_approval_mode: "manual", payment_failure_hold_minutes: 30 });
+        return Promise.resolve({
+          booking_approval_mode: "manual",
+          membership_lease_approval_mode: "manual",
+          payment_failure_hold_minutes: 30,
+        });
       }
       if (path === "/api/orgs/org_1/booking-settings" && init?.method === "PATCH") {
-        return Promise.resolve({ booking_approval_mode: "auto", payment_failure_hold_minutes: 15 });
+        return Promise.resolve({
+          booking_approval_mode: "auto",
+          membership_lease_approval_mode: "auto",
+          payment_failure_hold_minutes: 15,
+        });
       }
       if (path.startsWith("/api/promo-codes")) return Promise.resolve([]);
       if (path.startsWith("/api/tax-config")) return Promise.resolve(null);
@@ -65,8 +73,10 @@ describe("booking approval and recovery mobile flows", () => {
     const screen = render(<OwnerSettingsScreen />);
     fireEvent.changeText(screen.getByPlaceholderText("Organization public id"), "org_1");
 
-    expect(await screen.findByText(/Current: Manual approval/)).toBeTruthy();
-    fireEvent.press(screen.getByText("Auto approve"));
+    expect(await screen.findByText(/Current: hourly\/day-pass manual approval/)).toBeTruthy();
+    const autoApproveButtons = screen.getAllByText("Auto approve");
+    fireEvent.press(autoApproveButtons[0]);
+    fireEvent.press(autoApproveButtons[1]);
     fireEvent.press(screen.getByText("15 min"));
     fireEvent.press(screen.getByText("Save booking approval"));
 
@@ -75,7 +85,11 @@ describe("booking approval and recovery mobile flows", () => {
         "/api/orgs/org_1/booking-settings",
         {
           method: "PATCH",
-          body: JSON.stringify({ booking_approval_mode: "auto", payment_failure_hold_minutes: 15 }),
+          body: JSON.stringify({
+            booking_approval_mode: "auto",
+            membership_lease_approval_mode: "auto",
+            payment_failure_hold_minutes: 15,
+          }),
         },
         "token",
       );

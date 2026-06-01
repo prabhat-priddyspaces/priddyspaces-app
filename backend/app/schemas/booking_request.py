@@ -230,6 +230,7 @@ class BookingRequestOut(BaseModel):
     payment_hold_expires_at: datetime | None = None
     payment_failed_at: datetime | None = None
     booking_approval_mode: str = "manual"
+    membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
     payment_authorization_consent_at: datetime | None = None
     operator_notes: str | None = None
