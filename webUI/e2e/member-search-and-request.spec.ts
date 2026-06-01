@@ -357,7 +357,7 @@ test("member can submit an all-day conference booking without granularity blocki
     if (key === "POST /api/loyalty/redemptions/preview") {
       await json(route, {
         eligible: false,
-        reason: "Rewards are not available for this booking",
+        reason: "Priddy Points are not available for this space type",
         organization_public_id: "org_all_day_1",
         wallet_public_id: null,
         promo_balance: 0,
@@ -371,8 +371,8 @@ test("member can submit an all-day conference booking without granularity blocki
         discount_cents: 0,
         priddy: {
           eligible: false,
-          reason: "Rewards are not available for this booking",
-          balance: 0,
+          reason: "Priddy Points are not available for this space type",
+          balance: 1000,
           point_value_cents: 1,
           max_redeemable_points: 0,
           requested_points: 0,
@@ -436,6 +436,7 @@ test("member can submit an all-day conference booking without granularity blocki
   await page.goto("/spaces/space_all_day_1");
 
   await expect(page.getByRole("heading", { name: "Austin Conference Room" })).toBeVisible();
+  await expect(page.getByText("Priddy Points are not available for this space type")).toBeVisible();
   await page.getByLabel("All day").check();
   await page.getByLabel("I authorize Aligned Cowork to charge my card now for this booking.").check();
   await page.getByRole("button", { name: "Reserve & Pay" }).click();

@@ -29,20 +29,6 @@ interface Space {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   visibility: string;
-  priddy_points_enabled: boolean | null;
-  owner_points_enabled: boolean | null;
-}
-
-function pointsFormValue(value: boolean | null) {
-  if (value === true) return "enabled";
-  if (value === false) return "disabled";
-  return "inherit";
-}
-
-function pointsPayload(value: string) {
-  if (value === "enabled") return true;
-  if (value === "disabled") return false;
-  return null;
 }
 
 function typeConfig(spaceType: string) {
@@ -119,8 +105,6 @@ export function EditSpaceClient() {
     buffer_before_minutes: "0",
     buffer_after_minutes: "0",
     visibility: "public",
-    priddy_points_enabled: "inherit",
-    owner_points_enabled: "inherit"
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -145,8 +129,6 @@ export function EditSpaceClient() {
           buffer_before_minutes: String(space.buffer_before_minutes ?? 0),
           buffer_after_minutes: String(space.buffer_after_minutes ?? 0),
           visibility: space.visibility || "public",
-          priddy_points_enabled: pointsFormValue(space.priddy_points_enabled),
-          owner_points_enabled: pointsFormValue(space.owner_points_enabled)
         });
       })
       .catch((err: any) => setMessage(err?.message || "Failed to load space"))
@@ -178,8 +160,6 @@ export function EditSpaceClient() {
             buffer_before_minutes: config.showBuffers ? Number(form.buffer_before_minutes || 0) : 0,
             buffer_after_minutes: config.showBuffers ? Number(form.buffer_after_minutes || 0) : 0,
             visibility: form.visibility,
-            priddy_points_enabled: pointsPayload(form.priddy_points_enabled),
-            owner_points_enabled: pointsPayload(form.owner_points_enabled)
           })
         },
         token
@@ -373,20 +353,6 @@ export function EditSpaceClient() {
               </div>
             </div>
             ) : null}
-            <div className="grid gap-3 md:grid-cols-2">
-              <PointsSelect
-                id="priddy-points"
-                label="Priddy Points"
-                value={form.priddy_points_enabled}
-                onChange={(value) => setForm({ ...form, priddy_points_enabled: value })}
-              />
-              <PointsSelect
-                id="owner-points"
-                label="Owner points"
-                value={form.owner_points_enabled}
-                onChange={(value) => setForm({ ...form, owner_points_enabled: value })}
-              />
-            </div>
             <div className="flex gap-3">
               <Button type="button" onClick={handleSave}>
                 Save Changes
@@ -412,33 +378,5 @@ export function EditSpaceClient() {
         ) : null}
       </div>
     </AppShell>
-  );
-}
-
-function PointsSelect({
-  id,
-  label,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-      >
-        <option value="inherit">Use organization setting</option>
-        <option value="enabled">Allow on this space</option>
-        <option value="disabled">Exclude this space</option>
-      </select>
-    </div>
   );
 }

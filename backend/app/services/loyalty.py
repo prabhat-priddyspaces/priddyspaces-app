@@ -642,10 +642,6 @@ def _owner_points_allowed(
         return False, "Owner points are not enabled for this owner"
     if for_redemption and not settings.owner_points_redemption_enabled:
         return False, "Owner points cannot be redeemed for this owner"
-    if space.owner_points_enabled is False:
-        return False, "Owner points are not available for this space"
-    if space.owner_points_enabled is True:
-        return True, None
     if _space_type_value(space) not in _list_or_default(settings.allowed_space_types, DEFAULT_OWNER_REDEEMABLE_SPACE_TYPES):
         return False, "Owner points are not available for this space type"
     if booking_mode not in _list_or_default(settings.allowed_booking_modes, DEFAULT_OWNER_REDEEMABLE_BOOKING_MODES):
@@ -665,8 +661,6 @@ def _priddy_points_allowed(
         return False, "Priddy Points are not enabled", point_value
     if settings is None or not settings.accepts_priddy_points:
         return False, "This owner does not accept Priddy Points", point_value
-    if space.priddy_points_enabled is False:
-        return False, "Priddy Points are not available for this space", point_value
     if _space_type_value(space) not in _list_or_default(platform.priddy_allowed_space_types, DEFAULT_PRIDDY_REDEEMABLE_SPACE_TYPES):
         return False, "Priddy Points are not available for this space type", point_value
     if booking_mode not in _list_or_default(platform.priddy_allowed_booking_modes, DEFAULT_PRIDDY_REDEEMABLE_BOOKING_MODES):

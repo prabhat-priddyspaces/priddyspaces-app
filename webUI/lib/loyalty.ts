@@ -31,6 +31,9 @@ export interface LoyaltySettings {
   is_enabled: boolean;
   accepts_priddy_points: boolean;
   owner_points_redemption_enabled: boolean;
+  platform_priddy_points_enabled: boolean;
+  platform_priddy_allowed_space_types: string[];
+  platform_priddy_allowed_booking_modes: string[];
   point_value_cents: number;
   earn_rate_bps: number;
   earn_points_per_dollar: number;

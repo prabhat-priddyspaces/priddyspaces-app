@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 
 import MemberRewardsPage from "../app/member/rewards/page";
@@ -50,6 +50,9 @@ vi.mock("../lib/api", () => ({
         is_enabled: true,
         accepts_priddy_points: true,
         owner_points_redemption_enabled: true,
+        platform_priddy_points_enabled: true,
+        platform_priddy_allowed_space_types: ["shared_desk"],
+        platform_priddy_allowed_booking_modes: ["day_pass"],
         point_value_cents: 1,
         earn_rate_bps: 100,
         earn_points_per_dollar: 1,
@@ -167,6 +170,25 @@ describe("loyalty UI", () => {
     expect(screen.getByText("Reward settings")).toBeInTheDocument();
     expect(screen.getByText("Campaign builder")).toBeInTheDocument();
     expect(screen.getByText("First booking")).toBeInTheDocument();
+  });
+
+  it("labels workspace rewards and filters Priddy eligibility by platform settings", async () => {
+    render(<OwnerLoyaltyPage />);
+
+    expect(await screen.findByText("Enable workspace rewards")).toBeInTheDocument();
+    expect(screen.getByText("Members can redeem points earned with this organization on eligible bookings.")).toBeInTheDocument();
+    expect(screen.getByText("Members can redeem platform points on eligible bookings allowed by Priddyspaces.")).toBeInTheDocument();
+
+    const priddySpaceGroup = screen.getByText("Priddy Points space types").parentElement as HTMLElement;
+    expect(within(priddySpaceGroup).getByText("Shared desk")).toBeInTheDocument();
+    expect(within(priddySpaceGroup).queryByText("Conference room")).not.toBeInTheDocument();
+
+    const priddyBookingGroup = screen.getByText("Priddy Points booking types").parentElement as HTMLElement;
+    expect(within(priddyBookingGroup).getByText("Day pass")).toBeInTheDocument();
+    expect(within(priddyBookingGroup).queryByText("Hourly")).not.toBeInTheDocument();
+
+    const workspaceSpaceGroup = screen.getByText("Workspace rewards space types").parentElement as HTMLElement;
+    expect(within(workspaceSpaceGroup).getByText("Conference room")).toBeInTheDocument();
   });
 
   it("renders member rewards wallet and history", async () => {

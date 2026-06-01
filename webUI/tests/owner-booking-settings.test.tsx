@@ -70,6 +70,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
   it("loads and saves organization booking approval settings", async () => {
     render(<OwnerSettingsPage />);
 
+    expect(await screen.findByRole("link", { name: "Open loyalty settings" })).toHaveAttribute("href", "/owner/loyalty");
     expect(await screen.findByText("Booking approval")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Approval mode"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Payment failure recovery"), { target: { value: "15" } });

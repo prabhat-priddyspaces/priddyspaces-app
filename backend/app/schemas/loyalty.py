@@ -10,6 +10,9 @@ class LoyaltyOwnerSettingsOut(BaseModel):
     is_enabled: bool
     accepts_priddy_points: bool
     owner_points_redemption_enabled: bool
+    platform_priddy_points_enabled: bool
+    platform_priddy_allowed_space_types: list[str]
+    platform_priddy_allowed_booking_modes: list[str]
     point_value_cents: int
     earn_rate_bps: int
     earn_points_per_dollar: float

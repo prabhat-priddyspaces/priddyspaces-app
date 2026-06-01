@@ -30,6 +30,8 @@ from app.schemas.loyalty import (
 from app.services.auth_user import get_or_create_user
 from app.services.authz import get_org_member, list_org_members, require_owner_or_admin
 from app.services.loyalty import (
+    DEFAULT_PRIDDY_REDEEMABLE_BOOKING_MODES,
+    DEFAULT_PRIDDY_REDEEMABLE_SPACE_TYPES,
     earn_points_per_dollar,
     earn_points_per_100_dollars,
     earn_rate_bps_for_points_per_100,
@@ -80,13 +82,16 @@ def _require_mutation_access(db: Session, org: Organization, user: User) -> None
     require_owner_or_admin(member)
 
 
-def _settings_out(org: Organization, setting) -> LoyaltyOwnerSettingsOut:
+def _settings_out(org: Organization, setting, platform) -> LoyaltyOwnerSettingsOut:
     return LoyaltyOwnerSettingsOut(
         public_id=setting.public_id,
         organization_public_id=org.public_id,
         is_enabled=setting.is_enabled,
         accepts_priddy_points=setting.accepts_priddy_points,
         owner_points_redemption_enabled=setting.owner_points_redemption_enabled,
+        platform_priddy_points_enabled=platform.priddy_points_enabled,
+        platform_priddy_allowed_space_types=platform.priddy_allowed_space_types or DEFAULT_PRIDDY_REDEEMABLE_SPACE_TYPES,
+        platform_priddy_allowed_booking_modes=platform.priddy_allowed_booking_modes or DEFAULT_PRIDDY_REDEEMABLE_BOOKING_MODES,
         point_value_cents=setting.point_value_cents,
         earn_rate_bps=setting.earn_rate_bps,
         earn_points_per_dollar=earn_points_per_dollar(setting),
@@ -338,9 +343,11 @@ def get_owner_settings(
     user = get_or_create_user(db, token)
     org = _resolve_owner_org(db, user.id, organization_public_id)
     setting = get_settings(db, org.id, actor_id=user.id)
+    platform = get_or_create_platform_settings(db)
     db.commit()
     db.refresh(setting)
-    return _settings_out(org, setting)
+    db.refresh(platform)
+    return _settings_out(org, setting, platform)
 
 
 @router.put("/settings", response_model=LoyaltyOwnerSettingsOut)
@@ -366,10 +373,12 @@ def update_owner_settings(
         )
     setting.updated_by_user_id = user.id
     validate_settings(setting)
+    platform = get_or_create_platform_settings(db)
     db.add(setting)
     db.commit()
     db.refresh(setting)
-    return _settings_out(org, setting)
+    db.refresh(platform)
+    return _settings_out(org, setting, platform)
 
 
 @router.get("/owner/summary", response_model=LoyaltyOwnerSummaryOut)
