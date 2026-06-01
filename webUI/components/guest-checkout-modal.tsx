@@ -129,6 +129,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn, onBookingSubmit
                 </div>
               ) : (
                 <button
+                  aria-label="Continue as guest"
                   onClick={() => setStep("form")}
                   className="flex items-start gap-4 rounded-[16px] border-2 border-brand bg-brand-soft px-5 py-4 text-left transition hover:bg-brand-soft"
                 >
@@ -145,6 +146,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn, onBookingSubmit
               )}
 
               <button
+                aria-label="Sign in or create account"
                 onClick={onSignIn}
                 className="flex items-start gap-4 rounded-[16px] border border-line bg-surface px-5 py-4 text-left transition hover:border-line-strong hover:bg-surface-2"
               >

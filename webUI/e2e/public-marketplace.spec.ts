@@ -701,6 +701,19 @@ test("day-pass detail refreshes remaining seats after a guest request", async ({
       return;
     }
 
+    if (key === "POST /api/booking-requests/preview") {
+      await json(route, {
+        currency: "USD",
+        base_amount_cents: 4900,
+        setup_fee_amount_cents: 0,
+        discount_amount_cents: 0,
+        tax_amount_cents: 0,
+        total_amount_cents: 4900,
+        line_items: [{ label: "Day Pass x 1", amount_cents: 4900 }],
+      });
+      return;
+    }
+
     if (key === "POST /api/guest/booking-requests") {
       await json(route, {
         public_id: "guest_req_1",
@@ -725,6 +738,10 @@ test("day-pass detail refreshes remaining seats after a guest request", async ({
   await expect(page.getByRole("button", { name: "Sign in to Request to book" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Sign in to Request to book" }).click();
+  const checkoutDialog = page.getByRole("dialog");
+  await expect(checkoutDialog.getByRole("heading", { name: "Checkout summary" })).toBeVisible();
+  await expect(checkoutDialog.getByText("Day Pass x 1")).toBeVisible();
+  await checkoutDialog.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue as guest" }).click();
   await page.getByPlaceholder("Jane Smith").fill("Test User");
   await page.getByPlaceholder("jane@example.com").fill("customer@test.com");
