@@ -377,33 +377,17 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               </div>
             </SearchField>
 
-            {routeKey !== "private-offices" ? (
-              <SearchField
-                icon={<CalendarIcon size={13} className="text-text-3" />}
-                label="When"
-              >
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
-                  className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
-                />
-              </SearchField>
-            ) : (
-              <SearchField
-                icon={<Users size={13} className="text-text-3" />}
-                label="Capacity"
-              >
-                <input
-                  type="number"
-                  min="1"
-                  value={form.capacity}
-                  onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))}
-                  placeholder="Min capacity"
-                  className="bg-transparent text-[13px] font-medium text-text outline-none w-full placeholder:text-text-4"
-                />
-              </SearchField>
-            )}
+            <SearchField
+              icon={<CalendarIcon size={13} className="text-text-3" />}
+              label="When"
+            >
+              <input
+                type="date"
+                value={form.date}
+                onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+                className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
+              />
+            </SearchField>
 
             {routeKey === "meeting-rooms" ? (
               <>

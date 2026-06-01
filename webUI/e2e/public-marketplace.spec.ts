@@ -519,6 +519,7 @@ test("public marketplace shows no meeting rooms when the selected slot is unavai
 });
 
 test("public marketplace search excludes leased private offices", async ({ page }) => {
+  const marketplaceRequests: URL[] = [];
   const privateOfficeResults = {
     meta: { total_locations: 1, page: 1, page_size: 20 },
     results: [
@@ -567,6 +568,7 @@ test("public marketplace search excludes leased private offices", async ({ page 
     const key = `${route.request().method()} ${url.pathname}`;
 
     if (key === "GET /api/marketplace/locations") {
+      marketplaceRequests.push(url);
       await json(
         route,
         url.searchParams.get("category") === "private_office"
@@ -584,6 +586,29 @@ test("public marketplace search excludes leased private offices", async ({ page 
   await expect(page.getByRole("heading", { name: "Available Private Office" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Leased Private Office" })).not.toBeVisible();
   await expect(page.getByText("Showing 1 listing")).toBeVisible();
+  await expect(page.locator('input[type="date"]')).toHaveCount(1);
+  await expect(page.locator('input[placeholder="Min capacity"]')).toHaveCount(1);
+
+  await page.locator('input[type="date"]').fill("2026-06-15");
+  await page.locator('input[placeholder="Min capacity"]').fill("4");
+  await page.locator('input[placeholder="Any"]').fill("2000");
+  await page.getByRole("button", { name: "Search" }).click();
+
+  await expect(page).toHaveURL(/\/private-offices\?/);
+  await expect(page).toHaveURL(/date=2026-06-15/);
+  await expect(page).toHaveURL(/capacity=4/);
+  await expect(page).toHaveURL(/max_price_monthly=2000/);
+  await expect
+    .poll(() =>
+      marketplaceRequests.some(
+        (url) =>
+          url.searchParams.get("category") === "private_office" &&
+          url.searchParams.get("date") === "2026-06-15" &&
+          url.searchParams.get("capacity") === "4" &&
+          url.searchParams.get("max_price") === "2000",
+      ),
+    )
+    .toBe(true);
 });
 
 test("day-pass detail refreshes remaining seats after a guest request", async ({ page }) => {
