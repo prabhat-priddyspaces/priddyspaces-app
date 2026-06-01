@@ -28,6 +28,7 @@ class OrganizationOut(BaseModel):
     booking_approval_mode: Literal["manual", "auto"] = "manual"
     membership_lease_approval_mode: Literal["manual", "auto"] = "manual"
     payment_failure_hold_minutes: int = 30
+    waitlist_enabled: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -43,6 +44,7 @@ class OrganizationBookingSettingsOut(BaseModel):
     booking_approval_mode: Literal["manual", "auto"] = "manual"
     membership_lease_approval_mode: Literal["manual", "auto"] = "manual"
     payment_failure_hold_minutes: int = 30
+    waitlist_enabled: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,3 +53,4 @@ class OrganizationBookingSettingsUpdate(BaseModel):
     booking_approval_mode: Literal["manual", "auto"] | None = None
     membership_lease_approval_mode: Literal["manual", "auto"] | None = None
     payment_failure_hold_minutes: int | None = Field(default=None, ge=0)
+    waitlist_enabled: bool | None = None

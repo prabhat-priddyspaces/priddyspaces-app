@@ -197,6 +197,10 @@ test("member can submit a booking request from a space detail page", async ({ pa
       await json(route, [bookingRequest]);
       return;
     }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
+      return;
+    }
 
     if (key === "GET /api/booking-requests/req_1") {
       await json(route, bookingRequest);
@@ -488,6 +492,10 @@ test("member can submit an all-day conference booking without granularity blocki
       await json(route, [bookingRequest]);
       return;
     }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
+      return;
+    }
 
     await json(route, { detail: `Unhandled route: ${key}` }, 404);
   });
@@ -735,6 +743,10 @@ test("member can redeem Priddy Points for a full day pass without a card", async
 
     if (key === "GET /api/booking-requests") {
       await json(route, [bookingRequest]);
+      return;
+    }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
       return;
     }
 

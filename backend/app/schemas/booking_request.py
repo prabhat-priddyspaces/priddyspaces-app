@@ -67,6 +67,7 @@ class BookingRequestCreate(BaseModel):
     member_owner_payment_method_public_id: str | None = None
     payment_authorization_consent: bool = False
     redemption_lock_public_id: str | None = None
+    source_waitlist_public_id: str | None = None
 
     # Explicit pricing-mode signals from the booking widget. Optional for backwards
     # compat with older clients; modern widgets always send one of these.
@@ -90,6 +91,8 @@ class BookingRequestCreate(BaseModel):
                 "Provide booking fields (space_public_id + start/end_datetime) OR "
                 "membership fields (membership_plan_public_id + desired_start_date)"
             )
+        if self.source_waitlist_public_id and self.recurrence is not None:
+            raise ValueError("Waitlist invites can only be used for a single booking request")
         return self
 
 

@@ -105,6 +105,29 @@ interface BookingRequest {
   email_delivery_summary: EmailDeliverySummary[];
 }
 
+interface BookingWaitlistEntry {
+  public_id: string;
+  created_at: string | null;
+  status: string;
+  space_public_id: string | null;
+  space_name: string | null;
+  space_type: string | null;
+  location_name: string | null;
+  location_city: string | null;
+  member_name: string | null;
+  member_email: string | null;
+  membership_plan_name: string | null;
+  request_kind: string;
+  booking_mode: string | null;
+  seats_requested: number;
+  start_datetime: string | null;
+  end_datetime: string | null;
+  desired_start_date: string | null;
+  invited_at: string | null;
+  invite_expires_at: string | null;
+  operator_notes: string | null;
+}
+
 interface EmailDeliverySummary {
   notification_type: string;
   label: string;
@@ -147,6 +170,12 @@ function statusToBadge(status: string): {
       return { variant: "warning", label: "Pending" };
     case "payment_failed":
       return { variant: "danger", label: "Payment failed" };
+    case "invited":
+      return { variant: "info", label: "Invited" };
+    case "booked":
+      return { variant: "success", label: "Booked" };
+    case "expired":
+      return { variant: "danger", label: "Expired" };
     case "rejected":
     case "cancelled":
       return { variant: "danger", label: status === "cancelled" ? "Cancelled" : "Rejected" };
@@ -376,6 +405,7 @@ export default function OwnerRequestsPage() {
   const searchParams = useSearchParams();
   const { getApiToken, isAuthReady } = useApiToken();
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
+  const [waitlist, setWaitlist] = useState<BookingWaitlistEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -410,14 +440,17 @@ export default function OwnerRequestsPage() {
         return;
       }
       setError(null);
-      const list = await apiFetch<BookingRequest[]>(
-        "/api/booking-requests",
-        { method: "GET" },
-        token
-      );
+      const [list, waitlistList] = await Promise.all([
+        apiFetch<BookingRequest[]>("/api/booking-requests", { method: "GET" }, token),
+        apiFetch<BookingWaitlistEntry[]>("/api/booking-waitlist", { method: "GET" }, token),
+      ]);
       setBookings(list);
+      setWaitlist(waitlistList);
       setNotes(
-        Object.fromEntries(list.map((request) => [request.public_id, request.operator_notes || ""]))
+        Object.fromEntries([
+          ...list.map((request) => [request.public_id, request.operator_notes || ""] as const),
+          ...waitlistList.map((entry) => [entry.public_id, entry.operator_notes || ""] as const),
+        ])
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load requests");
@@ -528,6 +561,31 @@ export default function OwnerRequestsPage() {
     }
   }
 
+  async function inviteWaitlist(publicId: string) {
+    const token = (await getApiToken()) ?? undefined;
+    if (!token) {
+      setError("Sign in to manage waitlist entries.");
+      return;
+    }
+    setUpdating(publicId);
+    try {
+      setError(null);
+      await apiFetch(
+        `/api/booking-waitlist/${publicId}/invite`,
+        {
+          method: "POST",
+          body: JSON.stringify({ operator_notes: notes[publicId] || null }),
+        },
+        token,
+      );
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to invite waitlisted member");
+    } finally {
+      setUpdating(null);
+    }
+  }
+
   async function confirmPendingDecision() {
     if (!pendingDecision) return;
     const decision = pendingDecision;
@@ -603,6 +661,85 @@ export default function OwnerRequestsPage() {
 
       {error ? (
         <div className="mb-3.5 text-[13px] text-danger">{error}</div>
+      ) : null}
+
+      {waitlist.length > 0 ? (
+        <Card padded={false} className="mb-4 overflow-hidden">
+          <div className="grid gap-3 border-b border-line bg-surface-2 px-4 py-3 text-[13px] font-semibold text-text">
+            Waitlist
+          </div>
+          {waitlist.map((entry, index) => {
+            const status = statusToBadge(entry.status === "waitlisted" ? "requested" : entry.status);
+            const member = entry.member_name || entry.member_email || "Member";
+            const space = entry.membership_plan_name || entry.space_name || titleize(entry.space_type) || "Space";
+            const when = entry.desired_start_date
+              ? `Desired start ${entry.desired_start_date}`
+              : `${formatDeadline(entry.start_datetime) || "Requested time"}${entry.end_datetime ? ` – ${formatDeadline(entry.end_datetime) || ""}` : ""}`;
+            return (
+              <div
+                key={entry.public_id}
+                className={cn(
+                  "grid gap-3 px-4 py-4 lg:grid-cols-[1.2fr_1.5fr_1fr_110px_145px] lg:items-start",
+                  index > 0 && "border-t border-line",
+                )}
+              >
+                <div className="text-[13px]">
+                  <div className="font-semibold text-text">{member}</div>
+                  <div className="text-[11px] text-text-3">{entry.member_email || "No email"}</div>
+                </div>
+                <div className="text-[13px]">
+                  <div className="font-semibold text-text">{space}</div>
+                  <div className="text-[11px] text-text-3">
+                    {[entry.location_name, entry.location_city, titleize(entry.space_type)].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <div className="text-[12px] text-text-2">
+                  <div className="font-semibold text-text">{when}</div>
+                  {entry.invite_expires_at ? (
+                    <div className="text-[11px] text-text-3">Expires {formatDeadline(entry.invite_expires_at)}</div>
+                  ) : null}
+                </div>
+                <div>
+                  <Badge variant={status.variant} dot>{entry.status === "waitlisted" ? "Waitlisted" : status.label}</Badge>
+                </div>
+                <div className="flex justify-start gap-1.5 lg:justify-end">
+                  {entry.status === "waitlisted" || entry.status === "invited" ? (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => inviteWaitlist(entry.public_id)}
+                      disabled={updating === entry.public_id}
+                    >
+                      Invite to book
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" disabled>
+                      Closed
+                    </Button>
+                  )}
+                </div>
+                <div className="lg:col-span-5">
+                  <label className="text-[11px] text-text-3" htmlFor={`waitlist-note-${entry.public_id}`}>
+                    Operator notes
+                  </label>
+                  <textarea
+                    id={`waitlist-note-${entry.public_id}`}
+                    value={notes[entry.public_id] || ""}
+                    onChange={(e) =>
+                      setNotes((current) => ({
+                        ...current,
+                        [entry.public_id]: e.target.value,
+                      }))
+                    }
+                    rows={1}
+                    className="mt-1 w-full min-h-10 rounded-xl border border-line-strong bg-surface px-3 py-2 text-[13px] text-text outline-none transition focus:border-brand focus-visible:shadow-ring"
+                    placeholder="Add invite context"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </Card>
       ) : null}
 
       {loading ? (

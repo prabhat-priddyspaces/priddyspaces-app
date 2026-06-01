@@ -39,6 +39,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
             booking_approval_mode: "manual",
             membership_lease_approval_mode: "manual",
             payment_failure_hold_minutes: 30,
+            waitlist_enabled: false,
           },
         ]);
       }
@@ -50,6 +51,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
           booking_approval_mode: "manual",
           membership_lease_approval_mode: "manual",
           payment_failure_hold_minutes: 30,
+          waitlist_enabled: false,
         });
       }
       if (url === "/api/orgs/org_1/booking-settings" && init?.method === "PATCH") {
@@ -59,6 +61,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
           booking_approval_mode: "auto",
           membership_lease_approval_mode: "auto",
           payment_failure_hold_minutes: 15,
+          waitlist_enabled: true,
         });
       }
       if (url.startsWith("/api/promo-codes")) return Promise.resolve([]);
@@ -79,6 +82,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
     fireEvent.change(screen.getByLabelText("Hourly/day-pass approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Membership & lease approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Payment failure recovery"), { target: { value: "15" } });
+    fireEvent.click(screen.getByLabelText("Enable waitlist"));
     fireEvent.click(screen.getByRole("button", { name: "Save booking approval" }));
 
     await waitFor(() => {
@@ -90,6 +94,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
             booking_approval_mode: "auto",
             membership_lease_approval_mode: "auto",
             payment_failure_hold_minutes: 15,
+            waitlist_enabled: true,
           }),
         },
         "token",

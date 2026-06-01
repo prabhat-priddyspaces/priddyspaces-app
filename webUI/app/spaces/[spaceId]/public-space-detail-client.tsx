@@ -18,6 +18,7 @@ export function PublicSpaceDetailClient() {
       initialEndTime={searchParams.get("end_time") ?? undefined}
       initialPlanPublicId={searchParams.get("plan") ?? undefined}
       initialMoveInDate={searchParams.get("move_in") ?? undefined}
+      initialWaitlistPublicId={searchParams.get("waitlist") ?? undefined}
     />
   );
 }

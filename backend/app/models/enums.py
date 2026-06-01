@@ -111,6 +111,14 @@ class BookingRequestStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class BookingWaitlistStatus(str, enum.Enum):
+    WAITLISTED = "waitlisted"
+    INVITED = "invited"
+    BOOKED = "booked"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
 class PaymentStatus(str, enum.Enum):
     REQUIRES_PAYMENT = "requires_payment"
     SUCCEEDED = "succeeded"

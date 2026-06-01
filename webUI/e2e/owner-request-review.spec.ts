@@ -58,6 +58,10 @@ test("owner can review a request and approve it with notes", async ({ page }) =>
       await json(route, [requestState]);
       return;
     }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
+      return;
+    }
 
     if (key === "POST /api/booking-requests/req_2/approve") {
       const payload = route.request().postDataJSON() as { operator_notes?: string | null };
@@ -150,6 +154,10 @@ test("owner request email deep link opens approve confirmation", async ({ page }
       await json(route, [requestState]);
       return;
     }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
+      return;
+    }
 
     if (key === "POST /api/booking-requests/req_email_1/approve") {
       requestState.status = "approved";
@@ -233,6 +241,10 @@ test("owner sees backend capacity error when approval exceeds shared desk seats"
       await json(route, [requestState]);
       return;
     }
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, []);
+      return;
+    }
 
     if (key === "POST /api/booking-requests/req_shared_capacity/approve") {
       await json(route, { detail: "Not enough shared desk seats are available for that date" }, 409);
@@ -248,4 +260,76 @@ test("owner sees backend capacity error when approval exceeds shared desk seats"
   await page.getByRole("button", { name: "Approve", exact: true }).click();
 
   await expect(page.getByText("Not enough shared desk seats are available for that date")).toBeVisible();
+});
+
+test("owner can invite a waitlisted member to book", async ({ page }) => {
+  const waitlistEntry = {
+    public_id: "wait_owner_1",
+    created_at: "2026-06-01T14:00:00.000Z",
+    status: "waitlisted",
+    space_public_id: "space_shared_1",
+    space_name: "Shared Desk",
+    space_type: "shared_desk",
+    location_name: "Main Street Hub",
+    location_city: "Miami",
+    member_name: "Riley Ortiz",
+    member_email: "riley@example.com",
+    membership_plan_name: null,
+    request_kind: "daily_booking",
+    booking_mode: "day_pass",
+    seats_requested: 1,
+    start_datetime: "2026-06-02T13:00:00.000Z",
+    end_datetime: "2026-06-02T22:00:00.000Z",
+    desired_start_date: null,
+    invited_at: null as string | null,
+    invite_expires_at: null as string | null,
+    operator_notes: null as string | null,
+  };
+
+  await mockSession(page, "owner");
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse("owner"));
+      return;
+    }
+
+    if (key === "GET /api/booking-requests") {
+      await json(route, []);
+      return;
+    }
+
+    if (key === "GET /api/booking-waitlist") {
+      await json(route, [waitlistEntry]);
+      return;
+    }
+
+    if (key === "POST /api/booking-waitlist/wait_owner_1/invite") {
+      const payload = route.request().postDataJSON() as { operator_notes?: string | null };
+      expect(payload.operator_notes).toBe("Desk A can open tomorrow morning");
+      waitlistEntry.status = "invited";
+      waitlistEntry.invited_at = "2026-06-01T15:00:00.000Z";
+      waitlistEntry.invite_expires_at = "2026-06-02T15:00:00.000Z";
+      waitlistEntry.operator_notes = payload.operator_notes || null;
+      await json(route, waitlistEntry);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/owner/requests");
+
+  await expect(page.getByText("Waitlist", { exact: true })).toBeVisible();
+  await expect(page.getByText("Riley Ortiz")).toBeVisible();
+  await expect(page.getByText("Shared Desk", { exact: true }).first()).toBeVisible();
+
+  await page.getByLabel("Operator notes").fill("Desk A can open tomorrow morning");
+  await page.getByRole("button", { name: "Invite to book" }).click();
+
+  await expect(page.getByText("Invited", { exact: true })).toBeVisible();
+  await expect(page.getByText("Expires")).toBeVisible();
 });
