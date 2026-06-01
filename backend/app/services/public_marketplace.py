@@ -3,14 +3,25 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
 from app.models.cancellation_policy_tier import CancellationPolicyTier
-from app.models.enums import AvailabilityStatus, LocationStatus, OrganizationReviewStatus, SpaceType, SpaceVisibility, UserRole
+from app.models.enums import (
+    AvailabilityStatus,
+    BookingRequestKind,
+    BookingRequestStatus,
+    LocationStatus,
+    OrganizationReviewStatus,
+    SpaceType,
+    SpaceVisibility,
+    UserRole,
+)
 from app.models.location import Location
 from app.models.membership_plan import MembershipPlan
 from app.models.organization import Organization
@@ -18,6 +29,7 @@ from app.models.organization_member import OrganizationMember
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.space_image import SpaceImage
+from app.models.subscription import Subscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.schemas.working_hours import effective_public_working_hours
@@ -41,6 +53,13 @@ DEFAULT_SORT = {
 }
 
 EARTH_RADIUS_MILES = 3958.7613
+EXCLUSIVE_LEASE_SPACE_TYPES = {SpaceType.PRIVATE_OFFICE.value, SpaceType.SUITE.value}
+EXCLUSIVE_LEASE_MODES = {"private_office_lease", "suite_lease"}
+BLOCKING_LEASE_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due", "canceling"}
+BLOCKING_LEASE_REQUEST_STATUSES = {
+    BookingRequestStatus.REQUESTED,
+    BookingRequestStatus.PAYMENT_FAILED,
+}
 
 
 @dataclass
@@ -283,6 +302,52 @@ def _space_available_for_requested_window(
     except HTTPException:
         return False
     return True
+
+
+def _space_available_for_marketplace_inventory_date(
+    db: Session,
+    *,
+    space: Space,
+    requested_date: date | None,
+) -> bool:
+    space_type = getattr(space.space_type, "value", space.space_type)
+    if space_type not in EXCLUSIVE_LEASE_SPACE_TYPES:
+        return True
+
+    inventory_date = requested_date or date.today()
+    subscription_exists = (
+        db.query(Subscription.id)
+        .filter(
+            Subscription.space_id == space.id,
+            Subscription.status.in_(BLOCKING_LEASE_SUBSCRIPTION_STATUSES),
+            Subscription.start_date <= inventory_date,
+            or_(Subscription.end_date.is_(None), Subscription.end_date >= inventory_date),
+            or_(
+                Subscription.booking_mode.is_(None),
+                Subscription.booking_mode.in_(EXCLUSIVE_LEASE_MODES),
+            ),
+        )
+        .first()
+        is not None
+    )
+    if subscription_exists:
+        return False
+
+    day_start = datetime.combine(inventory_date, time.min, tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+    request_exists = (
+        db.query(BookingRequest.id)
+        .filter(
+            BookingRequest.space_id == space.id,
+            BookingRequest.request_kind == BookingRequestKind.LEASE_PURCHASE.value,
+            BookingRequest.status.in_(BLOCKING_LEASE_REQUEST_STATUSES),
+            BookingRequest.start_datetime < day_end,
+            BookingRequest.end_datetime > day_start,
+        )
+        .first()
+        is not None
+    )
+    return not request_exists
 
 
 def _query_tokens(q: str | None) -> list[str]:
@@ -610,6 +675,12 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
         space_amenities = _space_amenity_names(space)
         if filters.capacity is not None and space.capacity < filters.capacity:
             continue
+        if not _space_available_for_marketplace_inventory_date(
+            db,
+            space=space,
+            requested_date=parsed_date,
+        ):
+            continue
         if not _space_matches_query(
             query,
             location=location,
@@ -789,6 +860,12 @@ def get_public_location_detail(
     for space, _, image in filtered_rows:
         space_amenities = _space_amenity_names(space)
         if filters.capacity is not None and space.capacity < filters.capacity:
+            continue
+        if not _space_available_for_marketplace_inventory_date(
+            db,
+            space=space,
+            requested_date=parsed_date,
+        ):
             continue
         if not _space_matches_query(
             query,

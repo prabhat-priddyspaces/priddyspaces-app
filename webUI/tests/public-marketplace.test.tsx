@@ -44,6 +44,75 @@ vi.mock("../components/use-address-autocomplete", () => ({
   reverseGeocode: reverseGeocodeMock,
 }));
 
+function mockSharedDeskDetail(availabilityDay: Record<string, unknown>) {
+  apiFetchMock.mockImplementation((url: string) => {
+    if (url.includes("/availability")) {
+      return Promise.resolve({
+        space_public_id: "space_day_pass",
+        timezone: "America/New_York",
+        granularity_minutes: 60,
+        availability_start_time: "09:00",
+        availability_end_time: "17:00",
+        buffer_before_minutes: 0,
+        buffer_after_minutes: 0,
+        hourly_price: null,
+        daily_price: 49,
+        days: [availabilityDay],
+      });
+    }
+    if (url.startsWith("/api/membership-plans/public")) {
+      return Promise.resolve([]);
+    }
+    if (url.startsWith("/api/marketplace/spaces/")) {
+      return Promise.resolve({
+        space: {
+          public_id: "space_day_pass",
+          name: "Open Desk A1",
+          space_type: "shared_desk",
+          capacity: 4,
+          availability_status: "available",
+          availability_start_time: "09:00:00",
+          availability_end_time: "17:00:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          price_daily: 49,
+          price_monthly: null,
+          hourly_price: null,
+          membership_price: null,
+          amenities: ["WiFi"],
+          booking_products: [],
+        },
+        images: [],
+        location: {
+          location_public_id: "loc_1",
+          name: "Brickell Commons",
+          organization_name: "Public Org",
+          address: "100 Main St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33101",
+          neighborhood: "Downtown",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          public_phone: null,
+          public_email: null,
+          public_hours_weekdays: null,
+          public_hours_weekends: null,
+          public_working_hours_enabled: false,
+          public_working_hours: [],
+          public_parking_notes: [],
+          public_transit_notes: [],
+          public_included_items: [],
+        },
+        cancellation_policy: null,
+        support_contacts: [],
+      });
+    }
+    return Promise.resolve([]);
+  });
+}
+
 describe("public marketplace flows", () => {
   beforeEach(() => {
     searchQuery.value = "q=Miami";
@@ -530,6 +599,45 @@ describe("public marketplace flows", () => {
     expect(screen.getAllByText("Day Rate").length).toBeGreaterThan(0);
     expect(screen.getByText("All day")).toBeInTheDocument();
     expect(screen.queryByText("Recurrence")).not.toBeInTheDocument();
+  });
+
+  it("caps day-pass seat quantity to selected-day remaining seats", async () => {
+    mockSharedDeskDetail({
+      date: "2026-06-01",
+      fully_blocked: false,
+      capacity: 4,
+      booked_seats: 2,
+      remaining_seats: 2,
+      busy_intervals: [],
+    });
+
+    render(<PublicSpaceDetailView spaceId="space_day_pass" backHref="/spaces" initialDate="2026-06-01" />);
+
+    expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
+    expect(screen.getByText("2 seats available for the selected day.")).toBeInTheDocument();
+    const input = screen.getByRole("spinbutton", { name: /Seats/ }) as HTMLInputElement;
+    expect(input.max).toBe("2");
+
+    fireEvent.change(input, { target: { value: "5" } });
+
+    expect(input.value).toBe("2");
+  });
+
+  it("disables day-pass seat selection when the selected day is sold out", async () => {
+    mockSharedDeskDetail({
+      date: "2026-06-01",
+      fully_blocked: true,
+      capacity: 4,
+      booked_seats: 4,
+      remaining_seats: 0,
+      busy_intervals: [{ start: "09:00", end: "17:00" }],
+    });
+
+    render(<PublicSpaceDetailView spaceId="space_day_pass" backHref="/spaces" initialDate="2026-06-01" />);
+
+    expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
+    expect(screen.getByText("Sold out for the selected day.")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: /Seats/ })).toBeDisabled();
   });
 
   it("marks private-office lease prices on the detail page and checkout panel", async () => {

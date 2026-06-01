@@ -112,7 +112,7 @@ def _has_active_exclusive_lease(db: Session, space: Space) -> bool:
         db.query(Subscription.id)
         .filter(
             Subscription.space_id == space.id,
-            Subscription.status.in_(["pending_payment", "active", "past_due"]),
+            Subscription.status.in_(["pending_payment", "active", "past_due", "canceling"]),
             Subscription.start_date <= today,
             or_(Subscription.end_date.is_(None), Subscription.end_date >= today),
             or_(

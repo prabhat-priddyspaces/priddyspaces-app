@@ -30,6 +30,7 @@ interface GuestCheckoutModalProps {
   payload: GuestCheckoutPayload | null;
   onClose: () => void;
   onSignIn: () => void;
+  onBookingSubmitted?: () => void | Promise<void>;
 }
 
 type Step = "choice" | "form" | "success";
@@ -42,7 +43,7 @@ interface FormState {
   guest_notes: string;
 }
 
-export function GuestCheckoutModal({ payload, onClose, onSignIn }: GuestCheckoutModalProps) {
+export function GuestCheckoutModal({ payload, onClose, onSignIn, onBookingSubmitted }: GuestCheckoutModalProps) {
   const isMembershipOnly = payload === null;
   const [step, setStep] = useState<Step>("choice");
   const [form, setForm] = useState<FormState>({
@@ -86,6 +87,7 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn }: GuestCheckout
         }
       );
       setResult(data);
+      await onBookingSubmitted?.();
       setStep("success");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to submit this guest booking request.");

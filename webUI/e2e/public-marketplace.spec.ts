@@ -518,6 +518,199 @@ test("public marketplace shows no meeting rooms when the selected slot is unavai
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).not.toBeVisible();
 });
 
+test("public marketplace search excludes leased private offices", async ({ page }) => {
+  const privateOfficeResults = {
+    meta: { total_locations: 1, page: 1, page_size: 20 },
+    results: [
+      {
+        location_public_id: "loc_open_private",
+        name: "Brickell Commons",
+        address: "200 Brickell Ave",
+        city: "Miami",
+        state: "FL",
+        postal_code: "33131",
+        neighborhood: "Brickell",
+        timezone: "America/New_York",
+        lat: 25.7616,
+        lng: -80.1918,
+        featured_image_url: null,
+        location_amenities: ["WiFi"],
+        matching_space_count: 1,
+        featured_space_public_id: "space_open_private",
+        starting_day_pass_price: null,
+        starting_monthly_price: 1800,
+        starting_hourly_price: null,
+        starting_membership_price: null,
+        spaces: [
+          {
+            public_id: "space_open_private",
+            name: "Available Private Office",
+            space_type: "private_office",
+            capacity: 4,
+            availability_status: "available",
+            availability_start_time: null,
+            availability_end_time: null,
+            price_daily: null,
+            price_monthly: 1800,
+            hourly_price: null,
+            membership_price: null,
+            amenities: ["WiFi"],
+            image_url: null,
+          },
+        ],
+      },
+    ],
+  };
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/marketplace/locations") {
+      await json(
+        route,
+        url.searchParams.get("category") === "private_office"
+          ? privateOfficeResults
+          : coworkingResults,
+      );
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/private-offices?q=Miami");
+
+  await expect(page.getByRole("heading", { name: "Available Private Office" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Leased Private Office" })).not.toBeVisible();
+  await expect(page.getByText("Showing 1 listing")).toBeVisible();
+});
+
+test("day-pass detail refreshes remaining seats after a guest request", async ({ page }) => {
+  let availabilityCalls = 0;
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/marketplace/spaces/space_day_pass") {
+      await json(route, {
+        space: {
+          public_id: "space_day_pass",
+          name: "Open Desk A1",
+          space_type: "shared_desk",
+          capacity: 4,
+          availability_status: "available",
+          availability_start_time: "09:00:00",
+          availability_end_time: "17:00:00",
+          buffer_before_minutes: 0,
+          buffer_after_minutes: 0,
+          price_daily: 49,
+          price_monthly: null,
+          hourly_price: null,
+          membership_price: null,
+          amenities: ["WiFi"],
+          volume_discounts: [],
+          booking_products: [],
+        },
+        images: [],
+        location: {
+          location_public_id: "loc_1",
+          organization_name: "Public Org",
+          booking_approval_mode: "manual",
+          payment_failure_hold_minutes: null,
+          name: "Brickell Commons",
+          address: "100 Main St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33101",
+          neighborhood: "Downtown",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          public_phone: null,
+          public_email: null,
+          public_hours_weekdays: null,
+          public_hours_weekends: null,
+          public_working_hours_enabled: false,
+          public_working_hours: [],
+          public_parking_notes: [],
+          public_transit_notes: [],
+          public_included_items: [],
+        },
+        cancellation_policy: null,
+        support_contacts: [],
+      });
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_day_pass/availability") {
+      availabilityCalls += 1;
+      const remaining = availabilityCalls === 1 ? 2 : 1;
+      await json(route, {
+        space_public_id: "space_day_pass",
+        timezone: "America/New_York",
+        granularity_minutes: 60,
+        availability_start_time: "09:00",
+        availability_end_time: "17:00",
+        buffer_before_minutes: 0,
+        buffer_after_minutes: 0,
+        hourly_price: null,
+        daily_price: 49,
+        days: [
+          {
+            date: "2026-06-01",
+            fully_blocked: false,
+            capacity: 4,
+            booked_seats: 4 - remaining,
+            remaining_seats: remaining,
+            busy_intervals: [],
+          },
+        ],
+      });
+      return;
+    }
+
+    if (key === "GET /api/membership-plans/public") {
+      await json(route, []);
+      return;
+    }
+
+    if (key === "POST /api/guest/booking-requests") {
+      await json(route, {
+        public_id: "guest_req_1",
+        status: "requested",
+        start_datetime: "2026-06-01T13:00:00.000Z",
+        end_datetime: "2026-06-01T21:00:00.000Z",
+        space_public_id: "space_day_pass",
+        estimated_amount: 49,
+        message: "Request submitted",
+      });
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto("/spaces/space_day_pass?date=2026-06-01");
+
+  await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
+  await expect(page.getByText("2 seats available for the selected day.")).toBeVisible();
+  await expect(page.getByRole("spinbutton", { name: "Seats" })).toHaveAttribute("max", "2");
+  await expect(page.getByRole("button", { name: "Sign in to Request to book" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Sign in to Request to book" }).click();
+  await page.getByRole("button", { name: "Continue as guest" }).click();
+  await page.getByPlaceholder("Jane Smith").fill("Test User");
+  await page.getByPlaceholder("jane@example.com").fill("customer@test.com");
+  await page.getByRole("button", { name: "Submit booking request" }).click();
+  await expect(page.getByText("Request submitted!")).toBeVisible();
+  await page.getByRole("button", { name: "Close booking request" }).click();
+
+  await expect(page.getByText("1 seat available for the selected day.")).toBeVisible();
+  await expect(page.getByRole("spinbutton", { name: "Seats" })).toHaveAttribute("max", "1");
+});
+
 test("public get started menu exposes member and owner registration", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
