@@ -5,15 +5,16 @@ import { vi } from "vitest";
 import { PublicMarketplaceBrowser } from "../components/public-marketplace-browser";
 import { PublicSpaceDetailView } from "../components/public-space-detail-view";
 
-const { pushMock, apiFetchMock, reverseGeocodeMock, searchQuery } = vi.hoisted(() => ({
+const { pushMock, apiFetchMock, reverseGeocodeMock, routePath, searchQuery } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   apiFetchMock: vi.fn(),
   reverseGeocodeMock: vi.fn(),
+  routePath: { value: "/spaces" },
   searchQuery: { value: "q=Miami" },
 }));
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/spaces",
+  usePathname: () => routePath.value,
   useRouter: () => ({
     replace: vi.fn(),
     push: pushMock,
@@ -115,6 +116,7 @@ function mockSharedDeskDetail(availabilityDay: Record<string, unknown>) {
 
 describe("public marketplace flows", () => {
   beforeEach(() => {
+    routePath.value = "/spaces";
     searchQuery.value = "q=Miami";
     pushMock.mockReset();
     apiFetchMock.mockReset();
@@ -282,6 +284,7 @@ describe("public marketplace flows", () => {
   });
 
   it("marks private-office lease prices as estimated long-term prices in search", async () => {
+    routePath.value = "/private-offices";
     apiFetchMock.mockResolvedValueOnce({
       meta: { total_locations: 1, page: 1, page_size: 20 },
       results: [
@@ -329,6 +332,17 @@ describe("public marketplace flows", () => {
 
     expect(await screen.findByRole("heading", { name: "Private Office 4" })).toBeInTheDocument();
     expect(screen.getByText("Lease $1,800/mo*")).toBeInTheDocument();
+    expect(screen.getByLabelText("When")).toHaveAttribute("type", "date");
+    expect(screen.getAllByPlaceholderText("Min capacity")).toHaveLength(1);
+
+    fireEvent.change(screen.getByLabelText("When"), { target: { value: "2026-06-15" } });
+    fireEvent.change(screen.getByPlaceholderText("Min capacity"), { target: { value: "4" } });
+    fireEvent.change(screen.getByPlaceholderText("Any"), { target: { value: "2000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(pushMock).toHaveBeenCalledWith(
+      "/private-offices?q=Miami&date=2026-06-15&capacity=4&max_price_monthly=2000",
+    );
   });
 
   it("shows a designed fallback when a result image fails to load", async () => {
