@@ -227,6 +227,9 @@ def test_membership_purchase_request_create_and_approve(
     assert data["request_kind"] == BookingRequestKind.LEASE_PURCHASE.value
     assert data["membership_plan_public_id"] == plan.public_id
     assert data["status"] == BookingRequestStatus.REQUESTED.value
+    assert data["booking_approval_mode"] == "manual"
+    assert data["membership_lease_approval_mode"] == "manual"
+    assert data["instant_booking"] is False
     assert data["commitment_months_snapshot"] == 12
     assert data["estimated_amount"] == "2150.00"
 
@@ -284,6 +287,67 @@ def test_membership_purchase_request_create_and_approve(
     assert bal["used_minutes"] == 0
     assert bal["remaining_minutes"] == 16 * 60
     assert bal["overage_hourly_rate_cents"] == 5000
+
+
+def test_auto_lease_purchase_request_creates_subscription_without_pending_review(
+    db_session, client_factory, monkeypatch
+):
+    owner, member, org, _, space, _, method = _seed(db_session)
+    org.membership_lease_approval_mode = "auto"
+    db_session.add(org)
+    db_session.commit()
+    plan = _enable_mode_and_make_plan(
+        db_session, space, booking_mode=BookingMode.PRIVATE_OFFICE_LEASE
+    )
+    captured: dict = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return StripeSubscriptionResult(
+            subscription_id="sub_auto123",
+            status="active",
+            raw={"id": "sub_auto123"},
+        )
+
+    monkeypatch.setattr("app.api.booking_requests.create_stripe_subscription", fake_create)
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
+    )
+
+    create_resp = member_client.post(
+        "/api/booking-requests",
+        json={
+            "membership_plan_public_id": plan.public_id,
+            "desired_start_date": "2026-05-01",
+            "member_owner_payment_method_public_id": method.public_id,
+            "payment_authorization_consent": True,
+        },
+    )
+
+    assert create_resp.status_code == 200, create_resp.text
+    data = create_resp.json()
+    assert data["status"] == BookingRequestStatus.APPROVED.value
+    assert data["payment_status"] == "subscription_created"
+    assert data["booking_approval_mode"] == "auto"
+    assert data["membership_lease_approval_mode"] == "auto"
+    assert data["instant_booking"] is True
+    assert captured["plan"].id == plan.id
+
+    sub = (
+        db_session.query(Subscription)
+        .filter(Subscription.user_id == member.id, Subscription.space_id == space.id)
+        .first()
+    )
+    assert sub is not None
+    assert sub.stripe_subscription_id == "sub_auto123"
+    assert sub.status == SubscriptionStatusEnum.ACTIVE.value
+
+    owner_client = client_factory(
+        {"sub": "mp-owner", "email": owner.email, "email_verified": True}
+    )
+    pending = owner_client.get("/api/booking-requests?status=requested")
+    assert pending.status_code == 200
+    assert all(req["public_id"] != data["public_id"] for req in pending.json())
 
 
 def test_lease_purchase_request_rejects_overlapping_requested_lease(
@@ -357,6 +421,50 @@ def test_lease_approval_rejects_overlap_before_subscription_charge(
 
     assert approve_resp.status_code == 409
     assert approve_resp.json()["detail"] == "Space already leased for that period"
+
+
+def test_auto_lease_request_rejects_overlap_before_subscription_charge(
+    db_session, client_factory, monkeypatch
+):
+    _, member, org, _, space, _, method = _seed(db_session)
+    org.membership_lease_approval_mode = "auto"
+    db_session.add(org)
+    db_session.commit()
+    plan = _enable_mode_and_make_plan(
+        db_session, space, booking_mode=BookingMode.PRIVATE_OFFICE_LEASE
+    )
+    db_session.add(
+        Subscription(
+            user_id=member.id,
+            space_id=space.id,
+            tenant_id=space.tenant_id,
+            status="active",
+            start_date=date(2026, 5, 15),
+            end_date=date(2026, 6, 15),
+            booking_mode=BookingMode.PRIVATE_OFFICE_LEASE.value,
+        )
+    )
+    db_session.commit()
+
+    def fail_create(**_kwargs):
+        raise AssertionError("Stripe subscription should not be created for a conflicted lease")
+
+    monkeypatch.setattr("app.api.booking_requests.create_stripe_subscription", fail_create)
+    member_client = client_factory(
+        {"sub": "mp-member", "email": member.email, "email_verified": True}
+    )
+    create_resp = member_client.post(
+        "/api/booking-requests",
+        json={
+            "membership_plan_public_id": plan.public_id,
+            "desired_start_date": "2026-05-01",
+            "member_owner_payment_method_public_id": method.public_id,
+            "payment_authorization_consent": True,
+        },
+    )
+
+    assert create_resp.status_code == 409
+    assert create_resp.json()["detail"] == "Space already leased for that period"
 
 
 def test_booking_request_xor_validator_rejects_mixed_payload(

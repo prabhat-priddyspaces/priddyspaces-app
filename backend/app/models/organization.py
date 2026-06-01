@@ -33,6 +33,7 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     commission_override_pct = Column(Integer, nullable=True)
     booking_approval_mode = Column(String(16), nullable=False, default="manual", server_default="manual")
+    membership_lease_approval_mode = Column(String(16), nullable=False, default="manual", server_default="manual")
     payment_failure_hold_minutes = Column(Integer, nullable=False, default=30, server_default="30")
     allowed_marketing_lanes = Column(String(255), nullable=False, default="shared,verified_sender", server_default="shared,verified_sender")
     default_marketing_lane = Column(String(32), nullable=False, default="shared", server_default="shared")

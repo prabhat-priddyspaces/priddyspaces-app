@@ -29,6 +29,7 @@ class SpaceOut(BaseModel):
     public_id: str
     organization_name: str | None = None
     booking_approval_mode: str = "manual"
+    membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
     name: str
     space_type: SpaceType

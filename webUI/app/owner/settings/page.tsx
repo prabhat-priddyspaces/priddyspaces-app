@@ -19,6 +19,7 @@ interface Organization {
   review_status: string;
   review_notes: string | null;
   booking_approval_mode: "manual" | "auto";
+  membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
 }
 
@@ -55,6 +56,7 @@ interface BookingSettings {
   public_id: string;
   name: string;
   booking_approval_mode: "manual" | "auto";
+  membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
 }
 
@@ -120,6 +122,7 @@ export default function OwnerSettingsPage() {
   const [taxRate, setTaxRate] = useState("");
   const [bookingSettingsForm, setBookingSettingsForm] = useState({
     booking_approval_mode: "manual" as "manual" | "auto",
+    membership_lease_approval_mode: "manual" as "manual" | "auto",
     payment_failure_hold_minutes: "30",
   });
   const [flagForm, setFlagForm] = useState({
@@ -270,7 +273,11 @@ export default function OwnerSettingsPage() {
   async function loadBookingSettings() {
     if (!orgId) {
       setBookingSettings(null);
-      setBookingSettingsForm({ booking_approval_mode: "manual", payment_failure_hold_minutes: "30" });
+      setBookingSettingsForm({
+        booking_approval_mode: "manual",
+        membership_lease_approval_mode: "manual",
+        payment_failure_hold_minutes: "30",
+      });
       return;
     }
     const token = getAccessToken() ?? undefined;
@@ -282,6 +289,7 @@ export default function OwnerSettingsPage() {
     setBookingSettings(settings);
     setBookingSettingsForm({
       booking_approval_mode: settings.booking_approval_mode,
+      membership_lease_approval_mode: settings.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(settings.payment_failure_hold_minutes),
     });
   }
@@ -461,6 +469,7 @@ export default function OwnerSettingsPage() {
         method: "PATCH",
         body: JSON.stringify({
           booking_approval_mode: bookingSettingsForm.booking_approval_mode,
+          membership_lease_approval_mode: bookingSettingsForm.membership_lease_approval_mode,
           payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes),
         }),
       },
@@ -469,6 +478,7 @@ export default function OwnerSettingsPage() {
     setBookingSettings(saved);
     setBookingSettingsForm({
       booking_approval_mode: saved.booking_approval_mode,
+      membership_lease_approval_mode: saved.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes),
     });
     setMessage("Booking approval settings saved");
@@ -777,16 +787,18 @@ export default function OwnerSettingsPage() {
             <div>
               <div className="text-sm font-semibold">Booking approval</div>
               <div className="text-xs text-textMuted">
-                Current: {bookingSettings?.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval"} •{" "}
+                Current: Hourly/day-pass{" "}
+                {bookingSettings?.booking_approval_mode === "auto" ? "auto approve" : "manual approval"} • Membership &amp; lease{" "}
+                {bookingSettings?.membership_lease_approval_mode === "auto" ? "auto approve" : "manual approval"} •{" "}
                 {bookingSettings?.payment_failure_hold_minutes === 0
                   ? "Cancel failed payments immediately"
                   : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min payment recovery hold`}
               </div>
             </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <div className="grid gap-2">
-              <Label htmlFor="booking-approval-mode">Approval mode</Label>
+              <Label htmlFor="booking-approval-mode">Hourly/day-pass approval</Label>
               <select
                 id="booking-approval-mode"
                 className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
@@ -795,6 +807,23 @@ export default function OwnerSettingsPage() {
                   setBookingSettingsForm((current) => ({
                     ...current,
                     booking_approval_mode: e.target.value as "manual" | "auto",
+                  }))
+                }
+              >
+                <option value="manual">Manual approval</option>
+                <option value="auto">Auto approve</option>
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="membership-lease-approval-mode">Membership &amp; lease approval</Label>
+              <select
+                id="membership-lease-approval-mode"
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+                value={bookingSettingsForm.membership_lease_approval_mode}
+                onChange={(e) =>
+                  setBookingSettingsForm((current) => ({
+                    ...current,
+                    membership_lease_approval_mode: e.target.value as "manual" | "auto",
                   }))
                 }
               >

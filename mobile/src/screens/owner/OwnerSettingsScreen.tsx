@@ -11,6 +11,7 @@ type CancellationPolicy = { public_id: string };
 type SubscriptionPlan = { public_id: string };
 type BookingSettings = {
   booking_approval_mode: "manual" | "auto";
+  membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
 };
 
@@ -34,6 +35,7 @@ export function OwnerSettingsScreen() {
   const [taxRate, setTaxRate] = useState("");
   const [bookingSettingsForm, setBookingSettingsForm] = useState({
     booking_approval_mode: "manual" as "manual" | "auto",
+    membership_lease_approval_mode: "manual" as "manual" | "auto",
     payment_failure_hold_minutes: "30"
   });
   const [flagForm, setFlagForm] = useState({
@@ -80,6 +82,7 @@ export function OwnerSettingsScreen() {
           setBookingSettings(booking);
           setBookingSettingsForm({
             booking_approval_mode: booking.booking_approval_mode,
+            membership_lease_approval_mode: booking.membership_lease_approval_mode ?? "manual",
             payment_failure_hold_minutes: String(booking.payment_failure_hold_minutes)
           });
         }
@@ -171,12 +174,18 @@ export function OwnerSettingsScreen() {
         method: "PATCH",
         body: JSON.stringify({
           booking_approval_mode: bookingSettingsForm.booking_approval_mode,
+          membership_lease_approval_mode: bookingSettingsForm.membership_lease_approval_mode,
           payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes)
         })
       },
       token
     );
     setBookingSettings(saved);
+    setBookingSettingsForm({
+      booking_approval_mode: saved.booking_approval_mode,
+      membership_lease_approval_mode: saved.membership_lease_approval_mode ?? "manual",
+      payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes)
+    });
     setMessage("Booking approval saved");
   }
 
@@ -327,11 +336,13 @@ export function OwnerSettingsScreen() {
 
       <Text style={styles.sectionTitle}>Booking approval</Text>
       <Text style={styles.subtitle}>
-        Current: {bookingSettings?.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval"} ·{" "}
+        Current: hourly/day-pass {bookingSettings?.booking_approval_mode === "auto" ? "auto approve" : "manual approval"} ·{" "}
+        membership & lease {bookingSettings?.membership_lease_approval_mode === "auto" ? "auto approve" : "manual approval"} ·{" "}
         {bookingSettings?.payment_failure_hold_minutes === 0
           ? "cancel immediately"
           : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min recovery`}
       </Text>
+      <Text style={styles.label}>Hourly/day-pass approval</Text>
       <View style={styles.optionRow}>
         {[
           { value: "manual", label: "Manual approval" },
@@ -346,6 +357,22 @@ export function OwnerSettingsScreen() {
           </TouchableOpacity>
         ))}
       </View>
+      <Text style={styles.label}>Membership & lease approval</Text>
+      <View style={styles.optionRow}>
+        {[
+          { value: "manual", label: "Manual approval" },
+          { value: "auto", label: "Auto approve" }
+        ].map((opt) => (
+          <TouchableOpacity
+            key={`membership-${opt.value}`}
+            style={[styles.optionButton, bookingSettingsForm.membership_lease_approval_mode === opt.value && styles.optionActive]}
+            onPress={() => setBookingSettingsForm({ ...bookingSettingsForm, membership_lease_approval_mode: opt.value as "manual" | "auto" })}
+          >
+            <Text style={styles.optionText}>{opt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.label}>Payment failure recovery</Text>
       <View style={styles.optionRow}>
         {[
           { value: "0", label: "Cancel immediately" },
@@ -526,6 +553,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#111827"
+  },
+  label: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#374151"
   },
   primaryButton: {
     marginTop: 10,

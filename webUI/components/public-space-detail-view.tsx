@@ -498,8 +498,11 @@ export function PublicSpaceDetailView({
       ? `${detail.cancellation_policy.refund_percent}% refund ${detail.cancellation_policy.cancel_window_hours}+h before`
       : null;
   const autoApproval = detail?.location.booking_approval_mode === "auto";
+  const membershipLeaseAutoApproval = detail?.location.membership_lease_approval_mode === "auto";
   const reserveActionLabel = leaseBookingMode
-    ? "Request to Book"
+    ? membershipLeaseAutoApproval
+      ? "Reserve & Pay"
+      : "Request to Book"
     : autoApproval
       ? "Reserve & Pay"
       : "Request to book";
@@ -1200,6 +1203,7 @@ export function PublicSpaceDetailView({
                   spaceCapacity={detail.space.capacity}
                   organizationName={organizationName}
                   bookingMode={leaseBookingMode}
+                  approvalMode={detail.location.membership_lease_approval_mode === "auto" ? "auto" : "manual"}
                   spaceMonthlyPrice={detail.space.price_monthly ?? null}
                   setupFeeAmountCents={detail.space.setup_fee_amount_cents ?? 0}
                   buildLoginNextHref={({ planPublicId, moveInDate }) =>

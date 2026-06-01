@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { json } from "./helpers/mock-api";
+import { json, meResponse, mockSession } from "./helpers/mock-api";
 
 const coworkingResults = {
   meta: {
@@ -149,6 +149,205 @@ test("public marketplace can ask for browser location and search the default rad
       ),
     )
     .toBe(true);
+});
+
+test("auto-approved lease request does not appear as pending in owner inbox", async ({ page }) => {
+  await mockSession(page, "member");
+  let currentRole: "member" | "owner" = "member";
+  const moveInDate = new Date().toISOString().slice(0, 10);
+  const createdRequest = {
+    public_id: "req_auto_lease_1",
+    space_public_id: "space_auto_lease",
+    space_name: "Private Office 8",
+    space_type: "private_office",
+    location_public_id: "loc_auto_lease",
+    location_name: "Brickell Commons",
+    location_city: "Miami",
+    member_public_id: "member_auto",
+    member_name: "Test Member",
+    member_email: "member@priddyspaces.test",
+    member_phone: null,
+    member_company_name: null,
+    booking_id: null,
+    booking_public_id: null,
+    start_datetime: `${moveInDate}T00:00:00.000Z`,
+    end_datetime: "2027-06-01T00:00:00.000Z",
+    status: "approved",
+    payment_status: "subscription_created",
+    payment_provider: "stripe",
+    cancellation_deadline_at: null,
+    payment_hold_expires_at: null,
+    payment_failed_at: null,
+    estimated_amount: 1150,
+    price_daily: null,
+    price_monthly: 1150,
+    price_hourly: null,
+    base_amount_cents: 115000,
+    rate_basis: "monthly",
+    units: 1,
+    operator_notes: null,
+    failure_reason: null,
+    request_kind: "lease_purchase",
+    membership_plan_public_id: "plan_auto_lease",
+    membership_plan_name: "12-month Term",
+    desired_start_date: moveInDate,
+    seats_requested: 1,
+    commitment_months_snapshot: 12,
+    booking_approval_mode: "auto",
+    membership_lease_approval_mode: "auto",
+    payment_failure_hold_minutes: 30,
+    instant_booking: true,
+    is_guest_checkout: false,
+    guest_email: null,
+    guest_full_name: null,
+    guest_phone: null,
+    guest_company_name: null,
+    guest_notes: null,
+    email_delivery_summary: [],
+  };
+
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    const key = `${route.request().method()} ${url.pathname}`;
+
+    if (key === "GET /api/me") {
+      await json(route, meResponse(currentRole));
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_auto_lease") {
+      await json(route, {
+        space: {
+          public_id: "space_auto_lease",
+          name: "Private Office 8",
+          space_type: "private_office",
+          capacity: 4,
+          availability_status: "available",
+          availability_start_time: "09:00:00",
+          availability_end_time: "17:00:00",
+          price_daily: null,
+          price_monthly: 1150,
+          hourly_price: null,
+          membership_price: 1150,
+          amenities: ["WiFi"],
+          booking_products: [],
+          setup_fee_items: [],
+          setup_fee_amount_cents: 0,
+        },
+        images: [],
+        location: {
+          location_public_id: "loc_auto_lease",
+          organization_name: "Auto Lease Org",
+          booking_approval_mode: "manual",
+          membership_lease_approval_mode: "auto",
+          payment_failure_hold_minutes: 30,
+          name: "Brickell Commons",
+          address: "100 Main St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33101",
+          neighborhood: "Downtown",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          public_phone: null,
+          public_email: null,
+          public_hours_weekdays: null,
+          public_hours_weekends: null,
+          public_working_hours_enabled: false,
+          public_working_hours: [],
+          public_parking_notes: [],
+          public_transit_notes: [],
+          public_included_items: [],
+        },
+        cancellation_policy: null,
+        support_contacts: [],
+      });
+      return;
+    }
+
+    if (key === "GET /api/marketplace/spaces/space_auto_lease/availability") {
+      await json(route, {
+        space_public_id: "space_auto_lease",
+        timezone: "America/New_York",
+        granularity_minutes: 60,
+        availability_start_time: "09:00",
+        availability_end_time: "17:00",
+        hourly_price: null,
+        daily_price: null,
+        days: [{ date: moveInDate, fully_blocked: false, busy_intervals: [] }],
+      });
+      return;
+    }
+
+    if (key === "GET /api/membership-plans/public") {
+      await json(route, [
+        {
+          public_id: "plan_auto_lease",
+          booking_mode: "private_office_lease",
+          name: "12-month Term",
+          description: null,
+          price_cents: 115000,
+          billing_cycle: "monthly",
+          commitment_months: 12,
+          included_meeting_room_hours_per_month: 0,
+          overage_hourly_rate_cents: null,
+          seats_per_plan: 4,
+          space_capacity: 4,
+          available_seats: 1,
+        },
+      ]);
+      return;
+    }
+
+    if (key === "POST /api/booking-requests/preview") {
+      await json(route, {
+        currency: "usd",
+        base_amount_cents: 115000,
+        setup_fee_amount_cents: 0,
+        discount_amount_cents: 0,
+        tax_amount_cents: 0,
+        total_amount_cents: 115000,
+        line_items: [{ label: "12-month Term", amount_cents: 115000 }],
+      });
+      return;
+    }
+
+    if (key === "GET /api/payment-methods/resolve") {
+      await json(route, {
+        is_configured: true,
+        has_payment_method: true,
+        payment_method_public_id: "pm_auto_lease",
+        message: null,
+      });
+      return;
+    }
+
+    if (key === "POST /api/booking-requests") {
+      await json(route, createdRequest);
+      return;
+    }
+
+    if (key === "GET /api/booking-requests") {
+      await json(route, []);
+      return;
+    }
+
+    await json(route, { detail: `Unhandled route: ${key}` }, 404);
+  });
+
+  await page.goto(`/spaces/space_auto_lease?move_in=${moveInDate}`);
+  await expect(page.getByRole("heading", { name: "Private Office 8" })).toBeVisible();
+  await page.getByRole("button", { name: "Reserve & Pay" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Continue to payment" }).click();
+  await expect(page).toHaveURL(/\/member\/requests/);
+
+  currentRole = "owner";
+  await page.goto("/owner/requests");
+  await expect(page.getByRole("heading", { name: "Requests" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Pending 0/ })).toBeVisible();
+  await expect(page.getByText("No booking requests are waiting for review.")).toBeVisible();
 });
 
 test("public marketplace shows no payment-blocked listings", async ({ page }) => {

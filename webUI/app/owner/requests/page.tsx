@@ -42,7 +42,11 @@ function holdExpired(req: BookingRequest): boolean {
 }
 
 function approvalModeLabel(req: BookingRequest): string {
-  return req.booking_approval_mode === "auto" ? "Auto approve" : "Manual approval";
+  const mode = req.booking_approval_mode === "auto" ? "auto approve" : "manual approval";
+  if (req.request_kind === "membership_purchase" || req.request_kind === "lease_purchase") {
+    return `Membership & lease ${mode}`;
+  }
+  return `Hourly/day-pass ${mode}`;
 }
 
 import { AppShell } from "@/components/app-shell";
@@ -76,6 +80,7 @@ interface BookingRequest {
   payment_status: string | null;
   payment_provider: string | null;
   booking_approval_mode: string;
+  membership_lease_approval_mode: string;
   payment_failure_hold_minutes: number | null;
   payment_hold_expires_at: string | null;
   payment_failed_at: string | null;

@@ -293,9 +293,19 @@ def _space_type_value(space: Space | None) -> str | None:
     return getattr(space.space_type, "value", space.space_type)
 
 
-def _booking_approval_mode_for_org(organization: Organization | None) -> str:
-    mode = (organization.booking_approval_mode if organization else "manual") or "manual"
+def _normalized_approval_mode(mode: str | None) -> str:
+    mode = mode or "manual"
     return mode if mode in {"manual", "auto"} else "manual"
+
+
+def _booking_approval_mode_for_org(organization: Organization | None) -> str:
+    return _normalized_approval_mode(organization.booking_approval_mode if organization else None)
+
+
+def _membership_lease_approval_mode_for_org(organization: Organization | None) -> str:
+    return _normalized_approval_mode(
+        organization.membership_lease_approval_mode if organization else None
+    )
 
 
 def _approval_mode_for_request(req: BookingRequest, organization: Organization | None) -> str:
@@ -303,7 +313,7 @@ def _approval_mode_for_request(req: BookingRequest, organization: Organization |
         BookingRequestKind.MEMBERSHIP_PURCHASE.value,
         BookingRequestKind.LEASE_PURCHASE.value,
     }:
-        return "manual"
+        return "auto" if req.instant_booking else "manual"
     if req.instant_booking:
         return "auto"
     return "manual"
@@ -504,6 +514,7 @@ def _to_out(
         payment_hold_expires_at=req.payment_hold_expires_at,
         payment_failed_at=req.payment_failed_at,
         booking_approval_mode=_approval_mode_for_request(req, organization),
+        membership_lease_approval_mode=_membership_lease_approval_mode_for_org(organization),
         payment_failure_hold_minutes=organization.payment_failure_hold_minutes if organization else None,
         payment_authorization_consent_at=req.payment_authorization_consent_at,
         operator_notes=req.operator_notes,
@@ -702,8 +713,9 @@ def _create_membership_purchase_request(
     location = db.query(Location).filter(Location.id == space.location_id).first()
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
-    _require_public_booking_space(db, space, location, allow_unlisted=True)
+    organization = _require_public_booking_space(db, space, location, allow_unlisted=True)
     require_space_payment_ready_for_booking(db, space)
+    instant = _membership_lease_approval_mode_for_org(organization) == "auto"
 
     mode_row = (
         db.query(SpaceBookingMode)
@@ -782,6 +794,7 @@ def _create_membership_purchase_request(
         payment_status="not_charged" if owner_payment_setting else None,
         payment_authorization_consent_at=consent_at,
         request_kind=_kind_for_booking_mode(plan.booking_mode).value,
+        instant_booking=instant,
         membership_plan_id=plan.id,
         desired_start_date=desired_start,
         seats_requested=payload.seats_requested,
@@ -1508,6 +1521,16 @@ def create_booking_request(
         if space:
             location = db.query(Location).filter(Location.id == space.location_id).first()
             if location:
+                if req.instant_booking:
+                    req = _approve_membership_request(db, req, None)
+                    _run_booking_request_side_effect(
+                        db,
+                        "send_booking_confirmed_email",
+                        lambda: send_booking_confirmed_email(
+                            db, req, None, space, location, actor_user_id=user.id
+                        ),
+                    )
+                    return _to_out(req, space, None, db)
                 _send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
         return _to_out(req, space, None, db)
 
