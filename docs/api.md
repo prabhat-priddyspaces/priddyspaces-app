@@ -60,7 +60,7 @@
 - `GET /api/attendance` - owner/admin/platform attendance history with filters for location, date, space type, currently in office, checked in/out, and member name/email.
 - `GET /api/attendance/current` - owner/admin/platform list of members currently checked in.
 - `GET /api/attendance/locations` - location options visible to the current owner/admin/platform user.
-- `GET /api/member/directory` - member-only same-location directory based on active memberships or recent confirmed bookings.
+- `GET /api/member/directory` - member-only same-location directory based on active memberships or recent confirmed bookings. Supports `location_public_id`, `search`, and `currently_in_office` filters and returns checked-in presence fields.
 
 ### Notifications
 - `GET /api/push/config` - returns web-push availability and VAPID public key.

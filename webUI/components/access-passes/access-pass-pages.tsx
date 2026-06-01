@@ -39,6 +39,7 @@ import {
   type AttendanceFilters,
   type AttendanceLocation,
   type AttendanceRecord,
+  type MemberDirectoryFilters,
   type MemberDirectoryItem,
 } from "@/lib/access-passes";
 import { cn } from "@/lib/utils";
@@ -245,28 +246,50 @@ export function MemberAccessPassesPage({ focused = false }: { focused?: boolean 
   );
 }
 
+type DirectoryLocationOption = Pick<MemberDirectoryItem, "location_public_id" | "location_name">;
+
+function mergeDirectoryLocations(current: DirectoryLocationOption[], rows: MemberDirectoryItem[]): DirectoryLocationOption[] {
+  const byId = new Map(current.map((location) => [location.location_public_id, location]));
+  rows.forEach((row) => {
+    if (!byId.has(row.location_public_id)) {
+      byId.set(row.location_public_id, {
+        location_public_id: row.location_public_id,
+        location_name: row.location_name,
+      });
+    }
+  });
+  return Array.from(byId.values()).sort((a, b) => a.location_name.localeCompare(b.location_name));
+}
+
 export function MemberDirectoryPage() {
   const { getApiToken, isAuthReady } = useApiToken();
   const [rows, setRows] = useState<MemberDirectoryItem[]>([]);
+  const [locations, setLocations] = useState<DirectoryLocationOption[]>([]);
+  const [filters, setFilters] = useState<MemberDirectoryFilters>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!isAuthReady) return;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const token = (await getApiToken()) ?? undefined;
-        setRows(await listMemberDirectory(token));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load member directory");
-      } finally {
-        setLoading(false);
-      }
+    setLoading(true);
+    setError(null);
+    try {
+      const token = (await getApiToken()) ?? undefined;
+      const data = await listMemberDirectory(filters, token);
+      setRows(data);
+      setLocations((current) => mergeDirectoryLocations(current, data));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load member directory");
+    } finally {
+      setLoading(false);
     }
+  }, [filters, getApiToken, isAuthReady]);
+
+  useEffect(() => {
     void load();
-  }, [getApiToken, isAuthReady]);
+  }, [load]);
+
+  const hasActiveFilters = Boolean(filters.location_public_id || filters.currently_in_office || filters.search?.trim());
 
   return (
     <div className="space-y-5">
@@ -274,16 +297,66 @@ export function MemberDirectoryPage() {
         <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Member Directory</h1>
         <p className="text-sm text-text-3">Members recently or actively associated with your locations.</p>
       </div>
+      <Card className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
+        <div className="relative">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-4" />
+          <Input
+            value={filters.search || ""}
+            onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+            placeholder="Search members"
+            className="pl-9"
+          />
+        </div>
+        <select
+          value={filters.location_public_id || ""}
+          onChange={(event) => setFilters((current) => ({ ...current, location_public_id: event.target.value }))}
+          className="h-9 rounded-xl border border-line-strong bg-surface px-3 text-[13px] text-text outline-none"
+          aria-label="Filter by location"
+        >
+          <option value="">All locations</option>
+          {locations.map((location) => (
+            <option key={location.location_public_id} value={location.location_public_id}>
+              {location.location_name}
+            </option>
+          ))}
+        </select>
+        <label className="flex h-9 items-center gap-2 rounded-xl border border-line-strong bg-surface px-3 text-[13px] text-text">
+          <input
+            type="checkbox"
+            checked={Boolean(filters.currently_in_office)}
+            onChange={(event) => setFilters((current) => ({ ...current, currently_in_office: event.target.checked }))}
+          />
+          In office now
+        </label>
+        <Button type="button" onClick={() => setFilters({})} disabled={!hasActiveFilters}>
+          <XCircle size={15} />
+          Clear
+        </Button>
+      </Card>
       <ErrorText message={error} />
       {loading ? <LoadingState label="Loading directory..." /> : null}
       {!loading && rows.length === 0 ? (
-        <EmptyState icon={Users} title="No members found" body="Directory entries appear after other members have active memberships or recent confirmed bookings at your locations." />
+        hasActiveFilters ? (
+          <EmptyState icon={Search} title="No matching members" body="Try clearing filters or searching another shared location." />
+        ) : (
+          <EmptyState icon={Users} title="No members found" body="Directory entries appear after other members have active memberships or recent confirmed bookings at your locations." />
+        )
       ) : null}
       <div className="grid gap-3">
         {rows.map((row) => (
           <Card key={`${row.member_public_id}-${row.location_public_id}`} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="font-semibold text-text">{row.name || row.email}</div>
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                {row.is_currently_in_office ? (
+                  <span
+                    aria-label="Currently in office"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-success shadow-[0_0_0_3px_rgba(28,166,83,0.14)]"
+                    data-testid="member-presence-dot"
+                    title="Currently in office"
+                  />
+                ) : null}
+                <div className="truncate font-semibold text-text">{row.name || row.email}</div>
+              </div>
               <div className="text-sm text-text-3">{row.email}</div>
             </div>
             <div className="text-sm text-text-2 sm:text-right">

@@ -88,6 +88,15 @@ export type MemberDirectoryItem = {
   space_name: string | null;
   space_type: string;
   last_seen_at: string | null;
+  is_currently_in_office: boolean;
+  checked_in_at: string | null;
+};
+
+export type MemberDirectoryFilters = {
+  location_public_id?: string;
+  search?: string;
+  currently_in_office?: boolean;
+  days?: number;
 };
 
 export type AttendanceFilters = {
@@ -166,6 +175,10 @@ export function listCurrentAttendance(locationPublicId?: string, token?: string)
   return apiFetch<AttendanceRecord[]>(`/api/attendance/current${query}`, { method: "GET" }, token);
 }
 
-export function listMemberDirectory(token?: string) {
-  return apiFetch<MemberDirectoryItem[]>("/api/member/directory", { method: "GET" }, token);
+export function listMemberDirectory(filters: MemberDirectoryFilters = {}, token?: string) {
+  const query = Object.entries(filters)
+    .filter(([, value]) => !(value === undefined || value === null || value === "" || value === false))
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join("&");
+  return apiFetch<MemberDirectoryItem[]>(`/api/member/directory${query ? `?${query}` : ""}`, { method: "GET" }, token);
 }

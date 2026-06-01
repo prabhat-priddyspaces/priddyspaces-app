@@ -633,13 +633,66 @@ def recent_member_location_ids(db: Session, user_id: int) -> set[int]:
     return {lid for lid, in db.query(Space.location_id).filter(Space.id.in_(space_ids)).distinct()}
 
 
-def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> list[dict]:
+def _current_presence_by_member_location(db: Session, location_ids: set[int]) -> dict[tuple[int, int], datetime]:
+    if not location_ids:
+        return {}
+    now = now_utc()
+    rows = (
+        db.query(Booking, Space)
+        .join(Space, Space.id == Booking.space_id)
+        .filter(
+            Space.location_id.in_(location_ids),
+            Booking.status == BookingStatus.CONFIRMED,
+            Booking.checked_in_at.isnot(None),
+            Booking.checked_out_at.is_(None),
+            Booking.end_datetime >= now,
+        )
+        .order_by(Booking.checked_in_at.desc())
+        .all()
+    )
+    presence: dict[tuple[int, int], datetime] = {}
+    for booking, space in rows:
+        if not booking.checked_in_at:
+            continue
+        presence.setdefault((booking.user_id, space.location_id), booking.checked_in_at)
+    return presence
+
+
+def _directory_search_filter(query, search: str | None):
+    if not search or not search.strip():
+        return query
+    term = f"%{search.strip().lower()}%"
+    return query.filter(
+        or_(
+            func.lower(User.email).like(term),
+            func.lower(User.full_name).like(term),
+            func.lower(User.first_name).like(term),
+            func.lower(User.last_name).like(term),
+        )
+    )
+
+
+def directory_items_for_member(
+    db: Session,
+    user: User,
+    *,
+    days: int = 90,
+    location_public_id: str | None = None,
+    search: str | None = None,
+    currently_in_office: bool = False,
+) -> list[dict]:
     location_ids = recent_member_location_ids(db, user.id)
     if not location_ids:
         return []
+    if location_public_id:
+        location = db.query(Location).filter(Location.public_id == location_public_id).first()
+        if not location or location.id not in location_ids:
+            return []
+        location_ids = {location.id}
     cutoff = now_utc() - timedelta(days=max(1, days))
     today = now_utc().date()
-    rows = (
+    presence_by_key = _current_presence_by_member_location(db, location_ids)
+    query = (
         db.query(Booking, User, Space, Location)
         .join(User, User.id == Booking.user_id)
         .join(Space, Space.id == Booking.space_id)
@@ -650,14 +703,14 @@ def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> li
             Booking.status == BookingStatus.CONFIRMED,
             Booking.start_datetime >= cutoff,
         )
-        .order_by(Booking.start_datetime.desc())
-        .all()
     )
+    rows = _directory_search_filter(query, search).order_by(Booking.start_datetime.desc()).all()
     out: dict[tuple[int, int], dict] = {}
     for booking, member, space, location in rows:
         key = (member.id, location.id)
         if key in out:
             continue
+        checked_in_at = presence_by_key.get(key)
         out[key] = {
             "member_public_id": member.public_id,
             "name": _display_name(member),
@@ -668,8 +721,10 @@ def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> li
             "space_name": _space_name(space),
             "space_type": getattr(space.space_type, "value", space.space_type),
             "last_seen_at": booking.start_datetime,
+            "is_currently_in_office": checked_in_at is not None,
+            "checked_in_at": checked_in_at,
         }
-    subscription_rows = (
+    subscription_query = (
         db.query(Subscription, User, Space, Location)
         .join(User, User.id == Subscription.user_id)
         .join(Space, Space.id == Subscription.space_id)
@@ -681,13 +736,13 @@ def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> li
             Subscription.start_date <= today,
             or_(Subscription.end_date.is_(None), Subscription.end_date >= today),
         )
-        .order_by(Subscription.start_date.desc())
-        .all()
     )
+    subscription_rows = _directory_search_filter(subscription_query, search).order_by(Subscription.start_date.desc()).all()
     for subscription, member, space, location in subscription_rows:
         key = (member.id, location.id)
         if key in out:
             continue
+        checked_in_at = presence_by_key.get(key)
         out[key] = {
             "member_public_id": member.public_id,
             "name": _display_name(member),
@@ -698,5 +753,10 @@ def directory_items_for_member(db: Session, user: User, *, days: int = 90) -> li
             "space_name": _space_name(space),
             "space_type": getattr(space.space_type, "value", space.space_type),
             "last_seen_at": datetime.combine(subscription.start_date, datetime.min.time(), tzinfo=timezone.utc),
+            "is_currently_in_office": checked_in_at is not None,
+            "checked_in_at": checked_in_at,
         }
-    return list(out.values())
+    rows = list(out.values())
+    if currently_in_office:
+        rows = [row for row in rows if row["is_currently_in_office"]]
+    return rows
