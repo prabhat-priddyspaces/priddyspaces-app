@@ -559,10 +559,11 @@ def send_card_expiring_email(
 ) -> OutboundMessage | None:
     if not user.email:
         return None
-    exp_month = method.exp_month or ""
-    exp_year = method.exp_year or ""
-    expiry = f"{exp_month:02d}/{exp_year}" if isinstance(exp_month, int) and exp_year else str(exp_year or "")
-    state = "expired" if expired else "will expire soon"
+    exp_month = method.exp_month if isinstance(method.exp_month, int) else None
+    exp_year = method.exp_year if isinstance(method.exp_year, int) else None
+    expiry = f"{exp_month:02d}/{exp_year}" if exp_month and exp_year else "missing"
+    expiry_display = expiry if expiry != "missing" else "missing expiration details"
+    state = "has expired" if expired else "has incomplete expiration details" if expiry == "missing" else "will expire soon"
     lines = [
         f"Hi {user.first_name or user.full_name or user.email},",
         f"Your {method.brand or 'card'} ending in {method.last4 or 'unknown'} {state}.",
@@ -584,9 +585,9 @@ def send_card_expiring_email(
             "card": {
                 "brand": method.brand or "card",
                 "last4": method.last4 or "",
-                "exp_month": str(exp_month),
-                "exp_year": str(exp_year),
-                "expiry": expiry,
+                "exp_month": str(exp_month or ""),
+                "exp_year": str(exp_year or ""),
+                "expiry": expiry_display,
             }
         },
         tracking_context={

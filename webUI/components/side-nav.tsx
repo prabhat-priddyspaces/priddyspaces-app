@@ -17,6 +17,7 @@ const nav = [
   { href: "/owner/locations/new", label: "New Location" },
   { href: "/owner/team", label: "Team" },
   { href: "/owner/payments", label: "Payments" },
+  { href: "/owner/payments/health", label: "Payment Health" },
   { href: "/owner/invoices", label: "Invoices" },
   { href: "/owner/settings/payments", label: "Payment Settings" },
   { href: "/owner/settings/assistant-policies", label: "Assistant Policies" },

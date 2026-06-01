@@ -44,6 +44,7 @@ describe("owner AppShell mobile navigation", () => {
     expect(links.getByText("Attendance")).toBeInTheDocument();
     expect(links.getByText("Locations")).toBeInTheDocument();
     expect(links.getByText("Invoices")).toBeInTheDocument();
+    expect(links.getByText("Payment health")).toBeInTheDocument();
     expect(links.getByText("Members")).toBeInTheDocument();
   });
 });
