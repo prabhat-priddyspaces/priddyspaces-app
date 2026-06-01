@@ -133,6 +133,8 @@ describe("mobile access pass screens", () => {
         space_name: "Conference Room 2",
         space_type: "conference_room",
         last_seen_at: "2026-07-01T10:00:00Z",
+        is_currently_in_office: true,
+        checked_in_at: "2026-07-01T10:05:00Z",
       },
     ]);
     (resolveAccessPass as jest.Mock).mockResolvedValue(resolved);
@@ -170,7 +172,90 @@ describe("mobile access pass screens", () => {
     const screen = render(<MemberDirectoryScreen />);
     expect(await screen.findByText("Peer Member")).toBeTruthy();
     expect(screen.getByText("peer@example.com")).toBeTruthy();
+    expect(screen.getByTestId("mobile-member-presence-dot")).toBeTruthy();
     expect(screen.queryByText("member@example.com")).toBeNull();
+    expect(listMemberDirectory).toHaveBeenCalledWith({}, "token");
+  });
+
+  it("filters mobile directory by location, search, and current office presence", async () => {
+    const onlinePeer = {
+      member_public_id: "member_2",
+      name: "Online Peer",
+      email: "online@example.com",
+      location_public_id: "loc_1",
+      location_name: "Main",
+      space_public_id: "space_1",
+      space_name: "Conference Room 2",
+      space_type: "conference_room",
+      last_seen_at: "2026-07-01T10:00:00Z",
+      is_currently_in_office: true,
+      checked_in_at: "2026-07-01T10:05:00Z",
+    };
+    const offlinePeer = {
+      member_public_id: "member_3",
+      name: "Offline Peer",
+      email: "offline@example.com",
+      location_public_id: "loc_2",
+      location_name: "Annex",
+      space_public_id: "space_2",
+      space_name: "Private Office 1",
+      space_type: "private_office",
+      last_seen_at: "2026-07-01T11:00:00Z",
+      is_currently_in_office: false,
+      checked_in_at: null,
+    };
+    (listMemberDirectory as jest.Mock).mockImplementation(async (filters = {}) => {
+      let rows = [onlinePeer, offlinePeer];
+      if (filters.location_public_id) {
+        rows = rows.filter((row) => row.location_public_id === filters.location_public_id);
+      }
+      if (filters.search) {
+        const term = filters.search.toLowerCase();
+        rows = rows.filter((row) => row.name.toLowerCase().includes(term) || row.email.toLowerCase().includes(term));
+      }
+      if (filters.currently_in_office) {
+        rows = rows.filter((row) => row.is_currently_in_office);
+      }
+      return rows;
+    });
+
+    const screen = render(<MemberDirectoryScreen />);
+    expect(await screen.findByText("Online Peer")).toBeTruthy();
+    expect(screen.getByText("Offline Peer")).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId("mobile-directory-location-loc_2"));
+    await waitFor(() => {
+      expect(listMemberDirectory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ location_public_id: "loc_2" }),
+        "token",
+      );
+    });
+    await waitFor(() => expect(screen.queryByText("Online Peer")).toBeNull());
+    expect(screen.getByText("Offline Peer")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Clear filters"));
+    await waitFor(() => expect(listMemberDirectory).toHaveBeenLastCalledWith({}, "token"));
+
+    fireEvent.changeText(screen.getByPlaceholderText("Search members"), "online");
+    await waitFor(() => {
+      expect(listMemberDirectory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "online" }),
+        "token",
+      );
+    });
+
+    fireEvent.press(screen.getByText("Clear filters"));
+    await waitFor(() => expect(screen.getByText("Offline Peer")).toBeTruthy());
+
+    fireEvent(screen.getByLabelText("In office now"), "valueChange", true);
+    await waitFor(() => {
+      expect(listMemberDirectory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ currently_in_office: true }),
+        "token",
+      );
+    });
+    await waitFor(() => expect(screen.queryByText("Offline Peer")).toBeNull());
+    expect(screen.getByText("Online Peer")).toBeTruthy();
   });
 
   it("requests camera permission, resolves scan, and prevents duplicate check-in", async () => {
