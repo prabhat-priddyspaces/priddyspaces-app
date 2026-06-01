@@ -81,6 +81,7 @@ from app.services.booking_inventory import (
     expand_occurrences,
     is_shared_desk_day_pass,
     instant_booking_allowed,
+    validate_no_exact_duplicate_user_slot,
     validate_occurrences_available,
 )
 from app.services.booking_modes import RECURRING_BOOKING_MODES
@@ -1069,6 +1070,88 @@ def _audit_context_with_actor_email(db: Session, actor_id: int, context: dict | 
     return merged
 
 
+def _append_operator_note(existing: str | None, note: str) -> str:
+    combined = f"{existing.strip()}\n{note}" if existing and existing.strip() else note
+    return combined[:1024]
+
+
+def _cancel_superseded_duplicate_requests(
+    db: Session,
+    req: BookingRequest,
+    *,
+    actor_id: int,
+    acting_as_user_id: int | None,
+    context: dict | None,
+) -> int:
+    if not req.user_id:
+        return 0
+
+    duplicates = (
+        db.query(BookingRequest)
+        .filter(
+            BookingRequest.id != req.id,
+            BookingRequest.user_id == req.user_id,
+            BookingRequest.space_id == req.space_id,
+            BookingRequest.start_datetime == req.start_datetime,
+            BookingRequest.end_datetime == req.end_datetime,
+            BookingRequest.status.in_(
+                [
+                    BookingRequestStatus.REQUESTED,
+                    BookingRequestStatus.PAYMENT_FAILED,
+                ]
+            ),
+        )
+        .all()
+    )
+    if not duplicates:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    audit_context = _audit_context_with_actor_email(db, actor_id, context)
+    for duplicate in duplicates:
+        before_status = duplicate.status
+        booking = _booking_for_request(db, duplicate)
+        if booking and booking.status != BookingStatus.CANCELED:
+            booking.status = BookingStatus.CANCELED
+            db.add(booking)
+        if duplicate.booking_series_id:
+            db.query(Booking).filter(
+                Booking.booking_series_id == duplicate.booking_series_id,
+                Booking.status == BookingStatus.PENDING,
+            ).update({Booking.status: BookingStatus.CANCELED}, synchronize_session=False)
+            series = db.query(BookingSeries).filter(BookingSeries.id == duplicate.booking_series_id).first()
+            if series and series.status != "cancelled":
+                series.status = "cancelled"
+                db.add(series)
+        release_redemption_for_request(db, duplicate, reason="released")
+        revoke_access_passes_for_request(db, duplicate, reason="booking_request_superseded")
+        duplicate.status = BookingRequestStatus.CANCELLED
+        duplicate.cancelled_at = now
+        duplicate.payment_status = duplicate.payment_status or "superseded"
+        duplicate.operator_notes = _append_operator_note(
+            duplicate.operator_notes,
+            f"Superseded by confirmed booking request {req.public_id}.",
+        )
+        db.add(duplicate)
+        write_audit_log(
+            db,
+            actor_id=actor_id,
+            action="booking_request_superseded",
+            entity_type="booking_request",
+            entity_public_id=duplicate.public_id,
+            before_state={"status": before_status.value},
+            after_state={
+                "status": BookingRequestStatus.CANCELLED.value,
+                "superseded_by": req.public_id,
+            },
+            acting_as_user_id=acting_as_user_id,
+            context=audit_context,
+        )
+
+    db.commit()
+    return len(duplicates)
+
+
 def _owner_accessible_request(
     db: Session,
     public_id: str,
@@ -1464,6 +1547,13 @@ def create_booking_request(
         recurrence_until_date=payload.recurrence.until_date if payload.recurrence else None,
     )
 
+    validate_no_exact_duplicate_user_slot(
+        db,
+        user_id=user.id,
+        space_id=space.id,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
+    )
     _validate_locked_occurrences_available(
         db,
         space=space,
@@ -1789,10 +1879,32 @@ def approve_booking_request(
 
     if req.status == BookingRequestStatus.APPROVED and req.booking_id:
         booking = db.query(Booking).filter(Booking.id == req.booking_id).first()
+        _run_booking_request_side_effect(
+            db,
+            "cancel_superseded_duplicate_requests",
+            lambda: _cancel_superseded_duplicate_requests(
+                db,
+                req,
+                actor_id=actor_id,
+                acting_as_user_id=acting_as_user_id,
+                context=context,
+            ),
+        )
         return _to_out(req, space, booking, db, include_email_delivery=True)
 
     if req.status == BookingRequestStatus.APPROVED and is_membership_request:
         # Already approved memberships have no booking row; just return.
+        _run_booking_request_side_effect(
+            db,
+            "cancel_superseded_duplicate_requests",
+            lambda: _cancel_superseded_duplicate_requests(
+                db,
+                req,
+                actor_id=actor_id,
+                acting_as_user_id=acting_as_user_id,
+                context=context,
+            ),
+        )
         return _to_out(req, space, None, db, include_email_delivery=True)
 
     if req.status not in (BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED):
@@ -1813,6 +1925,14 @@ def approve_booking_request(
             end_datetime=req.end_datetime,
             location=location,
             space=space,
+        )
+        validate_no_exact_duplicate_user_slot(
+            db,
+            user_id=guest_user.id,
+            space_id=space.id,
+            start_datetime=occurrences[0].start_datetime,
+            end_datetime=occurrences[0].end_datetime,
+            ignore_booking_request_id=req.id,
         )
         _validate_locked_occurrences_available(
             db,
@@ -1861,6 +1981,14 @@ def approve_booking_request(
                 location=location,
                 space=space,
             )
+            validate_no_exact_duplicate_user_slot(
+                db,
+                user_id=req.user_id,
+                space_id=space.id,
+                start_datetime=occurrences[0].start_datetime,
+                end_datetime=occurrences[0].end_datetime,
+                ignore_booking_request_id=req.id,
+            )
             _validate_locked_occurrences_available(
                 db,
                 space=space,
@@ -1893,6 +2021,14 @@ def approve_booking_request(
             end_datetime=req.end_datetime,
             location=location,
             space=space,
+        )
+        validate_no_exact_duplicate_user_slot(
+            db,
+            user_id=req.user_id,
+            space_id=space.id,
+            start_datetime=occurrences[0].start_datetime,
+            end_datetime=occurrences[0].end_datetime,
+            ignore_booking_request_id=req.id,
         )
         _validate_locked_occurrences_available(
             db,
@@ -1932,6 +2068,17 @@ def approve_booking_request(
         after_status = req.status
     if req.status == BookingRequestStatus.APPROVED:
         booking_for_email = db.query(Booking).filter(Booking.id == req.booking_id).first() if req.booking_id else None
+        _run_booking_request_side_effect(
+            db,
+            "cancel_superseded_duplicate_requests",
+            lambda: _cancel_superseded_duplicate_requests(
+                db,
+                req,
+                actor_id=actor_id,
+                acting_as_user_id=acting_as_user_id,
+                context=context,
+            ),
+        )
         _run_booking_request_side_effect(
             db,
             "ensure_access_passes",
@@ -2065,7 +2212,7 @@ def retry_booking_request_payment(
             raise HTTPException(status_code=400, detail="Update payment method before retrying")
     else:
         require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
-    actor_id, _acting_as_user_id, _context = get_audit_actor_context(db, token)
+    actor_id, acting_as_user_id, context = get_audit_actor_context(db, token)
     _expire_failed_payment_hold_or_raise(db, req, space, location, actor_user_id=actor_id)
     if req.status != BookingRequestStatus.PAYMENT_FAILED:
         raise HTTPException(status_code=400, detail="Request is not payment failed")
@@ -2076,6 +2223,14 @@ def retry_booking_request_payment(
             end_datetime=req.end_datetime,
             location=location,
             space=space,
+        )
+        validate_no_exact_duplicate_user_slot(
+            db,
+            user_id=req.user_id,
+            space_id=space.id,
+            start_datetime=occurrences[0].start_datetime,
+            end_datetime=occurrences[0].end_datetime,
+            ignore_booking_request_id=req.id,
         )
         _validate_locked_occurrences_available(
             db,
@@ -2102,6 +2257,17 @@ def retry_booking_request_payment(
     req, booking, _payment = charge_booking_request(db, req, operator_notes=payload.operator_notes)
     if req.status == BookingRequestStatus.APPROVED:
         _activate_booking_series_if_needed(db, req)
+        _run_booking_request_side_effect(
+            db,
+            "cancel_superseded_duplicate_requests",
+            lambda: _cancel_superseded_duplicate_requests(
+                db,
+                req,
+                actor_id=actor_id,
+                acting_as_user_id=acting_as_user_id,
+                context=context,
+            ),
+        )
         _run_booking_request_side_effect(
             db,
             "ensure_access_passes",

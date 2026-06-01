@@ -9,8 +9,10 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import {
   CalendarEvent,
+  CalendarSlotGroup,
   formatCurrency,
   formatDateTime,
+  slotEventClass,
   statusColorClass,
 } from "@/lib/calendar";
 import { cn } from "@/lib/utils";
@@ -18,7 +20,8 @@ import { cn } from "@/lib/utils";
 type Viewer = "owner" | "admin" | "member";
 
 interface EventQuickActionPopoverProps {
-  event: CalendarEvent;
+  event?: CalendarEvent | null;
+  slot?: CalendarSlotGroup | null;
   onClose: () => void;
   onChanged: () => void;
   viewer?: Viewer;
@@ -29,6 +32,7 @@ type ActionState = { busy: boolean; error: string | null; message: string | null
 
 export function EventQuickActionPopover({
   event,
+  slot,
   onClose,
   onChanged,
   viewer = "owner",
@@ -60,158 +64,264 @@ export function EventQuickActionPopover({
     }
   }
 
-  const { kind, public_id } = event;
+  const events = slot?.events ?? (event ? [event] : []);
+  if (events.length === 0) return null;
+
+  const primary = events[0];
+  const sections = eventSections(events);
+  const headerKind = slot ? "SLOT" : primary.kind.toUpperCase();
+  const headerTitle = slot ? slot.label : primary.member.name;
+  const headerSub = slot
+    ? `${slot.space_name || "Unnamed"} · ${slot.location_name}`
+    : primary.member.email;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <Card className="w-full max-w-md p-5 sm:rounded-lg">
+      <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto p-5 sm:rounded-lg">
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-sm text-textMuted">{event.kind.toUpperCase()}</div>
-            {event.member.public_id && memberHref ? (
+            <div className="text-sm text-textMuted">{headerKind}</div>
+            {!slot && primary.member.public_id && memberHref ? (
               <Link
-                href={memberHref(event.member.public_id)}
+                href={memberHref(primary.member.public_id)}
                 className="text-base font-semibold text-textPrimary hover:text-accent hover:underline"
               >
-                {event.member.name}
+                {headerTitle}
               </Link>
             ) : (
-              <div className="text-base font-semibold text-textPrimary">{event.member.name}</div>
+              <div className="text-base font-semibold text-textPrimary">{headerTitle}</div>
             )}
-            <div className="text-xs text-textMuted">{event.member.email}</div>
+            <div className="text-xs text-textMuted">{headerSub}</div>
           </div>
-          <span
-            className={cn(
-              "rounded-sm border px-2 py-0.5 text-xs",
-              statusColorClass(event.status)
-            )}
-          >
-            {event.status}
-          </span>
+          {slot ? (
+            <span className={cn("rounded-sm border px-2 py-0.5 text-xs", slotEventClass(slot.tone))}>
+              {slot.detailLabel || `${events.length} records`}
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "rounded-sm border px-2 py-0.5 text-xs",
+                statusColorClass(primary.status)
+              )}
+            >
+              {primary.status}
+            </span>
+          )}
         </div>
 
         <div className="mt-4 grid gap-1 text-sm text-textPrimary">
           <div>
             <span className="text-textMuted">Space: </span>
-            {event.space_name || "Unnamed"} · {event.location_name}
+            {(slot?.space_name ?? primary.space_name) || "Unnamed"} · {slot?.location_name ?? primary.location_name}
           </div>
           <div>
             <span className="text-textMuted">When: </span>
-            {formatDateTime(event.start, null)} – {formatDateTime(event.end, null)}
+            {formatDateTime(slot?.start ?? primary.start, null)} – {formatDateTime(slot?.end ?? primary.end, null)}
           </div>
-          {event.amount_cents != null ? (
-            <div>
-              <span className="text-textMuted">Amount: </span>
-              {formatCurrency(event.amount_cents)}
-            </div>
-          ) : null}
-          {event.payment_status ? (
-            <div>
-              <span className="text-textMuted">Payment: </span>
-              {event.payment_status}
-            </div>
-          ) : null}
-          {event.plan_name ? (
-            <div>
-              <span className="text-textMuted">Plan: </span>
-              {event.plan_name}
-            </div>
-          ) : null}
         </div>
 
         {state.error ? <div className="mt-3 text-sm text-error">{state.error}</div> : null}
         {state.message ? <div className="mt-3 text-sm text-success">{state.message}</div> : null}
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          {viewer !== "member" && kind === "request" && event.status === "request.requested" ? (
-            <>
-              <Button
-                size="sm"
-                onClick={() =>
-                  call(`/api/booking-requests/${public_id}/approve`, {
-                    method: "POST",
-                    body: JSON.stringify({ operator_notes: null }),
-                  })
-                }
-                disabled={state.busy}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  call(`/api/booking-requests/${public_id}/reject`, {
-                    method: "POST",
-                    body: JSON.stringify({ operator_notes: null }),
-                  })
-                }
-                disabled={state.busy}
-              >
-                Reject
-              </Button>
-            </>
-          ) : null}
-          {viewer !== "member" && kind === "request" && event.status === "request.payment_failed" ? (
-            <Button
-              size="sm"
-              onClick={() =>
-                call(`/api/booking-requests/${public_id}/retry-payment`, {
-                  method: "POST",
-                  body: JSON.stringify({ operator_notes: null }),
-                })
-              }
-              disabled={state.busy}
-            >
-              Retry payment
-            </Button>
-          ) : null}
-          {kind === "booking" && event.status === "booking.confirmed" ? (
-            <>
-              {viewer !== "member" ? (
-                !event.checked_in ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => call(`/api/bookings/${public_id}/check-in`, { method: "POST" })}
-                    disabled={state.busy}
+        <div className="mt-5 grid gap-4">
+          {sections.map((section) => (
+            <div key={section.title} className="grid gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-textMuted">
+                {section.title} · {section.events.length}
+              </div>
+              <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                {section.events.map((sectionEvent) => (
+                  <div
+                    key={`${sectionEvent.kind}-${sectionEvent.public_id}`}
+                    className="grid gap-3 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
                   >
-                    Check in
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => call(`/api/bookings/${public_id}/check-out`, { method: "POST" })}
-                    disabled={state.busy}
-                  >
-                    Check out
-                  </Button>
-                )
-              ) : null}
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => call(`/api/bookings/${public_id}/cancel`, { method: "POST" })}
-                disabled={state.busy}
-              >
-                Cancel booking
-              </Button>
-            </>
-          ) : null}
-          <a
-            href={`mailto:${event.member.email}?subject=Your booking at ${encodeURIComponent(
-              event.location_name
-            )}`}
-            className="inline-flex h-9 items-center rounded-sm border border-border bg-white px-3 text-xs text-textSecondary hover:bg-surface2"
-          >
-            Email member
-          </a>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {sectionEvent.member.public_id && memberHref ? (
+                          <Link
+                            href={memberHref(sectionEvent.member.public_id)}
+                            className="text-sm font-semibold text-textPrimary hover:text-accent hover:underline"
+                          >
+                            {sectionEvent.member.name}
+                          </Link>
+                        ) : (
+                          <span className="text-sm font-semibold text-textPrimary">
+                            {sectionEvent.member.name}
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            "rounded-sm border px-2 py-0.5 text-[11px]",
+                            statusColorClass(sectionEvent.status)
+                          )}
+                        >
+                          {sectionEvent.status}
+                        </span>
+                      </div>
+                      <div className="truncate text-xs text-textMuted">{sectionEvent.member.email}</div>
+                      {eventMetaLine(sectionEvent) ? (
+                        <div className="mt-1 text-xs text-textSecondary">
+                          {eventMetaLine(sectionEvent)}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <EventActions
+                        event={sectionEvent}
+                        viewer={viewer}
+                        busy={state.busy}
+                        call={call}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 flex justify-end">
           <Button size="sm" variant="ghost" onClick={onClose}>
             Close
           </Button>
         </div>
       </Card>
     </div>
+  );
+}
+
+function eventSections(events: CalendarEvent[]): { title: string; events: CalendarEvent[] }[] {
+  const failed = events.filter((event) => event.status === "request.payment_failed");
+  const pending = events.filter(
+    (event) => event.status === "request.requested" || event.status === "booking.pending"
+  );
+  const booked = events.filter(
+    (event) => event.kind === "booking" && event.status === "booking.confirmed"
+  );
+  const memberships = events.filter(
+    (event) => event.kind === "subscription" && event.status === "subscription.active"
+  );
+  const known = new Set([...failed, ...pending, ...booked, ...memberships]);
+  const other = events.filter((event) => !known.has(event));
+  return [
+    { title: "Payment failed", events: failed },
+    { title: "Pending", events: pending },
+    { title: "Booked", events: booked },
+    { title: "Memberships", events: memberships },
+    { title: "Other", events: other },
+  ].filter((section) => section.events.length > 0);
+}
+
+function eventMetaLine(event: CalendarEvent): string {
+  return [
+    event.amount_cents != null ? formatCurrency(event.amount_cents) : null,
+    event.payment_status ? `Payment: ${event.payment_status}` : null,
+    event.plan_name ? `Plan: ${event.plan_name}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function EventActions({
+  event,
+  viewer,
+  busy,
+  call,
+}: {
+  event: CalendarEvent;
+  viewer: Viewer;
+  busy: boolean;
+  call: (path: string, init?: RequestInit) => Promise<void>;
+}) {
+  const { kind, public_id } = event;
+  return (
+    <>
+      {viewer !== "member" && kind === "request" && event.status === "request.requested" ? (
+        <>
+          <Button
+            size="sm"
+            onClick={() =>
+              call(`/api/booking-requests/${public_id}/approve`, {
+                method: "POST",
+                body: JSON.stringify({ operator_notes: null }),
+              })
+            }
+            disabled={busy}
+          >
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              call(`/api/booking-requests/${public_id}/reject`, {
+                method: "POST",
+                body: JSON.stringify({ operator_notes: null }),
+              })
+            }
+            disabled={busy}
+          >
+            Reject
+          </Button>
+        </>
+      ) : null}
+      {viewer !== "member" && kind === "request" && event.status === "request.payment_failed" ? (
+        <Button
+          size="sm"
+          onClick={() =>
+            call(`/api/booking-requests/${public_id}/retry-payment`, {
+              method: "POST",
+              body: JSON.stringify({ operator_notes: null }),
+            })
+          }
+          disabled={busy}
+        >
+          Retry payment
+        </Button>
+      ) : null}
+      {kind === "booking" && event.status === "booking.confirmed" ? (
+        <>
+          {viewer !== "member" ? (
+            !event.checked_in ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => call(`/api/bookings/${public_id}/check-in`, { method: "POST" })}
+                disabled={busy}
+              >
+                Check in
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => call(`/api/bookings/${public_id}/check-out`, { method: "POST" })}
+                disabled={busy}
+              >
+                Check out
+              </Button>
+            )
+          ) : null}
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => call(`/api/bookings/${public_id}/cancel`, { method: "POST" })}
+            disabled={busy}
+          >
+            Cancel booking
+          </Button>
+        </>
+      ) : null}
+      {viewer !== "member" ? (
+        <a
+          href={`mailto:${event.member.email}?subject=Your booking at ${encodeURIComponent(
+            event.location_name
+          )}`}
+          className="inline-flex h-9 items-center rounded-sm border border-border bg-white px-3 text-xs text-textSecondary hover:bg-surface2"
+        >
+          Email member
+        </a>
+      ) : null}
+    </>
   );
 }

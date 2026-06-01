@@ -197,6 +197,8 @@ test("owner creates a cash booking and sees it on the calendar", async ({ page }
 
   await page.goto("/owner/calendar");
   await expect(page.getByText("Board Room").last()).toBeVisible();
+  await expect(page.getByText("1 booked", { exact: true }).first()).toBeVisible();
+  await page.getByText("1 booked", { exact: true }).first().click();
   await expect(page.getByText("Walk In").first()).toBeVisible();
 });
 
@@ -215,6 +217,8 @@ test("owner sends a payment link and the pending hold appears", async ({ page })
 
   await page.goto("/owner/calendar");
   await expect(page.getByText("Board Room").last()).toBeVisible();
+  await expect(page.getByText("1 pending", { exact: true }).first()).toBeVisible();
+  await page.getByText("1 pending", { exact: true }).first().click();
   await expect(page.getByText("Walk In").first()).toBeVisible();
   await expect(page.getByText("1 events")).toBeVisible();
 });
@@ -273,5 +277,7 @@ test("public payment link completes payment and the booking becomes confirmed", 
 
   await mockSession(page, "owner");
   await page.goto("/owner/calendar");
+  await expect(page.getByText("1 booked", { exact: true }).first()).toBeVisible();
+  await page.getByText("1 booked", { exact: true }).first().click();
   await expect(page.getByText("Walk In")).toBeVisible();
 });

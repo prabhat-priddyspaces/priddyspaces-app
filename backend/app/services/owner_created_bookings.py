@@ -37,6 +37,7 @@ from app.services.booking_inventory import (
     booking_blocks_inventory,
     create_pending_booking_hold,
     expand_occurrences,
+    validate_no_exact_duplicate_user_slot,
     validate_occurrences_available,
 )
 from app.services.booking_payments import (
@@ -379,6 +380,13 @@ def create_owner_booking(
         seats_requested=payload.seats_requested,
     )
     member = resolve_owner_booking_member(db, payload, organization, actor.id)
+    validate_no_exact_duplicate_user_slot(
+        db,
+        user_id=member.id,
+        space_id=space.id,
+        start_datetime=occurrences[0].start_datetime,
+        end_datetime=occurrences[0].end_datetime,
+    )
     snapshot = estimate_owner_booking_snapshot(
         db,
         space=space,

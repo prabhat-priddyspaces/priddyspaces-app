@@ -35,6 +35,7 @@ class CalendarEvent(BaseModel):
     no_show: Optional[bool] = None
     request_kind: Optional[str] = None
     plan_name: Optional[str] = None
+    seats_requested: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,6 +47,7 @@ class CalendarSpace(BaseModel):
     location_public_id: str
     location_name: str
     location_timezone: Optional[str] = None
+    capacity: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

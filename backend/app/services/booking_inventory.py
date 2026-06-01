@@ -315,6 +315,44 @@ def validate_occurrences_available(
             raise HTTPException(status_code=409, detail="Booking request already exists for that time")
 
 
+def validate_no_exact_duplicate_user_slot(
+    db: Session,
+    *,
+    user_id: int,
+    space_id: int,
+    start_datetime: datetime,
+    end_datetime: datetime,
+    ignore_booking_request_id: int | None = None,
+) -> None:
+    start_utc = as_utc(start_datetime)
+    end_utc = as_utc(end_datetime)
+    request_query = db.query(BookingRequest).filter(
+        BookingRequest.user_id == user_id,
+        BookingRequest.space_id == space_id,
+        BookingRequest.status.in_([BookingRequestStatus.REQUESTED, BookingRequestStatus.PAYMENT_FAILED]),
+        BookingRequest.start_datetime == start_utc,
+        BookingRequest.end_datetime == end_utc,
+    )
+    if ignore_booking_request_id:
+        request_query = request_query.filter(BookingRequest.id != ignore_booking_request_id)
+    if request_query.first() is not None:
+        raise HTTPException(status_code=409, detail="Booking request already exists for that time")
+
+    booking_query = db.query(Booking).filter(
+        Booking.user_id == user_id,
+        Booking.space_id == space_id,
+        Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
+        Booking.start_datetime == start_utc,
+        Booking.end_datetime == end_utc,
+    )
+    if ignore_booking_request_id:
+        booking_query = booking_query.filter(
+            or_(Booking.booking_request_id.is_(None), Booking.booking_request_id != ignore_booking_request_id)
+        )
+    if booking_query.first() is not None:
+        raise HTTPException(status_code=409, detail="Booking already exists for that time")
+
+
 def create_pending_booking_hold(
     db: Session,
     *,
