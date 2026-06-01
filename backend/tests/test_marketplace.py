@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -31,6 +31,7 @@ from app.models.location import Location
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.space_image import SpaceImage
+from app.models.subscription import Subscription
 from app.models.subscription_plan import SubscriptionPlan
 
 
@@ -537,6 +538,127 @@ def test_public_location_search_derives_private_office_pricing(db_session, clien
     assert capped.json()["meta"]["total_locations"] == 0
 
 
+def test_public_private_office_marketplace_excludes_leased_inventory(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    private_office = seeded["private_office"]
+    today = date.today()
+    lease = Subscription(
+        user_id=1,
+        space_id=private_office.id,
+        tenant_id=private_office.tenant_id,
+        status="active",
+        start_date=today - timedelta(days=1),
+        end_date=today + timedelta(days=30),
+        booking_mode="private_office_lease",
+    )
+    db_session.add(lease)
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get("/api/marketplace/locations?category=private_office")
+
+    assert response.status_code == 200
+    payload = response.json()
+    public_ids = [
+        space["public_id"]
+        for location in payload["results"]
+        for space in location["spaces"]
+    ]
+    assert private_office.public_id not in public_ids
+
+    detail = client.get(
+        f"/api/marketplace/locations/{seeded['coworking_location'].public_id}?category=private_office"
+    )
+    assert detail.status_code == 404
+
+    lease.status = "canceled"
+    db_session.add(lease)
+    db_session.commit()
+
+    reopened = client.get("/api/marketplace/locations?category=private_office")
+    assert reopened.status_code == 200
+    reopened_public_ids = [
+        space["public_id"]
+        for location in reopened.json()["results"]
+        for space in location["spaces"]
+    ]
+    assert private_office.public_id in reopened_public_ids
+
+    lease.status = "expired"
+    db_session.add(lease)
+    db_session.commit()
+
+    expired = client.get("/api/marketplace/locations?category=private_office")
+    expired_public_ids = [
+        space["public_id"]
+        for location in expired.json()["results"]
+        for space in location["spaces"]
+    ]
+    assert private_office.public_id in expired_public_ids
+
+
+def test_public_private_office_marketplace_honors_searched_move_in_date(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    private_office = seeded["private_office"]
+    db_session.add(
+        Subscription(
+            user_id=1,
+            space_id=private_office.id,
+            tenant_id=private_office.tenant_id,
+            status="active",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 31),
+            booking_mode="private_office_lease",
+        )
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    blocked = client.get("/api/marketplace/locations?category=private_office&date=2026-05-15")
+    open_after_lease = client.get("/api/marketplace/locations?category=private_office&date=2026-06-15")
+
+    blocked_public_ids = [
+        space["public_id"]
+        for location in blocked.json()["results"]
+        for space in location["spaces"]
+    ]
+    open_public_ids = [
+        space["public_id"]
+        for location in open_after_lease.json()["results"]
+        for space in location["spaces"]
+    ]
+    assert private_office.public_id not in blocked_public_ids
+    assert private_office.public_id in open_public_ids
+
+
+def test_public_private_office_marketplace_excludes_requested_lease_inventory(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    private_office = seeded["private_office"]
+    db_session.add(
+        BookingRequest(
+            tenant_id=private_office.tenant_id,
+            user_id=1,
+            space_id=private_office.id,
+            start_datetime=datetime(2026, 5, 1, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            status=BookingRequestStatus.REQUESTED,
+            request_kind="lease_purchase",
+            seats_requested=1,
+        )
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get("/api/marketplace/locations?category=private_office&date=2026-05-15")
+
+    public_ids = [
+        space["public_id"]
+        for location in response.json()["results"]
+        for space in location["spaces"]
+    ]
+    assert private_office.public_id not in public_ids
+
+
 def test_public_location_search_includes_locations_without_coordinates(db_session, client_factory):
     seeded = _seed_public_location_marketplace(db_session)
     client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
@@ -864,6 +986,98 @@ def test_public_space_availability_marks_day_fully_blocked_by_bookings(db_sessio
         {"start": "09:00", "end": "12:00"},
         {"start": "12:00", "end": "18:00"},
     ]
+
+
+def test_public_space_availability_counts_shared_desk_remaining_seats(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    shared_desk = seeded["shared_desk_secondary"]
+    booking_request = BookingRequest(
+        tenant_id=shared_desk.tenant_id,
+        user_id=1,
+        space_id=shared_desk.id,
+        start_datetime=datetime(2026, 4, 20, 13, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2026, 4, 20, 22, 0, tzinfo=timezone.utc),
+        status=BookingRequestStatus.APPROVED,
+        request_kind="daily_booking",
+        seats_requested=2,
+    )
+    db_session.add(booking_request)
+    db_session.flush()
+    db_session.add(
+        Booking(
+            user_id=1,
+            space_id=shared_desk.id,
+            tenant_id=shared_desk.tenant_id,
+            start_datetime=datetime(2026, 4, 20, 13, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 20, 22, 0, tzinfo=timezone.utc),
+            inventory_start_datetime=datetime(2026, 4, 20, 13, 0, tzinfo=timezone.utc),
+            inventory_end_datetime=datetime(2026, 4, 20, 22, 0, tzinfo=timezone.utc),
+            booking_request_id=booking_request.id,
+            status=BookingStatus.CONFIRMED,
+        )
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get(
+        f"/api/marketplace/spaces/{shared_desk.public_id}/availability?from=2026-04-20&to=2026-04-20"
+    )
+
+    assert response.status_code == 200
+    day = response.json()["days"][0]
+    assert day["capacity"] == 3
+    assert day["booked_seats"] == 2
+    assert day["remaining_seats"] == 1
+    assert day["fully_blocked"] is False
+    assert day["busy_intervals"] == []
+
+    db_session.add(
+        BookingRequest(
+            tenant_id=shared_desk.tenant_id,
+            user_id=1,
+            space_id=shared_desk.id,
+            start_datetime=datetime(2026, 4, 20, 13, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 20, 22, 0, tzinfo=timezone.utc),
+            status=BookingRequestStatus.REQUESTED,
+            request_kind="daily_booking",
+            seats_requested=1,
+        )
+    )
+    db_session.commit()
+
+    sold_out = client.get(
+        f"/api/marketplace/spaces/{shared_desk.public_id}/availability?from=2026-04-20&to=2026-04-20"
+    )
+    sold_out_day = sold_out.json()["days"][0]
+    assert sold_out_day["booked_seats"] == 3
+    assert sold_out_day["remaining_seats"] == 0
+    assert sold_out_day["fully_blocked"] is True
+    assert sold_out_day["busy_intervals"] == [{"start": "09:00", "end": "18:00"}]
+
+
+def test_public_space_availability_treats_canceling_private_office_lease_as_blocking(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    private_office = seeded["private_office"]
+    db_session.add(
+        Subscription(
+            user_id=1,
+            space_id=private_office.id,
+            tenant_id=private_office.tenant_id,
+            status="canceling",
+            start_date=date(2026, 4, 1),
+            end_date=date(2026, 4, 30),
+            booking_mode="private_office_lease",
+        )
+    )
+    db_session.commit()
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get(
+        f"/api/marketplace/spaces/{private_office.public_id}/availability?from=2026-04-20&to=2026-04-20"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["days"][0]["fully_blocked"] is True
 
 
 def test_public_space_availability_returns_daily_granularity(db_session, client_factory):

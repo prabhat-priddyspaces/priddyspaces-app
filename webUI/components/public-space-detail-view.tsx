@@ -381,12 +381,38 @@ export function PublicSpaceDetailView({
   }, [selectedDay, openWindow]);
 
   const allDayDisabled = !selectedDay || dayHasConflict || dayOpenSpan == null;
+  const selectedSeatCapacity = isSharedDesk
+    ? selectedDay?.capacity ?? detail?.space.capacity ?? 1
+    : null;
+  const selectedRemainingSeats = isSharedDesk
+    ? selectedDay?.remaining_seats ?? selectedSeatCapacity ?? 1
+    : null;
+  const maxSeatQuantity = isSharedDesk
+    ? Math.max(0, selectedRemainingSeats ?? selectedSeatCapacity ?? 1)
+    : 1;
+  const seatAvailabilityText = isSharedDesk
+    ? maxSeatQuantity <= 0
+      ? "Sold out for the selected day."
+      : `${maxSeatQuantity} ${maxSeatQuantity === 1 ? "seat" : "seats"} available for the selected day.`
+    : null;
 
   useEffect(() => {
     if (allDay && allDayDisabled) {
       setAllDay(false);
     }
   }, [allDay, allDayDisabled]);
+
+  useEffect(() => {
+    if (!isSharedDesk) return;
+    if (maxSeatQuantity <= 0) {
+      setSeatQuantity("1");
+      return;
+    }
+    const requested = Math.max(1, Number(seatQuantity || 1));
+    if (!Number.isFinite(requested) || requested > maxSeatQuantity) {
+      setSeatQuantity(String(maxSeatQuantity));
+    }
+  }, [isSharedDesk, maxSeatQuantity, seatQuantity]);
 
   const hours = useMemo(() => {
     if (allDay) return dayOpenSpan ?? 0;
@@ -396,7 +422,12 @@ export function PublicSpaceDetailView({
   }, [allDay, dayOpenSpan, startTime, endTime]);
 
   const volumeDiscounts = useMemo(() => detail?.space.volume_discounts ?? [], [detail?.space.volume_discounts]);
-  const bookingQuantity = isSharedDesk ? Math.max(1, Number(seatQuantity || 1)) : 1;
+  const bookingQuantity = isSharedDesk
+    ? Math.min(
+        Math.max(1, Number(seatQuantity || 1)),
+        Math.max(1, maxSeatQuantity || 1),
+      )
+    : 1;
 
   const breakdown = useMemo(() => {
     if (allDay) {
@@ -535,6 +566,10 @@ export function PublicSpaceDetailView({
     if (openEnd <= openStart) return false;
     if (allDay) {
       if (freshDay.fully_blocked) return false;
+      if (isSharedDesk && freshDay.remaining_seats != null) {
+        const requestedSeats = Math.max(1, Number(seatQuantity || 1));
+        if (requestedSeats > freshDay.remaining_seats) return false;
+      }
       return !(freshDay.busy_intervals ?? []).some((busy) => {
         const busyStart = Math.max(timeToMinutes(busy.start), openStart);
         const busyEnd = Math.min(timeToMinutes(busy.end), openEnd);
@@ -662,6 +697,7 @@ export function PublicSpaceDetailView({
         },
         token,
       );
+      await fetchAndStoreAvailability().catch(() => null);
       router.push("/member/requests");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reservation failed");
@@ -676,6 +712,16 @@ export function PublicSpaceDetailView({
     }
     if (!date) {
       setError("Choose a date before reserving.");
+      return;
+    }
+    if (isSharedDesk && maxSeatQuantity <= 0) {
+      setError("No day-pass seats are available for this date.");
+      return;
+    }
+    if (isSharedDesk && Math.max(1, Number(seatQuantity || 1)) > maxSeatQuantity) {
+      setError(
+        `Only ${maxSeatQuantity} ${maxSeatQuantity === 1 ? "seat is" : "seats are"} available for this date.`,
+      );
       return;
     }
 
@@ -1243,11 +1289,19 @@ export function PublicSpaceDetailView({
                       <input
                         type="number"
                         min={1}
-                        max={detail.space.capacity || 1}
+                        max={Math.max(1, maxSeatQuantity)}
                         value={seatQuantity}
-                        onChange={(event) => setSeatQuantity(event.target.value)}
-                        className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none"
+                        disabled={maxSeatQuantity <= 0}
+                        onChange={(event) => {
+                          const parsed = Number(event.target.value || 1);
+                          const next = Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+                          setSeatQuantity(String(Math.min(next, Math.max(1, maxSeatQuantity))));
+                        }}
+                        className="h-11 rounded-2xl border border-line bg-surface px-3 text-sm font-medium text-text outline-none disabled:cursor-not-allowed disabled:opacity-60"
                       />
+                      {seatAvailabilityText ? (
+                        <span className="text-xs font-normal text-text-3">{seatAvailabilityText}</span>
+                      ) : null}
                     </label>
                   ) : null}
 
@@ -1454,6 +1508,9 @@ export function PublicSpaceDetailView({
         <GuestCheckoutModal
           payload={guestPayload}
           onClose={() => setGuestCheckoutOpen(false)}
+          onBookingSubmitted={async () => {
+            await fetchAndStoreAvailability().catch(() => undefined);
+          }}
           onSignIn={() => {
             setGuestCheckoutOpen(false);
             router.push(buildLoginHref(buildSelfNextHref()));

@@ -11,7 +11,7 @@ from app.models.booking_request import BookingRequest
 from app.models.enums import BookingRequestStatus, BookingStatus, SpaceType
 from app.models.subscription import Subscription
 
-_BLOCKING_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due"}
+_BLOCKING_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due", "canceling"}
 _EXCLUSIVE_BOOKING_MODES = {"private_office_lease", "suite_lease"}
 
 
@@ -170,8 +170,15 @@ def get_space_availability(
     cur = start_date
     while cur <= end_date:
         intervals = sorted(busy_by_day.get(cur, []))
+        capacity = None
+        booked_seats = None
+        remaining_seats = None
         if shared_desk_capacity is not None:
-            sold_out = sold_seats_by_day.get(cur, 0) >= shared_desk_capacity
+            capacity = shared_desk_capacity
+            sold_seats = max(0, sold_seats_by_day.get(cur, 0))
+            booked_seats = min(shared_desk_capacity, sold_seats)
+            remaining_seats = max(0, shared_desk_capacity - sold_seats)
+            sold_out = remaining_seats <= 0
             fully_blocked = cur in blocked_days or sold_out
             intervals = [(open_start.strftime("%H:%M"), open_end.strftime("%H:%M"))] if fully_blocked else []
         else:
@@ -180,6 +187,9 @@ def get_space_availability(
             {
                 "date": cur.isoformat(),
                 "fully_blocked": fully_blocked,
+                "capacity": capacity,
+                "booked_seats": booked_seats,
+                "remaining_seats": remaining_seats,
                 "busy_intervals": [
                     {"start": s, "end": e} for s, e in intervals
                 ],

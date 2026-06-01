@@ -181,6 +181,9 @@ export interface SpaceAvailabilityInterval {
 export interface SpaceAvailabilityDay {
   date: string;
   fully_blocked: boolean;
+  capacity?: number | null;
+  booked_seats?: number | null;
+  remaining_seats?: number | null;
   busy_intervals: SpaceAvailabilityInterval[];
 }
 

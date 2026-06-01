@@ -186,6 +186,9 @@ class SpaceAvailabilityIntervalOut(BaseModel):
 class SpaceAvailabilityDayOut(BaseModel):
     date: str
     fully_blocked: bool
+    capacity: int | None = None
+    booked_seats: int | None = None
+    remaining_seats: int | None = None
     busy_intervals: list[SpaceAvailabilityIntervalOut]
 
 
