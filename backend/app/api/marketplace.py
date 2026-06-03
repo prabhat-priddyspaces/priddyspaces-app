@@ -36,6 +36,7 @@ from app.services.public_marketplace import (
 )
 from app.services.money import CENT, to_money_decimal
 from app.services.owner_payments import require_space_payment_ready_for_public_surface, space_payment_is_marketplace_ready
+from app.services.platform_auth import get_or_create_platform_settings
 from app.services.space_availability import get_space_availability
 
 router = APIRouter()
@@ -44,6 +45,11 @@ BOOKING_CALENDAR_DAILY_PRICES_FLAG = "booking_calendar_daily_prices_enabled"
 
 
 def _feature_flag_enabled(db: Session, *, tenant_id: int, space_id: int, flag_key: str) -> bool:
+    if flag_key == BOOKING_CALENDAR_DAILY_PRICES_FLAG:
+        settings = get_or_create_platform_settings(db)
+        if settings.booking_calendar_daily_prices_enabled:
+            return True
+
     return db.query(FeatureFlag.id).filter(
         FeatureFlag.flag_key == flag_key,
         FeatureFlag.flag_value.is_(True),

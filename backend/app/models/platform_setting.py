@@ -14,3 +14,4 @@ class PlatformSetting(PublicIdMixin, TimestampMixin, Base):
     priddy_point_value_cents = Column(Integer, nullable=False, default=1, server_default="1")
     priddy_allowed_space_types = Column(JSON, nullable=False, default=lambda: ["shared_desk"])
     priddy_allowed_booking_modes = Column(JSON, nullable=False, default=lambda: ["day_pass"])
+    booking_calendar_daily_prices_enabled = Column(Boolean, nullable=False, default=False, server_default="false")

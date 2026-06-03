@@ -29,6 +29,7 @@ from app.models.organization_amenity import OrganizationAmenity
 from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.platform_team_member import PlatformTeamMember
+from app.services.platform_auth import get_or_create_platform_settings
 from app.models.location import Location
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
@@ -1071,6 +1072,24 @@ def test_public_space_availability_calendar_daily_prices_are_feature_flagged(db_
 
     assert enabled_response.status_code == 200
     assert enabled_response.json()["show_calendar_daily_prices"] is True
+
+
+def test_public_space_availability_calendar_daily_prices_follow_platform_setting(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_room = seeded["meeting_room"]
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    settings = get_or_create_platform_settings(db_session)
+    settings.booking_calendar_daily_prices_enabled = True
+    db_session.add(settings)
+    db_session.commit()
+
+    response = client.get(
+        f"/api/marketplace/spaces/{meeting_room.public_id}/availability?from=2026-04-16&to=2026-04-16"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["show_calendar_daily_prices"] is True
 
 
 def test_public_space_availability_counts_shared_desk_remaining_seats(db_session, client_factory):

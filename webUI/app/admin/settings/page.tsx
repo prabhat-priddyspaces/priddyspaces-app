@@ -33,6 +33,7 @@ interface SettingsResponse {
   priddy_point_value_cents: number;
   priddy_allowed_space_types: string[];
   priddy_allowed_booking_modes: string[];
+  booking_calendar_daily_prices_enabled: boolean;
   current_admin: CurrentAdmin;
 }
 
@@ -57,6 +58,7 @@ export default function AdminSettingsPage() {
   const [priddySignupPoints, setPriddySignupPoints] = useState("1000");
   const [priddySpaceTypes, setPriddySpaceTypes] = useState<string[]>(["shared_desk"]);
   const [priddyBookingModes, setPriddyBookingModes] = useState<string[]>(["day_pass"]);
+  const [calendarDailyPricesEnabled, setCalendarDailyPricesEnabled] = useState(false);
   const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -84,6 +86,7 @@ export default function AdminSettingsPage() {
         setPriddySignupPoints(String(settings.priddy_signup_points));
         setPriddySpaceTypes(settings.priddy_allowed_space_types || ["shared_desk"]);
         setPriddyBookingModes(settings.priddy_allowed_booking_modes || ["day_pass"]);
+        setCalendarDailyPricesEnabled(settings.booking_calendar_daily_prices_enabled);
         setCurrentAdmin(settings.current_admin);
         setFirstName(settings.current_admin.first_name ?? "");
         setLastName(settings.current_admin.last_name ?? "");
@@ -113,6 +116,7 @@ export default function AdminSettingsPage() {
             priddy_point_value_cents: 1,
             priddy_allowed_space_types: priddySpaceTypes,
             priddy_allowed_booking_modes: priddyBookingModes,
+            booking_calendar_daily_prices_enabled: calendarDailyPricesEnabled,
           }),
         },
         token
@@ -302,6 +306,25 @@ export default function AdminSettingsPage() {
                   </Button>
                 </div>
                 <div className="mt-5 border-t border-border pt-5">
+                  <div className="mb-5 rounded-xl border border-border p-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[13px] font-semibold">Booking calendar prices</div>
+                        <div className="mt-1 text-[12px] text-text-3">
+                          Show the current booking price under each available day in public calendar date pickers.
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-[13px] text-text-2">
+                        <input
+                          data-testid="booking-calendar-daily-prices-toggle"
+                          type="checkbox"
+                          checked={calendarDailyPricesEnabled}
+                          onChange={(event) => setCalendarDailyPricesEnabled(event.target.checked)}
+                        />
+                        Enabled
+                      </label>
+                    </div>
+                  </div>
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
                       <div className="text-[14px] font-semibold">Priddy Points</div>

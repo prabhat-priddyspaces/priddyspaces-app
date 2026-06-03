@@ -1518,6 +1518,7 @@ def get_platform_settings(
         "priddy_point_value_cents": settings.priddy_point_value_cents,
         "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
         "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
+        "booking_calendar_daily_prices_enabled": settings.booking_calendar_daily_prices_enabled,
         "current_admin": {
             "public_id": actor.public_id,
             "email": actor.email,
@@ -1545,6 +1546,7 @@ def update_platform_settings(
         "priddy_point_value_cents": settings.priddy_point_value_cents,
         "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
         "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
+        "booking_calendar_daily_prices_enabled": settings.booking_calendar_daily_prices_enabled,
     }
     for field, value in payload.model_dump(exclude_unset=True).items():
         if value is not None:
@@ -1566,6 +1568,7 @@ def update_platform_settings(
             "priddy_point_value_cents": settings.priddy_point_value_cents,
             "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
             "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
+            "booking_calendar_daily_prices_enabled": settings.booking_calendar_daily_prices_enabled,
         },
     )
     return {
@@ -1575,6 +1578,7 @@ def update_platform_settings(
         "priddy_point_value_cents": settings.priddy_point_value_cents,
         "priddy_allowed_space_types": settings.priddy_allowed_space_types or ["shared_desk"],
         "priddy_allowed_booking_modes": settings.priddy_allowed_booking_modes or ["day_pass"],
+        "booking_calendar_daily_prices_enabled": settings.booking_calendar_daily_prices_enabled,
     }
 
 
