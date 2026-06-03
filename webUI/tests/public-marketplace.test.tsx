@@ -558,7 +558,8 @@ describe("public marketplace flows", () => {
           availability_end_time: "18:30",
           hourly_price: 30,
           daily_price: 200,
-          days: [{ date: "2026-06-01", fully_blocked: false, busy_intervals: [] }],
+          show_calendar_daily_prices: true,
+          days: [{ date: "2026-06-03", fully_blocked: false, busy_intervals: [] }],
         });
       }
       if (url.startsWith("/api/marketplace/spaces/")) {
@@ -628,12 +629,20 @@ describe("public marketplace flows", () => {
       return Promise.resolve([]);
     });
 
-    render(<PublicSpaceDetailView spaceId="space_1" backHref="/spaces" initialDate="2026-06-01" />);
+    render(<PublicSpaceDetailView spaceId="space_1" backHref="/spaces" initialDate="2026-06-03" />);
 
     expect(await screen.findByRole("heading", { name: "Conference 14-B" })).toBeInTheDocument();
     expect(screen.getAllByText("Day Rate").length).toBeGreaterThan(0);
     expect(screen.getByText("All day")).toBeInTheDocument();
     expect(screen.queryByText("Recurrence")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /June 3, 2026/ }));
+    expect(await screen.findByTestId("availability-calendar-day-price-2026-06-03")).toHaveTextContent("$30");
+    fireEvent.click(screen.getByTestId("availability-calendar-day-price-2026-06-03").closest("button")!);
+
+    fireEvent.click(screen.getByLabelText(/All day/));
+    fireEvent.click(screen.getByRole("button", { name: /June 3, 2026/ }));
+    expect(await screen.findByTestId("availability-calendar-day-price-2026-06-03")).toHaveTextContent("$200");
   });
 
   it("caps day-pass seat quantity to selected-day remaining seats", async () => {

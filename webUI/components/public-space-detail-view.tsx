@@ -364,6 +364,7 @@ export function PublicSpaceDetailView({
   const hourlyAmount = moneyToNumber(hourlyPrice);
   const dailyAmount = moneyToNumber(dailyPrice);
   const conferenceDayRateAvailable = isConferenceRoom && dailyAmount != null;
+  const calendarPrice = allDay ? dailyPrice : hourlyPrice ?? dailyPrice;
 
   useEffect(() => {
     if (isSharedDesk) setAllDay(true);
@@ -1310,7 +1311,7 @@ export function PublicSpaceDetailView({
                     granularityMinutes={granularity}
                     dailyPrice={
                       availability?.show_calendar_daily_prices
-                        ? availability.daily_price ?? detail.space.price_daily
+                        ? calendarPrice
                         : null
                     }
                   />

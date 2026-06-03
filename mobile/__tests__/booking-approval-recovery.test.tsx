@@ -198,7 +198,7 @@ describe("booking approval and recovery mobile flows", () => {
     const screen = render(<SpaceDetailScreen />);
 
     expect(await screen.findByText("Reserve & Pay")).toBeTruthy();
-    expect(await screen.findByText("$200+")).toBeTruthy();
+    expect(await screen.findByText("$50+")).toBeTruthy();
     expect(await screen.findByText("10:00")).toBeTruthy();
     expect(screen.queryByText("09:00")).toBeNull();
   });
@@ -281,6 +281,7 @@ describe("booking approval and recovery mobile flows", () => {
           buffer_after_minutes: 0,
           hourly_price: "50.00",
           daily_price: "200.00",
+          show_calendar_daily_prices: true,
           days: [{ date: today, fully_blocked: false, busy_intervals: [] }],
         });
       }
@@ -314,7 +315,9 @@ describe("booking approval and recovery mobile flows", () => {
     const screen = render(<SpaceDetailScreen />);
 
     expect(await screen.findByText("Reserve & Pay")).toBeTruthy();
+    expect(await screen.findByText("$50+")).toBeTruthy();
     fireEvent.press(screen.getByText("All day"));
+    expect(await screen.findByText("$200+")).toBeTruthy();
     expect(await screen.findByText(/All day from/)).toBeTruthy();
     fireEvent.press(screen.getByText("Reserve & Pay"));
     expect(await screen.findByText("Checkout summary")).toBeTruthy();

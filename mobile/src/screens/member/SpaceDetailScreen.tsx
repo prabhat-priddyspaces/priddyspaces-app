@@ -236,8 +236,11 @@ export function SpaceDetailScreen() {
         }))
   );
   const fullDayDisabled = !space?.price_daily || selectedDayHasConflict || (availability ? !selectedDay : false);
+  const calendarPriceValue = fullDay
+    ? availability?.daily_price ?? space?.price_daily
+    : availability?.hourly_price ?? space?.price_hourly ?? availability?.daily_price ?? space?.price_daily;
   const dateChipPrice = availability?.show_calendar_daily_prices
-    ? formatDatePrice(availability.daily_price ?? space?.price_daily)
+    ? formatDatePrice(calendarPriceValue)
     : null;
   const checkoutPayload = useMemo(
     () =>

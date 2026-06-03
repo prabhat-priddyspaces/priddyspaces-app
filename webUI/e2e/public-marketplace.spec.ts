@@ -508,9 +508,10 @@ test("public marketplace redirects to /spaces and supports route-driven location
         availability_end_time: "18:00",
         hourly_price: 60,
         daily_price: 220,
+        show_calendar_daily_prices: true,
         days: [
           {
-            date: "2026-04-15",
+            date: "2026-06-15",
             fully_blocked: false,
             busy_intervals: [],
           },
@@ -636,32 +637,35 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await expect(page).toHaveURL(/\/meeting-rooms\?q=Miami$/);
   await expect(page.getByText("Book-Ready Meeting Rooms")).toBeVisible();
 
-  await page.locator('input[type="date"]').fill("2026-04-15");
+  await page.locator('input[type="date"]').fill("2026-06-15");
   await page.locator('input[type="time"]').nth(0).fill("10:00");
   await page.locator('input[type="time"]').nth(1).fill("11:00");
   await page.getByRole("button", { name: "Search" }).click();
 
   await expect(page).toHaveURL(/\/meeting-rooms\?/);
-  await expect(page).toHaveURL(/date=2026-04-15/);
+  await expect(page).toHaveURL(/date=2026-06-15/);
   await expect(page).toHaveURL(/start_time=10%3A00/);
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
   await page.locator('[data-selected="true"]').filter({ hasText: "Conference 14-B" }).click();
   await expect(page).toHaveURL(/\/spaces\/space_public_3\?/);
   await expect(page.getByRole("heading", { name: "Conference 14-B" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /April 15, 2026/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /June 15, 2026/ })).toBeVisible();
+  await page.getByRole("button", { name: /June 15, 2026/ }).click();
+  await expect(page.getByTestId("availability-calendar-day-price-2026-06-15")).toHaveText("$60");
+  await page.getByRole("button", { name: /June 15, 2026/ }).click();
   const timeSelects = page.locator("aside select");
   await expect(timeSelects.nth(0)).toHaveValue("10:00");
   await expect(timeSelects.nth(1)).toHaveValue("11:00");
 
   await page.getByRole("link", { name: "Back to search" }).click();
   await expect(page).toHaveURL(/\/meeting-rooms\?/);
-  await expect(page).toHaveURL(/date=2026-04-15/);
+  await expect(page).toHaveURL(/date=2026-06-15/);
 
   await page.getByRole("link", { name: "Coworking & Day Passes" }).click();
   await expect(page).toHaveURL(/\/spaces\?/);
   await expect(page).toHaveURL(/q=Miami/);
-  await expect(page).toHaveURL(/date=2026-04-15/);
+  await expect(page).toHaveURL(/date=2026-06-15/);
   await expect(page).toHaveURL(/start_time=10%3A00/);
   await expect(page).toHaveURL(/end_time=11%3A00/);
 
@@ -678,7 +682,7 @@ test("public marketplace redirects to /spaces and supports route-driven location
   await page.getByRole("link", { name: "Back to search" }).click();
   await expect(page).toHaveURL(/\/spaces\?/);
   await expect(page).toHaveURL(/q=Miami/);
-  await expect(page).toHaveURL(/date=2026-04-15/);
+  await expect(page).toHaveURL(/date=2026-06-15/);
 
   await page.goto("/meeting-rooms/_.html?id=loc_public_2&lat=26.132029&lng=-80.262418&radius_miles=50");
   await expect(page).toHaveURL(/\/locations\/loc_public_2\?/);
