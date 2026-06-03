@@ -61,6 +61,66 @@ describe("setup fee checkout UI", () => {
     expect(onConfirm).toHaveBeenCalled();
   });
 
+  it("applies and removes a promo code through checkout preview", async () => {
+    const onConfirm = vi.fn();
+    apiFetchMock.mockImplementation((_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || "{}"));
+      if (body.promo_code === "SUMMER20") {
+        return Promise.resolve({
+          currency: "USD",
+          base_amount_cents: 12000,
+          setup_fee_amount_cents: 0,
+          discount_amount_cents: -2400,
+          promo_code: "SUMMER20",
+          promo_description: "Summer",
+          promo_discount_amount_cents: 2400,
+          subtotal_after_promo_cents: 9600,
+          tax_amount_cents: 0,
+          total_amount_cents: 9600,
+          line_items: [{ label: "Hourly reservation", amount_cents: 12000 }],
+        });
+      }
+      return Promise.resolve({
+        currency: "USD",
+        base_amount_cents: 12000,
+        setup_fee_amount_cents: 0,
+        discount_amount_cents: 0,
+        tax_amount_cents: 0,
+        total_amount_cents: 12000,
+        line_items: [{ label: "Hourly reservation", amount_cents: 12000 }],
+      });
+    });
+
+    render(
+      <CheckoutSummaryModal
+        open
+        payload={{
+          space_public_id: "space_1",
+          start_datetime: "2026-06-01T14:00:00.000Z",
+          end_datetime: "2026-06-01T16:00:00.000Z",
+          booking_mode: "hourly",
+          full_day: false,
+        }}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+
+    expect(await screen.findByText("Have a promo code?")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Promo code"), { target: { value: "summer20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(await screen.findByText("Promo SUMMER20")).toBeInTheDocument();
+    expect(screen.getByText("$96")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(onConfirm).toHaveBeenCalledWith("SUMMER20");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Promo SUMMER20")).not.toBeInTheDocument();
+    });
+  });
+
   it("loads and replaces owner setup fee rows", async () => {
     apiFetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/spaces/space_1/setup-fees" && init?.method === "GET") {

@@ -49,8 +49,17 @@ interface PricingRule {
 interface PromoCode {
   public_id: string;
   code: string;
+  description: string | null;
   discount_type: string;
   discount_value: number;
+  expires_at: string | null;
+  max_redemptions: number | null;
+  max_redemptions_per_member: number | null;
+  total_redemptions: number;
+  is_active: boolean;
+  total_discount_granted_cents: number;
+  revenue_impacted_cents: number;
+  status: string | null;
 }
 
 interface TaxConfig {
@@ -122,6 +131,15 @@ function waitlistSummary(settings: (Pick<BookingSettings, WaitlistTypeKey> & { w
   return settings.waitlist_enabled ? "All space types" : "off";
 }
 
+const centsFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+function formatCents(cents: number | null | undefined) {
+  return centsFormatter.format((cents || 0) / 100);
+}
+
 export default function OwnerSettingsPage() {
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
@@ -145,6 +163,11 @@ export default function OwnerSettingsPage() {
     code: "",
     discount_type: "percent",
     discount_value: "",
+    description: "",
+    expires_at: "",
+    max_redemptions: "",
+    max_redemptions_per_member: "",
+    is_active: true,
   });
   const [taxRate, setTaxRate] = useState("");
   const [bookingSettingsForm, setBookingSettingsForm] = useState({
@@ -442,12 +465,28 @@ export default function OwnerSettingsPage() {
           code: promoForm.code,
           discount_type: promoForm.discount_type,
           discount_value: Number(promoForm.discount_value),
-          is_active: true,
+          description: promoForm.description || null,
+          expires_at: promoForm.expires_at ? new Date(promoForm.expires_at).toISOString() : null,
+          max_redemptions: promoForm.max_redemptions ? Number(promoForm.max_redemptions) : null,
+          max_redemptions_per_member: promoForm.max_redemptions_per_member
+            ? Number(promoForm.max_redemptions_per_member)
+            : null,
+          is_active: promoForm.is_active,
         }),
       },
       token
     );
     setMessage("Promo code created");
+    setPromoForm({
+      code: "",
+      discount_type: "percent",
+      discount_value: "",
+      description: "",
+      expires_at: "",
+      max_redemptions: "",
+      max_redemptions_per_member: "",
+      is_active: true,
+    });
     await loadPromoCodes();
   }
 
@@ -736,7 +775,7 @@ export default function OwnerSettingsPage() {
           <div className="grid gap-2 md:grid-cols-4">
             <Input
               value={promoForm.code}
-              onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value })}
+              onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
               placeholder="CODE"
             />
             <select
@@ -750,7 +789,35 @@ export default function OwnerSettingsPage() {
             <Input
               value={promoForm.discount_value}
               onChange={(e) => setPromoForm({ ...promoForm, discount_value: e.target.value })}
-              placeholder="Value"
+              placeholder={promoForm.discount_type === "fixed" ? "Fixed amount ($)" : "Percent"}
+            />
+            <select
+              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
+              value={promoForm.is_active ? "active" : "inactive"}
+              onChange={(e) => setPromoForm({ ...promoForm, is_active: e.target.value === "active" })}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <Input
+              value={promoForm.description}
+              onChange={(e) => setPromoForm({ ...promoForm, description: e.target.value })}
+              placeholder="Description"
+            />
+            <Input
+              type="date"
+              value={promoForm.expires_at}
+              onChange={(e) => setPromoForm({ ...promoForm, expires_at: e.target.value })}
+            />
+            <Input
+              value={promoForm.max_redemptions}
+              onChange={(e) => setPromoForm({ ...promoForm, max_redemptions: e.target.value })}
+              placeholder="Max redemptions"
+            />
+            <Input
+              value={promoForm.max_redemptions_per_member}
+              onChange={(e) => setPromoForm({ ...promoForm, max_redemptions_per_member: e.target.value })}
+              placeholder="Max per member"
             />
             <Button type="button" onClick={createPromoCode} disabled={!orgId}>
               Add promo
@@ -758,8 +825,22 @@ export default function OwnerSettingsPage() {
           </div>
           <div className="grid gap-2 text-xs text-textMuted">
             {promoCodes.map((promo) => (
-              <div key={promo.public_id}>
-                {promo.code} • {promo.discount_type} • {promo.discount_value}
+              <div key={promo.public_id} className="rounded-md border border-border p-3">
+                <div className="font-semibold text-textPrimary">
+                  {promo.code} • {promo.discount_type === "fixed" ? `$${promo.discount_value}` : `${promo.discount_value}%`} •{" "}
+                  {promo.status || (promo.is_active ? "active" : "inactive")}
+                </div>
+                {promo.description ? <div>{promo.description}</div> : null}
+                <div>
+                  Used {promo.total_redemptions || 0}
+                  {promo.max_redemptions ? ` / ${promo.max_redemptions}` : ""} • Per member{" "}
+                  {promo.max_redemptions_per_member || "unlimited"} • Expires{" "}
+                  {promo.expires_at ? new Date(promo.expires_at).toLocaleDateString() : "never"}
+                </div>
+                <div>
+                  Discounts {formatCents(promo.total_discount_granted_cents)} • Revenue impacted{" "}
+                  {formatCents(promo.revenue_impacted_cents)}
+                </div>
               </div>
             ))}
             {promoCodes.length === 0 ? <div>No promo codes configured.</div> : null}

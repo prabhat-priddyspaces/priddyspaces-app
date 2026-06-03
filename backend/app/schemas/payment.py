@@ -35,6 +35,7 @@ class PaymentOut(BaseModel):
     amount: int
     provider: str
     status: str
+    description: str | None = None
     tenant_id: int | None
     member_public_id: str | None = None
     member_name: str | None = None

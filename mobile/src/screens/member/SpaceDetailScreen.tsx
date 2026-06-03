@@ -73,12 +73,17 @@ type ReservationPayload = {
   booking_mode: "hourly" | "day_pass";
   full_day: boolean;
   seats_requested?: number;
+  promo_code?: string;
 };
 
 type CheckoutPreview = {
   base_amount_cents: number;
   setup_fee_amount_cents: number;
   discount_amount_cents: number;
+  promo_code?: string | null;
+  promo_description?: string | null;
+  promo_discount_amount_cents?: number;
+  subtotal_after_promo_cents?: number | null;
   tax_amount_cents: number;
   total_amount_cents: number;
   line_items: Array<{ label: string; amount_cents: number }>;
@@ -130,6 +135,8 @@ export function SpaceDetailScreen() {
   const [checkoutMembershipPlan, setCheckoutMembershipPlan] = useState<MembershipPlan | null>(null);
   const [checkoutPreview, setCheckoutPreview] = useState<CheckoutPreview | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState("");
   const [seatQuantity, setSeatQuantity] = useState("1");
 
   useEffect(() => {
@@ -245,14 +252,14 @@ export function SpaceDetailScreen() {
   const checkoutPayload = useMemo(
     () =>
       checkoutReservation
-        ? checkoutReservation
+        ? { ...checkoutReservation, promo_code: appliedPromoCode || undefined }
         : checkoutMembershipPlan
           ? {
               membership_plan_public_id: checkoutMembershipPlan.public_id,
               desired_start_date: bookingDate
             }
           : null,
-    [bookingDate, checkoutMembershipPlan, checkoutReservation],
+    [appliedPromoCode, bookingDate, checkoutMembershipPlan, checkoutReservation],
   );
 
   useEffect(() => {
@@ -280,6 +287,13 @@ export function SpaceDetailScreen() {
       active = false;
     };
   }, [checkoutPayload, token]);
+
+  useEffect(() => {
+    if (!checkoutReservation && !checkoutMembershipPlan) {
+      setPromoInput("");
+      setAppliedPromoCode("");
+    }
+  }, [checkoutMembershipPlan, checkoutReservation]);
 
   useEffect(() => {
     if (isSharedDesk) setFullDay(true);
@@ -353,6 +367,7 @@ export function SpaceDetailScreen() {
 
   async function continueBookingAfterSummary(payload: ReservationPayload) {
     if (!token || !space) return;
+    const payloadWithPromo = appliedPromoCode ? { ...payload, promo_code: appliedPromoCode } : payload;
     setSubmitting(true);
     setCheckoutReservation(null);
     setMessage("");
@@ -366,12 +381,12 @@ export function SpaceDetailScreen() {
         throw new Error(resolved.message || "This owner has not configured payments.");
       }
       if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
-        setPendingReservation(payload);
+        setPendingReservation(payloadWithPromo);
         setPaymentSetupOpen(true);
         setMessage("Add a booking card to continue.");
         return;
       }
-      await submitBooking(payload, resolved.payment_method_public_id);
+      await submitBooking(payloadWithPromo, resolved.payment_method_public_id);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Unable to send booking request");
     } finally {
@@ -466,6 +481,31 @@ export function SpaceDetailScreen() {
     setMessage("");
     setCheckoutMembershipPlan(plan);
   }
+
+  function applyPromo() {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) {
+      setMessage("Enter a promo code");
+      return;
+    }
+    if (appliedPromoCode && appliedPromoCode !== code) {
+      setMessage("Remove the current promo code before applying another.");
+      return;
+    }
+    setMessage("");
+    setAppliedPromoCode(code);
+    setPromoInput(code);
+  }
+
+  function removePromo() {
+    setAppliedPromoCode("");
+    setPromoInput("");
+    setMessage("");
+  }
+
+  const checkoutAutomaticDiscountCents = checkoutPreview
+    ? (checkoutPreview.discount_amount_cents || 0) + Math.max(0, checkoutPreview.promo_discount_amount_cents || 0)
+    : 0;
 
   return (
     <View style={styles.container}>
@@ -676,6 +716,31 @@ export function SpaceDetailScreen() {
                 <Text style={styles.modalTitle}>Checkout summary</Text>
                 <Text style={styles.modalSubtitle}>Review the full amount before checkout.</Text>
                 {checkoutLoading ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
+                {checkoutReservation ? (
+                  <View style={styles.promoBox}>
+                    <Text style={styles.promoTitle}>Have a promo code?</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={promoInput}
+                      editable={!appliedPromoCode}
+                      placeholder="Promo code"
+                      autoCapitalize="characters"
+                      onChangeText={(value) => setPromoInput(value.toUpperCase())}
+                    />
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={appliedPromoCode ? removePromo : applyPromo}
+                    >
+                      <Text style={styles.secondaryButtonText}>{appliedPromoCode ? "Remove promo" : "Apply promo"}</Text>
+                    </TouchableOpacity>
+                    {checkoutPreview?.promo_code && (checkoutPreview.promo_discount_amount_cents || 0) > 0 ? (
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryDiscount}>Promo {checkoutPreview.promo_code}</Text>
+                        <Text style={styles.summaryDiscount}>-{formatCents(checkoutPreview.promo_discount_amount_cents || 0)}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
                 {checkoutPreview ? (
                   <View style={styles.summaryRows}>
                     {checkoutPreview.line_items.map((item, index) => (
@@ -684,10 +749,10 @@ export function SpaceDetailScreen() {
                         <Text style={styles.summaryValue}>{formatCents(item.amount_cents)}</Text>
                       </View>
                     ))}
-                    {checkoutPreview.discount_amount_cents < 0 ? (
+                    {checkoutAutomaticDiscountCents < 0 ? (
                       <View style={styles.summaryRow}>
                         <Text style={styles.summaryDiscount}>Discount</Text>
-                        <Text style={styles.summaryDiscount}>-{formatCents(Math.abs(checkoutPreview.discount_amount_cents))}</Text>
+                        <Text style={styles.summaryDiscount}>-{formatCents(Math.abs(checkoutAutomaticDiscountCents))}</Text>
                       </View>
                     ) : null}
                     {checkoutPreview.tax_amount_cents > 0 ? (
@@ -918,6 +983,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
     color: "#6B7280"
+  },
+  promoBox: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+    gap: 8
+  },
+  promoTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827"
   },
   summaryRows: {
     marginTop: 16,

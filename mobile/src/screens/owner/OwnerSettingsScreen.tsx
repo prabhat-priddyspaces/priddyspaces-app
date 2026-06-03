@@ -5,7 +5,21 @@ import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
 type PricingRule = { public_id: string };
-type PromoCode = { public_id: string };
+type PromoCode = {
+  public_id: string;
+  code?: string;
+  description?: string | null;
+  discount_type?: string;
+  discount_value?: number;
+  expires_at?: string | null;
+  max_redemptions?: number | null;
+  max_redemptions_per_member?: number | null;
+  total_redemptions?: number;
+  is_active?: boolean;
+  total_discount_granted_cents?: number;
+  revenue_impacted_cents?: number;
+  status?: string | null;
+};
 type FeatureFlag = { public_id: string };
 type CancellationPolicy = { public_id: string };
 type SubscriptionPlan = { public_id: string };
@@ -43,6 +57,10 @@ function waitlistSummary(settings: (Pick<BookingSettings, WaitlistTypeKey> & { w
   return settings.waitlist_enabled ? "All space types" : "off";
 }
 
+function formatCents(cents?: number | null) {
+  return `$${((cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function OwnerSettingsScreen() {
   const { token } = useAuth();
   const [orgId, setOrgId] = useState("");
@@ -59,7 +77,16 @@ export function OwnerSettingsScreen() {
   const [connectStatus, setConnectStatus] = useState("Unknown");
 
   const [pricingForm, setPricingForm] = useState({ rate_type: "daily", rate_amount: "" });
-  const [promoForm, setPromoForm] = useState({ code: "", discount_type: "percent", discount_value: "" });
+  const [promoForm, setPromoForm] = useState({
+    code: "",
+    discount_type: "percent",
+    discount_value: "",
+    description: "",
+    expires_at: "",
+    max_redemptions: "",
+    max_redemptions_per_member: "",
+    is_active: "true"
+  });
   const [taxRate, setTaxRate] = useState("");
   const [bookingSettingsForm, setBookingSettingsForm] = useState({
     booking_approval_mode: "manual" as "manual" | "auto",
@@ -180,12 +207,28 @@ export function OwnerSettingsScreen() {
           code: promoForm.code,
           discount_type: promoForm.discount_type,
           discount_value: Number(promoForm.discount_value),
-          is_active: true
+          description: promoForm.description || null,
+          expires_at: promoForm.expires_at ? new Date(promoForm.expires_at).toISOString() : null,
+          max_redemptions: promoForm.max_redemptions ? Number(promoForm.max_redemptions) : null,
+          max_redemptions_per_member: promoForm.max_redemptions_per_member
+            ? Number(promoForm.max_redemptions_per_member)
+            : null,
+          is_active: promoForm.is_active === "true"
         })
       },
       token
     );
     setMessage("Promo code created");
+    setPromoForm({
+      code: "",
+      discount_type: "percent",
+      discount_value: "",
+      description: "",
+      expires_at: "",
+      max_redemptions: "",
+      max_redemptions_per_member: "",
+      is_active: "true"
+    });
   }
 
   async function saveTaxConfig() {
@@ -364,17 +407,75 @@ export function OwnerSettingsScreen() {
         style={styles.input}
         placeholder="Code"
         value={promoForm.code}
-        onChangeText={(value) => setPromoForm({ ...promoForm, code: value })}
+        onChangeText={(value) => setPromoForm({ ...promoForm, code: value.toUpperCase() })}
       />
       <TextInput
         style={styles.input}
-        placeholder="Discount value"
+        placeholder={promoForm.discount_type === "fixed" ? "Fixed amount ($)" : "Percent"}
         value={promoForm.discount_value}
         onChangeText={(value) => setPromoForm({ ...promoForm, discount_value: value })}
       />
+      <TextInput
+        style={styles.input}
+        placeholder="Description"
+        value={promoForm.description}
+        onChangeText={(value) => setPromoForm({ ...promoForm, description: value })}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Expiration date YYYY-MM-DD"
+        value={promoForm.expires_at}
+        onChangeText={(value) => setPromoForm({ ...promoForm, expires_at: value })}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Max redemptions"
+        value={promoForm.max_redemptions}
+        keyboardType="number-pad"
+        onChangeText={(value) => setPromoForm({ ...promoForm, max_redemptions: value })}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Max per member"
+        value={promoForm.max_redemptions_per_member}
+        keyboardType="number-pad"
+        onChangeText={(value) => setPromoForm({ ...promoForm, max_redemptions_per_member: value })}
+      />
+      <View style={styles.optionRow}>
+        {[
+          { label: "Active", value: "true" },
+          { label: "Inactive", value: "false" }
+        ].map((opt) => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[styles.optionButton, promoForm.is_active === opt.value && styles.optionActive]}
+            onPress={() => setPromoForm({ ...promoForm, is_active: opt.value })}
+          >
+            <Text style={styles.optionText}>{opt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       <TouchableOpacity style={styles.primaryButton} onPress={addPromoCode}>
         <Text style={styles.primaryButtonText}>Add promo code</Text>
       </TouchableOpacity>
+      {promoCodes.map((promo) => (
+        <View key={promo.public_id} style={styles.infoCard}>
+          <Text style={styles.cardTitle}>
+            {promo.code} • {promo.discount_type === "fixed" ? `$${promo.discount_value}` : `${promo.discount_value}%`}
+          </Text>
+          <Text style={styles.cardMuted}>
+            {promo.status || (promo.is_active ? "active" : "inactive")} • Used {promo.total_redemptions || 0}
+            {promo.max_redemptions ? ` / ${promo.max_redemptions}` : ""}
+          </Text>
+          <Text style={styles.cardMuted}>
+            Per member {promo.max_redemptions_per_member || "unlimited"} • Expires{" "}
+            {promo.expires_at ? new Date(promo.expires_at).toLocaleDateString() : "never"}
+          </Text>
+          <Text style={styles.cardMuted}>
+            Discounts {formatCents(promo.total_discount_granted_cents)} • Revenue {formatCents(promo.revenue_impacted_cents)}
+          </Text>
+        </View>
+      ))}
 
       <Text style={styles.sectionTitle}>Tax rate</Text>
       <TextInput style={styles.input} placeholder="Rate %" value={taxRate} onChangeText={setTaxRate} />
@@ -658,5 +759,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#111827",
     fontWeight: "600"
+  },
+  infoCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#FFFFFF"
+  },
+  cardTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827"
+  },
+  cardMuted: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6B7280"
   }
 });

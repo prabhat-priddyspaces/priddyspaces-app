@@ -40,6 +40,7 @@ from app.services.authz import accessible_location_ids, get_org_member, list_org
 from app.services.platform_auth import organization_is_publicly_visible
 from app.services.pricing import estimate_booking_amount
 from app.services.payment_metadata import normalize_payment_failure_reason
+from app.services.promo_codes import payment_description_from_snapshot
 from app.services.stripe_payments import (
     create_billing_portal_session,
     create_customer,
@@ -86,6 +87,10 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
         amount=payment.amount,
         provider=payment.provider,
         status=payment.status.value if payment.status else "",
+        description=payment_description_from_snapshot(
+            payment.pricing_snapshot if isinstance(payment.pricing_snapshot, dict) else None,
+            base="Booking payment" if payment.booking_id or payment.booking_request_id else "Payment",
+        ),
         tenant_id=payment.tenant_id,
         member_public_id=member.public_id if member else None,
         member_name=(

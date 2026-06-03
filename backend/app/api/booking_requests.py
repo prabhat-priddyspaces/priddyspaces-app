@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_optional_user
 from app.core.config import settings
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
@@ -451,6 +451,7 @@ def _to_out(
             refund_policy_snapshot = json.loads(req.refund_policy_snapshot)
         except json.JSONDecodeError:
             refund_policy_snapshot = None
+    promo_breakdown = payment_breakdown.get("promo") if isinstance(payment_breakdown, dict) else None
     redemption_lock_public_id = None
     loyalty_points_used = 0
     loyalty_discount_cents = 0
@@ -508,6 +509,13 @@ def _to_out(
         redemption_lock_public_id=redemption_lock_public_id,
         loyalty_points_used=loyalty_points_used,
         loyalty_discount_cents=loyalty_discount_cents,
+        promo_code=promo_breakdown.get("code") if isinstance(promo_breakdown, dict) else None,
+        promo_description=promo_breakdown.get("description") if isinstance(promo_breakdown, dict) else None,
+        promo_discount_amount_cents=(
+            int(promo_breakdown.get("discount_amount_cents") or 0)
+            if isinstance(promo_breakdown, dict)
+            else 0
+        ),
         approved_at=req.approved_at,
         rejected_at=req.rejected_at,
         cancelled_at=req.cancelled_at,
@@ -1417,7 +1425,9 @@ def create_guest_booking_request(
 def preview_booking_request_price(
     payload: BookingPricePreviewCreate,
     db: Session = Depends(get_db),
+    token: dict | None = Depends(get_optional_user),
 ):
+    preview_user = get_or_create_user(db, token) if token else None
     if payload.membership_plan_public_id:
         plan = (
             db.query(MembershipPlan)
@@ -1485,11 +1495,18 @@ def preview_booking_request_price(
         booking_mode="day_pass" if is_day_pass else "hourly",
         full_day=is_day_pass,
         seats_requested=payload.seats_requested,
+        promo_code=payload.promo_code,
+        user_id=preview_user.id if preview_user else None,
     )
     return BookingPricePreviewOut(
         base_amount_cents=snapshot["base_cents"],
         setup_fee_amount_cents=snapshot["setup_fee_cents"],
         discount_amount_cents=snapshot["discount_cents"],
+        promo_code=snapshot.get("promo_code"),
+        promo_code_public_id=snapshot.get("promo_code_public_id"),
+        promo_description=snapshot.get("promo_description"),
+        promo_discount_amount_cents=snapshot.get("promo_discount_amount_cents") or 0,
+        subtotal_after_promo_cents=snapshot.get("subtotal_after_promo_cents"),
         tax_amount_cents=snapshot["tax_cents"],
         total_amount_cents=snapshot["total_cents"],
         rate_basis=snapshot["rate_basis"],
@@ -1626,6 +1643,8 @@ def create_booking_request(
         full_day=is_day_pass,
         seats_requested=payload.seats_requested,
         occurrence_count=len(occurrences),
+        promo_code=payload.promo_code,
+        user_id=user.id,
     )
     lock = active_lock_by_public_id(db, payload.redemption_lock_public_id, user, space) if payload.redemption_lock_public_id else None
     points_cover_total = False

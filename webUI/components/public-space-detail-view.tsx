@@ -89,6 +89,7 @@ interface ReservationPayload {
   booking_mode: "hourly" | "day_pass";
   full_day: boolean;
   seats_requested?: number;
+  promo_code?: string;
 }
 
 function membershipBookingModeForSpaceType(spaceType: string) {
@@ -749,12 +750,13 @@ export function PublicSpaceDetailView({
     }
   }
 
-  async function continueReservationAfterSummary(payload: ReservationPayload) {
+  async function continueReservationAfterSummary(payload: ReservationPayload, promoCode?: string) {
+    const payloadWithPromo = promoCode ? { ...payload, promo_code: promoCode } : payload;
     const token = getAccessToken() ?? undefined;
     setCheckoutSubmitting(true);
     setCheckoutReservation(null);
     if (!token) {
-      setGuestPayload(payload);
+      setGuestPayload(payloadWithPromo);
       setGuestCheckoutOpen(true);
       setCheckoutSubmitting(false);
       return;
@@ -763,11 +765,11 @@ export function PublicSpaceDetailView({
     setError("");
     try {
       if (pointsCoverTotal) {
-        await submitReservation(payload, null);
+        await submitReservation(payloadWithPromo, null);
         return;
       }
       const resolved = await apiFetch<PaymentMethodResolve>(
-        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(payload.space_public_id)}`,
+        `/api/payment-methods/resolve?space_public_id=${encodeURIComponent(payloadWithPromo.space_public_id)}`,
         { method: "GET" },
         token,
       );
@@ -775,11 +777,11 @@ export function PublicSpaceDetailView({
         throw new Error(resolved.message || `${chargeOwnerName === "this owner" ? "This owner" : chargeOwnerName} has not configured payments.`);
       }
       if (!resolved.has_payment_method || !resolved.payment_method_public_id) {
-        setPendingReservation(payload);
+        setPendingReservation(payloadWithPromo);
         setPaymentMethodOpen(true);
         return;
       }
-      await submitReservation(payload, resolved.payment_method_public_id);
+      await submitReservation(payloadWithPromo, resolved.payment_method_public_id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Reservation failed");
     } finally {
@@ -1624,9 +1626,9 @@ export function PublicSpaceDetailView({
           setCheckoutReservation(null);
           setCheckoutMembershipPlan(null);
         }}
-        onConfirm={() => {
+        onConfirm={(promoCode) => {
           if (checkoutReservation) {
-            continueReservationAfterSummary(checkoutReservation).catch(() => null);
+            continueReservationAfterSummary(checkoutReservation, promoCode).catch(() => null);
           } else if (checkoutMembershipPlan) {
             continueMembershipAfterSummary(checkoutMembershipPlan).catch(() => null);
           }
