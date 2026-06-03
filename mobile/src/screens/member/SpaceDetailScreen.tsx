@@ -100,6 +100,13 @@ function formatCents(cents: number) {
   return `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatDatePrice(value: string | number | null | undefined) {
+  if (value == null || value === "") return null;
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return `$${amount.toLocaleString(undefined, { minimumFractionDigits: amount % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}+`;
+}
+
 export function SpaceDetailScreen() {
   const { token } = useAuth();
   const route = useRoute<any>();
@@ -229,6 +236,9 @@ export function SpaceDetailScreen() {
         }))
   );
   const fullDayDisabled = !space?.price_daily || selectedDayHasConflict || (availability ? !selectedDay : false);
+  const dateChipPrice = availability?.show_calendar_daily_prices
+    ? formatDatePrice(availability.daily_price ?? space?.price_daily)
+    : null;
   const checkoutPayload = useMemo(
     () =>
       checkoutReservation
@@ -483,11 +493,14 @@ export function SpaceDetailScreen() {
           <View style={styles.chipRow}>
             {dateOptions.slice(0, 7).map((option) => {
               const unavailable = dateIsUnavailable(option);
+              const showDatePrice = Boolean(dateChipPrice && !unavailable);
               return (
                 <TouchableOpacity
                   key={option}
+                  testID={`mobile-booking-date-${option}`}
                   style={[
                     styles.chip,
+                    showDatePrice ? styles.priceChip : null,
                     bookingDate === option ? styles.chipActive : null,
                     unavailable ? styles.chipDisabled : null
                   ]}
@@ -503,6 +516,17 @@ export function SpaceDetailScreen() {
                   >
                     {option.slice(5)}
                   </Text>
+                  {showDatePrice ? (
+                    <Text
+                      testID={`mobile-booking-date-price-${option}`}
+                      style={[
+                        styles.chipPriceText,
+                        bookingDate === option ? styles.chipPriceTextActive : null
+                      ]}
+                    >
+                      {dateChipPrice}
+                    </Text>
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
@@ -760,7 +784,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: "#FFFFFF"
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    minWidth: 54
+  },
+  priceChip: {
+    paddingVertical: 7,
+    minWidth: 64
   },
   chipActive: {
     borderColor: "#111827",
@@ -780,6 +810,15 @@ const styles = StyleSheet.create({
   },
   chipTextDisabled: {
     color: "#9CA3AF"
+  },
+  chipPriceText: {
+    marginTop: 2,
+    color: "#047857",
+    fontWeight: "600",
+    fontSize: 11
+  },
+  chipPriceTextActive: {
+    color: "#BBF7D0"
   },
   modeRow: {
     marginTop: 12,

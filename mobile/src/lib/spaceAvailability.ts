@@ -19,6 +19,7 @@ export type SpaceAvailabilityResponse = {
   buffer_after_minutes: number;
   hourly_price: string | number | null;
   daily_price: string | number | null;
+  show_calendar_daily_prices?: boolean;
   days: SpaceAvailabilityDay[];
 };
 
