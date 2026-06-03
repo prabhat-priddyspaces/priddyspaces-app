@@ -890,9 +890,10 @@ test("day-pass detail refreshes remaining seats after a guest request", async ({
         buffer_after_minutes: 0,
         hourly_price: null,
         daily_price: 49,
+        show_calendar_daily_prices: true,
         days: [
           {
-            date: "2026-06-01",
+            date: "2026-06-03",
             fully_blocked: false,
             capacity: 4,
             booked_seats: 4 - remaining,
@@ -926,8 +927,8 @@ test("day-pass detail refreshes remaining seats after a guest request", async ({
       await json(route, {
         public_id: "guest_req_1",
         status: "requested",
-        start_datetime: "2026-06-01T13:00:00.000Z",
-        end_datetime: "2026-06-01T21:00:00.000Z",
+        start_datetime: "2026-06-03T13:00:00.000Z",
+        end_datetime: "2026-06-03T21:00:00.000Z",
         space_public_id: "space_day_pass",
         estimated_amount: 49,
         message: "Request submitted",
@@ -938,9 +939,12 @@ test("day-pass detail refreshes remaining seats after a guest request", async ({
     await json(route, { detail: `Unhandled route: ${key}` }, 404);
   });
 
-  await page.goto("/spaces/space_day_pass?date=2026-06-01");
+  await page.goto("/spaces/space_day_pass?date=2026-06-03");
 
   await expect(page.getByRole("heading", { name: "Open Desk A1" })).toBeVisible();
+  await page.getByRole("button", { name: /June 3, 2026/ }).click();
+  await expect(page.getByTestId("availability-calendar-day-price-2026-06-03")).toHaveText("$49");
+  await page.getByRole("button", { name: /June 3, 2026/ }).click();
   await expect(page.getByText("2 seats available for the selected day.")).toBeVisible();
   await expect(page.getByRole("spinbutton", { name: "Seats" })).toHaveAttribute("max", "2");
   await expect(page.getByRole("button", { name: "Sign in to Request to book" })).toBeEnabled();

@@ -214,5 +214,6 @@ class SpaceAvailabilityOut(BaseModel):
     buffer_after_minutes: int = 0
     hourly_price: MoneyAmount | None
     daily_price: MoneyAmount | None
+    show_calendar_daily_prices: bool = False
     waitlist_enabled: bool = False
     days: list[SpaceAvailabilityDayOut]

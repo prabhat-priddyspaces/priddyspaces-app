@@ -9,6 +9,7 @@ import {
   todayIso,
   type OpenInterval,
 } from "@/lib/space-availability";
+import { formatUsd, type MoneyValue } from "@/lib/money";
 import type { SpaceAvailabilityDay } from "@/lib/public-marketplace";
 
 interface AvailabilityCalendarProps {
@@ -18,6 +19,7 @@ interface AvailabilityCalendarProps {
   open: OpenInterval;
   granularityMinutes: number;
   minDateIso?: string;
+  dailyPrice?: MoneyValue | null;
 }
 
 function startOfMonthIso(isoDate: string): string {
@@ -64,6 +66,7 @@ export function AvailabilityCalendar({
   open,
   granularityMinutes,
   minDateIso,
+  dailyPrice,
 }: AvailabilityCalendarProps) {
   const [openPopover, setOpenPopover] = useState(false);
   const [viewMonth, setViewMonth] = useState(() => startOfMonthIso(value || todayIso()));
@@ -92,6 +95,7 @@ export function AvailabilityCalendar({
 
   const cells = useMemo(() => buildMonthGrid(viewMonth), [viewMonth]);
   const minIso = minDateIso ?? todayIso();
+  const dailyPriceLabel = formatUsd(dailyPrice);
 
   return (
     <div ref={containerRef} className="relative">
@@ -144,7 +148,7 @@ export function AvailabilityCalendar({
           <div className="grid grid-cols-7 gap-1">
             {cells.map((iso, idx) => {
               if (!iso) {
-                return <div key={`empty-${idx}`} className="h-9" />;
+                return <div key={`empty-${idx}`} className={dailyPriceLabel ? "h-12" : "h-9"} />;
               }
               const day = dayMap.get(iso);
               const dayNum = parseInt(iso.slice(-2), 10);
@@ -156,7 +160,7 @@ export function AvailabilityCalendar({
                 return (
                   <div
                     key={iso}
-                    className="flex h-9 items-center justify-center rounded-full text-sm text-text-4"
+                    className={`flex ${dailyPriceLabel ? "h-12" : "h-9"} items-center justify-center rounded-full text-sm text-text-4`}
                   >
                     <span className="line-through decoration-line">{dayNum}</span>
                   </div>
@@ -171,13 +175,23 @@ export function AvailabilityCalendar({
                     onChange(iso);
                     setOpenPopover(false);
                   }}
-                  className={`h-9 rounded-full text-sm font-medium transition ${
+                  className={`${dailyPriceLabel ? "h-12" : "h-9"} rounded-full text-sm font-medium transition ${
                     isSelected
                       ? "bg-brand text-white"
                       : "text-text hover:bg-surface-2"
                   }`}
                 >
-                  {dayNum}
+                  <span className="flex flex-col items-center justify-center leading-tight">
+                    <span>{dayNum}</span>
+                    {dailyPriceLabel ? (
+                      <span
+                        data-testid={`availability-calendar-day-price-${iso}`}
+                        className={`text-[10px] font-semibold ${isSelected ? "text-white" : "text-emerald-700"}`}
+                      >
+                        {dailyPriceLabel}
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
               );
             })}

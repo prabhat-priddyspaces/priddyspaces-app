@@ -23,6 +23,10 @@ TEST_DATABASE_URL = (
     or DEFAULT_TEST_DATABASE_URL
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ.setdefault(
+    "JWT_SECRET",
+    "test-internal-jwt-secret-with-at-least-sixty-four-bytes-of-entropy",
+)
 
 from app.db.deps import get_db
 from app.core.auth import get_current_user, get_optional_user

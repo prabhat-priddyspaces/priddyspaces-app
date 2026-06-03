@@ -1308,6 +1308,11 @@ export function PublicSpaceDetailView({
                     days={availability?.days ?? []}
                     open={openWindow}
                     granularityMinutes={granularity}
+                    dailyPrice={
+                      availability?.show_calendar_daily_prices
+                        ? availability.daily_price ?? detail.space.price_daily
+                        : null
+                    }
                   />
 
                   {isConferenceRoom && !allDay ? (

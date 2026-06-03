@@ -99,7 +99,10 @@ describe("MemberCalendarPage", () => {
     render(<MemberCalendarPage />);
 
     expect(await screen.findByTestId("member-day-grid")).toBeInTheDocument();
-    expect(screen.getByTestId("calendar-event-booking_a")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("calendar-date-input"), {
+      target: { value: "2026-06-01" },
+    });
+    expect(await screen.findByTestId("calendar-event-booking_a")).toBeInTheDocument();
     expect(screen.getByTestId("calendar-event-booking_b")).toBeInTheDocument();
     expect(screen.queryByText("Unused Room")).not.toBeInTheDocument();
 

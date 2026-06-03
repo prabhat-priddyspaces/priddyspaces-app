@@ -47,7 +47,11 @@ vi.mock("../components/use-address-autocomplete", () => ({
   reverseGeocode: reverseGeocodeMock,
 }));
 
-function mockSharedDeskDetail(availabilityDay: Record<string, unknown>, waitlistEnabled = false) {
+function mockSharedDeskDetail(
+  availabilityDay: Record<string, unknown>,
+  waitlistEnabled = false,
+  showCalendarDailyPrices = false
+) {
   apiFetchMock.mockImplementation((url: string) => {
     if (url.includes("/availability")) {
       return Promise.resolve({
@@ -60,6 +64,7 @@ function mockSharedDeskDetail(availabilityDay: Record<string, unknown>, waitlist
         buffer_after_minutes: 0,
         hourly_price: null,
         daily_price: 49,
+        show_calendar_daily_prices: showCalendarDailyPrices,
         waitlist_enabled: waitlistEnabled,
         days: [availabilityDay],
       });
@@ -651,6 +656,50 @@ describe("public marketplace flows", () => {
     fireEvent.change(input, { target: { value: "5" } });
 
     expect(input.value).toBe("2");
+  });
+
+  it("shows day-pass prices in the date picker only when the calendar price flag is enabled", async () => {
+    mockSharedDeskDetail(
+      {
+        date: "2026-06-03",
+        fully_blocked: false,
+        capacity: 4,
+        booked_seats: 1,
+        remaining_seats: 3,
+        busy_intervals: [],
+      },
+      false,
+      true
+    );
+
+    const { unmount } = render(
+      <PublicSpaceDetailView spaceId="space_day_pass" backHref="/spaces" initialDate="2026-06-03" />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /June 3, 2026/ }));
+    expect(screen.getByTestId("availability-calendar-day-price-2026-06-03")).toHaveTextContent("$49");
+
+    unmount();
+    apiFetchMock.mockReset();
+    mockSharedDeskDetail(
+      {
+        date: "2026-06-03",
+        fully_blocked: false,
+        capacity: 4,
+        booked_seats: 1,
+        remaining_seats: 3,
+        busy_intervals: [],
+      },
+      false,
+      false
+    );
+
+    render(<PublicSpaceDetailView spaceId="space_day_pass" backHref="/spaces" initialDate="2026-06-03" />);
+
+    expect(await screen.findByRole("heading", { name: "Open Desk A1" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /June 3, 2026/ }));
+    expect(screen.queryByTestId("availability-calendar-day-price-2026-06-03")).not.toBeInTheDocument();
   });
 
   it("disables day-pass seat selection when the selected day is sold out", async () => {

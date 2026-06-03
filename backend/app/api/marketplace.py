@@ -9,6 +9,7 @@ from app.models.location import Location
 from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
 from app.models.organization_amenity import OrganizationAmenity
+from app.models.feature_flag import FeatureFlag
 from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.enums import (
@@ -38,6 +39,20 @@ from app.services.owner_payments import require_space_payment_ready_for_public_s
 from app.services.space_availability import get_space_availability
 
 router = APIRouter()
+
+BOOKING_CALENDAR_DAILY_PRICES_FLAG = "booking_calendar_daily_prices_enabled"
+
+
+def _feature_flag_enabled(db: Session, *, tenant_id: int, space_id: int, flag_key: str) -> bool:
+    return db.query(FeatureFlag.id).filter(
+        FeatureFlag.flag_key == flag_key,
+        FeatureFlag.flag_value.is_(True),
+        (
+            (FeatureFlag.scope_type == "space") & (FeatureFlag.scope_id == space_id)
+        ) | (
+            (FeatureFlag.scope_type == "tenant") & (FeatureFlag.scope_id == tenant_id)
+        ),
+    ).first() is not None
 
 
 @router.get("/marketplace/search", response_model=list[MarketplaceSpaceOut])
@@ -398,6 +413,12 @@ def get_marketplace_space_availability(
         buffer_after_minutes=space.buffer_after_minutes or 0,
         hourly_price=hourly_price,
         daily_price=space.price_daily,
+        show_calendar_daily_prices=_feature_flag_enabled(
+            db,
+            tenant_id=space.tenant_id,
+            space_id=space.id,
+            flag_key=BOOKING_CALENDAR_DAILY_PRICES_FLAG,
+        ),
         waitlist_enabled=bool(organization.waitlist_enabled),
         days=days,
     )

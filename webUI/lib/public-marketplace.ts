@@ -211,6 +211,7 @@ export interface SpaceAvailabilityResponse {
   buffer_after_minutes: number;
   hourly_price: MoneyValue | null;
   daily_price: MoneyValue | null;
+  show_calendar_daily_prices?: boolean;
   waitlist_enabled?: boolean;
   days: SpaceAvailabilityDay[];
 }

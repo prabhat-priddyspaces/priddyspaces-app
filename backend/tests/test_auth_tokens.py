@@ -8,8 +8,11 @@ from app.core.auth import verify_token
 from app.core.config import settings
 from app.core.jwt import issue_token
 
+TEST_JWT_SECRET = "test-internal-jwt-secret-with-at-least-sixty-four-bytes-of-entropy"
 
-def test_verify_token_accepts_internal_hs256_token():
+
+def test_verify_token_accepts_internal_hs256_token(monkeypatch):
+    monkeypatch.setattr(settings, "JWT_SECRET", TEST_JWT_SECRET)
     token = issue_token(
         "user_public_id",
         "owner@example.com",
@@ -29,7 +32,8 @@ def test_verify_token_accepts_internal_hs256_token():
     assert payload["impersonation_reason"] == "Owner support review"
 
 
-def test_verify_token_rejects_expired_internal_token():
+def test_verify_token_rejects_expired_internal_token(monkeypatch):
+    monkeypatch.setattr(settings, "JWT_SECRET", TEST_JWT_SECRET)
     token = jwt.encode(
         {
             "sub": "user_public_id",
@@ -39,7 +43,7 @@ def test_verify_token_rejects_expired_internal_token():
             "iat": int(time.time()) - 120,
             "exp": int(time.time()) - 60,
         },
-        settings.JWT_SECRET,
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
 
@@ -50,7 +54,8 @@ def test_verify_token_rejects_expired_internal_token():
     assert exc.value.detail == "Token expired"
 
 
-def test_verify_token_rejects_unsupported_algorithm():
+def test_verify_token_rejects_unsupported_algorithm(monkeypatch):
+    monkeypatch.setattr(settings, "JWT_SECRET", TEST_JWT_SECRET)
     token = jwt.encode(
         {
             "sub": "user_public_id",
@@ -60,7 +65,7 @@ def test_verify_token_rejects_unsupported_algorithm():
             "iat": int(time.time()),
             "exp": int(time.time()) + 60,
         },
-        settings.JWT_SECRET,
+        TEST_JWT_SECRET,
         algorithm="HS512",
     )
 

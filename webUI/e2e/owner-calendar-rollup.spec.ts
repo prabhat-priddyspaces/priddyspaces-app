@@ -109,6 +109,7 @@ test("owner calendar rolls up shared desk slot statuses", async ({ page }) => {
   await routeCalendarApis(page);
 
   await page.goto("/owner/calendar");
+  await page.getByTestId("calendar-date-input").fill("2026-06-01");
 
   await expect(page.getByText("3 booked • 1 pending").first()).toBeVisible();
   await expect(page.getByText("4/10 seats").first()).toBeVisible();

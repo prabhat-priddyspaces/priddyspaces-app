@@ -21,6 +21,7 @@ from app.models.enums import (
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.cancellation_policy import CancellationPolicy
+from app.models.feature_flag import FeatureFlag
 from app.models.user import User
 from app.models.location_amenity import LocationAmenity
 from app.models.organization import Organization
@@ -1037,6 +1038,39 @@ def test_public_space_availability_marks_day_fully_blocked_by_bookings(db_sessio
         {"start": "09:00", "end": "12:00"},
         {"start": "12:00", "end": "18:00"},
     ]
+
+
+def test_public_space_availability_calendar_daily_prices_are_feature_flagged(db_session, client_factory):
+    seeded = _seed_public_location_marketplace(db_session)
+    meeting_room = seeded["meeting_room"]
+    client = client_factory({"sub": "sub-owner-public", "email": "owner-public@example.com", "email_verified": True})
+
+    response = client.get(
+        f"/api/marketplace/spaces/{meeting_room.public_id}/availability?from=2026-04-16&to=2026-04-16"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["daily_price"] == "220.00"
+    assert body["show_calendar_daily_prices"] is False
+
+    db_session.add(
+        FeatureFlag(
+            tenant_id=meeting_room.tenant_id,
+            flag_key="booking_calendar_daily_prices_enabled",
+            flag_value=True,
+            scope_type="space",
+            scope_id=meeting_room.id,
+        )
+    )
+    db_session.commit()
+
+    enabled_response = client.get(
+        f"/api/marketplace/spaces/{meeting_room.public_id}/availability?from=2026-04-16&to=2026-04-16"
+    )
+
+    assert enabled_response.status_code == 200
+    assert enabled_response.json()["show_calendar_daily_prices"] is True
 
 
 def test_public_space_availability_counts_shared_desk_remaining_seats(db_session, client_factory):

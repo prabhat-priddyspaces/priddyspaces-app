@@ -9,8 +9,11 @@ from app.models.space import Space
 from app.schemas.feature_flag import FeatureFlagCreate, FeatureFlagOut
 from app.services.auth_user import get_or_create_user
 from app.services.authz import get_org_member, require_owner_or_admin
+from app.services.platform_auth import require_superadmin
 
 router = APIRouter()
+
+SUPERADMIN_MANAGED_FLAGS = {"booking_calendar_daily_prices_enabled"}
 
 
 @router.post("/feature-flags", response_model=FeatureFlagOut)
@@ -20,6 +23,7 @@ def create_feature_flag(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
+    superadmin_managed = payload.flag_key in SUPERADMIN_MANAGED_FLAGS
 
     scope_id = None
     tenant_id = None
@@ -27,29 +31,44 @@ def create_feature_flag(
         org = db.query(Organization).filter(Organization.public_id == payload.scope_public_id).first()
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
-        member = get_org_member(db, org.id, user.id)
-        require_owner_or_admin(member)
+        if superadmin_managed:
+            require_superadmin(db, token)
+        else:
+            member = get_org_member(db, org.id, user.id)
+            require_owner_or_admin(member)
         scope_id = org.id
         tenant_id = org.id
     elif payload.scope_type == "space":
         space = db.query(Space).filter(Space.public_id == payload.scope_public_id).first()
         if not space:
             raise HTTPException(status_code=404, detail="Space not found")
-        member = get_org_member(db, space.tenant_id, user.id)
-        require_owner_or_admin(member)
+        if superadmin_managed:
+            require_superadmin(db, token)
+        else:
+            member = get_org_member(db, space.tenant_id, user.id)
+            require_owner_or_admin(member)
         scope_id = space.id
         tenant_id = space.tenant_id
     else:
         raise HTTPException(status_code=400, detail="Invalid scope_type")
 
-    flag = FeatureFlag(
-        tenant_id=tenant_id,
-        flag_key=payload.flag_key,
-        flag_value=payload.flag_value,
-        scope_type=payload.scope_type,
-        scope_id=scope_id
-    )
-    db.add(flag)
+    flag = db.query(FeatureFlag).filter(
+        FeatureFlag.flag_key == payload.flag_key,
+        FeatureFlag.scope_type == payload.scope_type,
+        FeatureFlag.scope_id == scope_id,
+    ).first()
+    if flag:
+        flag.flag_value = payload.flag_value
+        flag.tenant_id = tenant_id
+    else:
+        flag = FeatureFlag(
+            tenant_id=tenant_id,
+            flag_key=payload.flag_key,
+            flag_value=payload.flag_value,
+            scope_type=payload.scope_type,
+            scope_id=scope_id
+        )
+        db.add(flag)
     db.commit()
     db.refresh(flag)
     return flag
@@ -68,7 +87,10 @@ def list_feature_flags(
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
         member = get_org_member(db, org.id, user.id)
-        require_owner_or_admin(member)
+        if not member:
+            require_superadmin(db, token)
+        else:
+            require_owner_or_admin(member)
         return db.query(FeatureFlag).filter(
             FeatureFlag.scope_type == "tenant",
             FeatureFlag.scope_id == org.id
@@ -78,7 +100,10 @@ def list_feature_flags(
         if not space:
             raise HTTPException(status_code=404, detail="Space not found")
         member = get_org_member(db, space.tenant_id, user.id)
-        require_owner_or_admin(member)
+        if not member:
+            require_superadmin(db, token)
+        else:
+            require_owner_or_admin(member)
         return db.query(FeatureFlag).filter(
             FeatureFlag.scope_type == "space",
             FeatureFlag.scope_id == space.id
