@@ -354,6 +354,14 @@ def test_superadmin_can_update_settings_profile_and_password(db_session, client_
     assert settings.status_code == 200
     assert settings.json()["current_admin"]["email"] == superadmin.email
     assert settings.json()["current_admin"]["created_at"] is not None
+    assert settings.json()["booking_calendar_daily_prices_enabled"] is False
+
+    platform_settings = client.patch(
+        "/api/admin/settings",
+        json={"booking_calendar_daily_prices_enabled": True},
+    )
+    assert platform_settings.status_code == 200
+    assert platform_settings.json()["booking_calendar_daily_prices_enabled"] is True
 
     profile = client.patch(
         "/api/admin/settings/profile",

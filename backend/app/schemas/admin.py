@@ -69,6 +69,7 @@ class PlatformSettingsUpdateIn(BaseModel):
     priddy_point_value_cents: int | None = None
     priddy_allowed_space_types: list[str] | None = None
     priddy_allowed_booking_modes: list[str] | None = None
+    booking_calendar_daily_prices_enabled: bool | None = None
 
     @field_validator("default_owner_commission_pct")
     @classmethod
