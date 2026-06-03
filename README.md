@@ -109,6 +109,17 @@ python -m alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
+### Backend tests
+
+Backend tests run against PostgreSQL. Start the database service, then point tests
+at a database whose name contains `test`:
+
+```bash
+docker compose up -d db
+cd backend
+TEST_DATABASE_URL=postgresql+psycopg2://priddyspaces:priddyspaces@localhost:5433/priddyspaces_test pytest -q
+```
+
 ## Useful Docker commands
 
 ```bash
