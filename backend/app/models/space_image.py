@@ -8,8 +8,8 @@ class SpaceImage(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "space_images"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     image_url = Column(String(1024), nullable=False)
     storage_key = Column(String(512), nullable=False)
     is_primary = Column(Boolean, nullable=False, default=False, server_default="false")

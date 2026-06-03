@@ -8,8 +8,8 @@ class SpaceBookingMode(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "space_booking_modes"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     booking_mode = Column(String(32), nullable=False)
     is_enabled = Column(Boolean, nullable=False, default=True, server_default="true")
 

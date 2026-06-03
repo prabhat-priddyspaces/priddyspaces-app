@@ -11,8 +11,9 @@ class AuditLog(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    actor_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
-    acting_as_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # actor_id=0 is a sentinel for system/webhook actors — no FK constraint
+    actor_id = Column(Integer, nullable=False, index=True)
+    acting_as_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     action = Column(String(128), nullable=False)
     entity_type = Column(String(64), nullable=False)
     entity_public_id = Column(String(36), nullable=False)

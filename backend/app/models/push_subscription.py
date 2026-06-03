@@ -8,7 +8,7 @@ class PushSubscription(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "push_subscriptions"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     tenant_id = Column(Integer, nullable=True, index=True)
     provider = Column(String(16), nullable=False, index=True)
     endpoint_hash = Column(String(128), nullable=False, unique=True, index=True)

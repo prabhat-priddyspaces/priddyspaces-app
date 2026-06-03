@@ -175,7 +175,6 @@ def upgrade() -> None:
     _validate("feature_flags", "tenant_id")
     _validate("tax_configs", "tenant_id")
     _validate("promo_codes", "tenant_id")
-    _validate("audit_logs", "actor_id")
     _validate("audit_logs", "acting_as_user_id")
     _validate("user_notifications", "user_id")
     _validate("push_subscriptions", "user_id")

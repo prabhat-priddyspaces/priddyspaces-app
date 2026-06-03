@@ -8,7 +8,7 @@ class CancellationPolicyTier(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "cancellation_policy_tiers"
 
     id = Column(Integer, primary_key=True)
-    cancellation_policy_id = Column(Integer, ForeignKey("cancellation_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    cancellation_policy_id = Column(Integer, ForeignKey("cancellation_policies.id", ondelete="CASCADE", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     min_hours_before_start = Column(Integer, nullable=False)
     refund_percent = Column(Integer, nullable=False)
     sort_order = Column(Integer, nullable=False, default=0, server_default="0")

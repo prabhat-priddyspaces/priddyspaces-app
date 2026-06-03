@@ -10,8 +10,8 @@ class SubscriptionPlan(PublicIdMixin, TimestampMixin, Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(120), nullable=False, default="Membership")
-    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     space_type = Column(
         Enum(SpaceType, values_callable=enum_values),
         nullable=False,

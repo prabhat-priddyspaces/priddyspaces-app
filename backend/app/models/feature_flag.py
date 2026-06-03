@@ -12,7 +12,7 @@ class FeatureFlag(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     flag_key = Column(String(64), nullable=False)
     flag_value = Column(Boolean, nullable=False, default=False, server_default="false")
     scope_type = Column(String(16), nullable=False)  # tenant | space

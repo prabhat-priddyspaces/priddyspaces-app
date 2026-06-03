@@ -11,11 +11,11 @@ class MemberOwnerPaymentMethod(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
-    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     provider = Column(String(32), nullable=False)
-    owner_payment_setting_id = Column(Integer, ForeignKey("owner_payment_settings.id", ondelete="RESTRICT"), nullable=False)
+    owner_payment_setting_id = Column(Integer, ForeignKey("owner_payment_settings.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False)
 
     provider_customer_id = Column(String(255), nullable=True)
     provider_payment_method_id = Column(String(255), nullable=True)

@@ -9,7 +9,7 @@ class PaymentEvent(PublicIdMixin, TimestampMixin, Base):
 
     id = Column(Integer, primary_key=True)
     provider = Column(String(32), default="stripe", server_default="stripe")
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     event_id = Column(String(255), nullable=False, unique=True, index=True)
     event_type = Column(String(128), nullable=False)
     payload = Column(JSON, nullable=True)

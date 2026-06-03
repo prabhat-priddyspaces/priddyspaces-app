@@ -213,7 +213,7 @@ def upgrade() -> None:
     _add_fk("promo_codes", "tenant_id", "organizations")
 
     # ── audit_logs ───────────────────────────────────────────────────────────
-    _add_fk("audit_logs", "actor_id", "users")
+    # actor_id uses 0 as a system sentinel — no FK constraint on it
     _add_fk("audit_logs", "acting_as_user_id", "users", on_delete="SET NULL")
 
     # ── user_notifications ───────────────────────────────────────────────────
@@ -318,7 +318,6 @@ def downgrade() -> None:
     _drop_fk("push_subscriptions", "user_id")
     _drop_fk("user_notifications", "user_id")
     _drop_fk("audit_logs", "acting_as_user_id")
-    _drop_fk("audit_logs", "actor_id")
     _drop_fk("promo_codes", "tenant_id")
     _drop_fk("tax_configs", "tenant_id")
     _drop_fk("feature_flags", "tenant_id")

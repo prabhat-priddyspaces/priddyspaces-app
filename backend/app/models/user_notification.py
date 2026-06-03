@@ -17,7 +17,7 @@ class UserNotification(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     tenant_id = Column(Integer, nullable=True, index=True)
     organization_id = Column(Integer, nullable=True, index=True)
     booking_id = Column(Integer, nullable=True, index=True)

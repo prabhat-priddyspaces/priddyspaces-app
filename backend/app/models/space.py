@@ -8,8 +8,8 @@ class Space(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "spaces"
 
     id = Column(Integer, primary_key=True)
-    location_id = Column(Integer, ForeignKey("locations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    location_id = Column(Integer, ForeignKey("locations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     name = Column(String(255), nullable=True)
     space_type = Column(
         Enum(SpaceType, values_callable=enum_values),
@@ -43,4 +43,4 @@ class Space(PublicIdMixin, TimestampMixin, Base):
     priddy_points_enabled = Column(Boolean, nullable=True)
     owner_points_enabled = Column(Boolean, nullable=True)
     amenities = Column(String(1024), nullable=True)
-    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="SET NULL"), nullable=True)
+    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)

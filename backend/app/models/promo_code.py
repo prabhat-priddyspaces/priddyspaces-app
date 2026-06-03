@@ -11,7 +11,7 @@ class PromoCode(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     code = Column(String(64), nullable=False)
     description = Column(String(1024), nullable=True)
     discount_type = Column(String(16), nullable=False)  # percent | fixed

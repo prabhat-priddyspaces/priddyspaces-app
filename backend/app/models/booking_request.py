@@ -9,15 +9,15 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "booking_requests"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT"), nullable=False, index=True)
-    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True)
-    booking_series_id = Column(Integer, ForeignKey("booking_series.id", ondelete="SET NULL"), nullable=True, index=True)
-    owner_payment_setting_id = Column(Integer, ForeignKey("owner_payment_settings.id", ondelete="SET NULL"), nullable=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
+    booking_series_id = Column(Integer, ForeignKey("booking_series.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
+    owner_payment_setting_id = Column(Integer, ForeignKey("owner_payment_settings.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     payment_provider = Column(String(32), nullable=True)
-    member_owner_payment_method_id = Column(Integer, ForeignKey("member_owner_payment_methods.id", ondelete="SET NULL"), nullable=True)
-    loyalty_redemption_lock_id = Column(Integer, ForeignKey("loyalty_redemption_locks.id", ondelete="SET NULL"), nullable=True)
+    member_owner_payment_method_id = Column(Integer, ForeignKey("member_owner_payment_methods.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
+    loyalty_redemption_lock_id = Column(Integer, ForeignKey("loyalty_redemption_locks.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     start_datetime = Column(DateTime(timezone=True), nullable=False)
     end_datetime = Column(DateTime(timezone=True), nullable=False)
     status = Column(
@@ -43,7 +43,7 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
     payment_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     operator_notes = Column(String(1024), nullable=True)
     source = Column(String(32), nullable=False, default="member", server_default="member")
-    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     payment_collection_mode = Column(String(32), nullable=True)
 
     request_kind = Column(
@@ -52,7 +52,7 @@ class BookingRequest(PublicIdMixin, TimestampMixin, Base):
         default=BookingRequestKind.HOURLY_BOOKING,
         server_default="hourly_booking",
     )
-    membership_plan_id = Column(Integer, ForeignKey("membership_plans.id", ondelete="SET NULL"), nullable=True)
+    membership_plan_id = Column(Integer, ForeignKey("membership_plans.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     desired_start_date = Column(Date, nullable=True)
     seats_requested = Column(Integer, nullable=False, default=1, server_default="1")
     commitment_months_snapshot = Column(Integer, nullable=True)

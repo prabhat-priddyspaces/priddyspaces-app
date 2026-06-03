@@ -11,7 +11,7 @@ class CancellationPolicy(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     space_type = Column(String(32), nullable=False)
     cancel_window_hours = Column(Integer, nullable=False, default=24)
     refund_percent = Column(Integer, nullable=False, default=0)
