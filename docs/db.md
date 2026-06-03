@@ -146,10 +146,25 @@
 - public_id
 - tenant_id
 - code
+- description
 - discount_type (percent/fixed)
 - discount_value
 - starts_at
 - ends_at
+- expires_at
+- max_redemptions
+- max_redemptions_per_member
+- total_redemptions
+- is_active
+
+### BookingPromotion
+- id
+- public_id
+- booking_id
+- booking_request_id
+- promo_code_id
+- promo_code_snapshot
+- discount_amount
 
 ### FeatureFlag
 - id

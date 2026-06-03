@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
 
 export interface CheckoutSummaryPayload {
   space_public_id?: string;
@@ -14,6 +15,7 @@ export interface CheckoutSummaryPayload {
   seats_requested?: number;
   membership_plan_public_id?: string;
   desired_start_date?: string;
+  promo_code?: string;
 }
 
 interface PreviewLineItem {
@@ -26,6 +28,11 @@ interface CheckoutPreview {
   base_amount_cents: number;
   setup_fee_amount_cents: number;
   discount_amount_cents: number;
+  promo_code?: string | null;
+  promo_code_public_id?: string | null;
+  promo_description?: string | null;
+  promo_discount_amount_cents?: number;
+  subtotal_after_promo_cents?: number | null;
   tax_amount_cents: number;
   total_amount_cents: number;
   line_items: PreviewLineItem[];
@@ -39,7 +46,7 @@ interface CheckoutSummaryModalProps {
   rewardsDiscountCents?: number;
   submitting?: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (promoCode?: string) => void;
 }
 
 function formatCents(cents: number) {
@@ -64,7 +71,20 @@ export function CheckoutSummaryModal({
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const payloadKey = useMemo(() => (payload ? JSON.stringify(payload) : ""), [payload]);
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState("");
+  const canUsePromo = Boolean(getAccessToken() && payload?.space_public_id && !payload?.membership_plan_public_id);
+  const payloadKey = useMemo(
+    () => (payload ? JSON.stringify({ ...payload, promo_code: appliedPromoCode || undefined }) : ""),
+    [appliedPromoCode, payload],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setPromoInput("");
+      setAppliedPromoCode("");
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open || !payloadKey) {
@@ -76,10 +96,14 @@ export function CheckoutSummaryModal({
     let active = true;
     setLoading(true);
     setError("");
-    apiFetch<CheckoutPreview>("/api/booking-requests/preview", {
-      method: "POST",
-      body: JSON.stringify(requestPayload),
-    })
+    apiFetch<CheckoutPreview>(
+      "/api/booking-requests/preview",
+      {
+        method: "POST",
+        body: JSON.stringify(requestPayload),
+      },
+      getAccessToken() ?? undefined,
+    )
       .then((response) => {
         if (active) setPreview(response);
       })
@@ -98,6 +122,30 @@ export function CheckoutSummaryModal({
     () => Math.max(0, (preview?.total_amount_cents ?? 0) - Math.max(0, rewardsDiscountCents)),
     [preview?.total_amount_cents, rewardsDiscountCents],
   );
+  const automaticDiscountCents = preview
+    ? (preview.discount_amount_cents || 0) + Math.max(0, preview.promo_discount_amount_cents || 0)
+    : 0;
+
+  function applyPromo() {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) {
+      setError("Enter a promo code");
+      return;
+    }
+    if (appliedPromoCode && appliedPromoCode !== code) {
+      setError("Remove the current promo code before applying another.");
+      return;
+    }
+    setError("");
+    setAppliedPromoCode(code);
+    setPromoInput(code);
+  }
+
+  function removePromo() {
+    setAppliedPromoCode("");
+    setPromoInput("");
+    setError("");
+  }
 
   if (!open) return null;
 
@@ -122,6 +170,43 @@ export function CheckoutSummaryModal({
         <div className="mt-5 min-h-[140px]">
           {loading ? <div className="text-sm text-text-3">Loading checkout summary...</div> : null}
           {error ? <div className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</div> : null}
+          {canUsePromo ? (
+            <div className="mb-3 rounded-xl border border-line bg-surface-2 p-3">
+              <div className="text-sm font-semibold text-text">Have a promo code?</div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={promoInput}
+                  disabled={Boolean(appliedPromoCode)}
+                  onChange={(event) => setPromoInput(event.target.value.toUpperCase())}
+                  placeholder="Promo code"
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-text outline-none disabled:opacity-60"
+                />
+                {appliedPromoCode ? (
+                  <button
+                    type="button"
+                    onClick={removePromo}
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-line px-3 text-sm font-semibold text-text"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={applyPromo}
+                    className="inline-flex h-10 items-center justify-center rounded-lg bg-brand px-3 text-sm font-semibold text-white"
+                  >
+                    Apply
+                  </button>
+                )}
+              </div>
+              {preview?.promo_code && (preview.promo_discount_amount_cents || 0) > 0 ? (
+                <div className="mt-2 flex items-center justify-between gap-4 text-sm text-success">
+                  <span>Promo {preview.promo_code}</span>
+                  <span>-{formatCents(preview.promo_discount_amount_cents || 0)}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {preview && !loading ? (
             <div className="space-y-3 text-sm">
               {preview.line_items.map((item, index) => (
@@ -130,10 +215,10 @@ export function CheckoutSummaryModal({
                   <span className="font-medium text-text">{formatCents(item.amount_cents)}</span>
                 </div>
               ))}
-              {preview.discount_amount_cents < 0 ? (
+              {automaticDiscountCents < 0 ? (
                 <div className="flex items-center justify-between gap-4 text-success">
                   <span>Discount</span>
-                  <span>-{formatCents(Math.abs(preview.discount_amount_cents))}</span>
+                  <span>-{formatCents(Math.abs(automaticDiscountCents))}</span>
                 </div>
               ) : null}
               {rewardsDiscountCents > 0 ? (
@@ -168,7 +253,7 @@ export function CheckoutSummaryModal({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={() => onConfirm(preview?.promo_code || appliedPromoCode || undefined)}
             disabled={!preview || loading || Boolean(error) || submitting}
             className="inline-flex h-11 items-center justify-center rounded-full bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
           >

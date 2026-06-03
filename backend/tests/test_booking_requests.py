@@ -24,7 +24,10 @@ from app.models.location import Location
 from app.models.space import Space
 from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.booking_request import BookingRequest
+from app.models.booking_promotion import BookingPromotion
 from app.models.booking import Booking
+from app.models.promo_code import PromoCode
+from app.models.tax_config import TaxConfig
 from app.models.audit_log import AuditLog
 from app.models.booking_series import BookingSeries
 from app.models.owner_payment_setting import OwnerPaymentSetting
@@ -369,6 +372,153 @@ def test_shared_desk_preview_applies_setup_fee_once_per_checkout_not_seat(db_ses
     assert body["base_amount_cents"] == 5000
     assert body["setup_fee_amount_cents"] == 1000
     assert body["total_amount_cents"] == 6000
+
+
+def test_member_promo_preview_and_successful_booking_redemption(db_session, client_factory, monkeypatch):
+    owner, space = _seed_owner_space(db_session)
+    db_session.add(TaxConfig(tenant_id=space.tenant_id, rate_percent=10))
+    promo = PromoCode(
+        tenant_id=space.tenant_id,
+        code="SUMMER20",
+        description="Summer launch",
+        discount_type="percent",
+        discount_value=20,
+        max_redemptions=2,
+        max_redemptions_per_member=1,
+        is_active=True,
+    )
+    member = User(
+        email="promo-member@example.com",
+        auth_subject="sub-promo-member",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add_all([promo, member])
+    db_session.commit()
+    db_session.refresh(member)
+    method = _seed_payment_method(db_session, member, space)
+    _publish_space_for_preview(db_session, space)
+    member_client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+
+    preview = member_client.post(
+        "/api/booking-requests/preview",
+        json={
+            "space_public_id": space.public_id,
+            "start_datetime": datetime(2026, 3, 23, 10, 0, tzinfo=timezone.utc).isoformat(),
+            "end_datetime": datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc).isoformat(),
+            "booking_mode": "hourly",
+            "full_day": False,
+            "promo_code": "summer20",
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    preview_body = preview.json()
+    assert preview_body["base_amount_cents"] == 10000
+    assert preview_body["promo_code"] == "SUMMER20"
+    assert preview_body["promo_discount_amount_cents"] == 2000
+    assert preview_body["tax_amount_cents"] == 800
+    assert preview_body["total_amount_cents"] == 8800
+
+    create_payload = _request_payload(space, method, day=23)
+    create_payload["promo_code"] = "SUMMER20"
+    create = member_client.post("/api/booking-requests", json=create_payload)
+    assert create.status_code == 200, create.text
+    req = db_session.query(BookingRequest).filter(BookingRequest.public_id == create.json()["public_id"]).one()
+
+    class SucceedingProvider:
+        def charge_saved_method(self, **kwargs):
+            assert kwargs["amount_cents"] == 8800
+            return ChargeResult(status="succeeded", provider_payment_id="pi_promo", raw_response={"ok": True})
+
+    monkeypatch.setattr("app.services.booking_payments.PaymentProviderFactory.get", lambda _setting: SucceedingProvider())
+    owner_client = client_factory({
+        "sub": owner.auth_subject,
+        "email": owner.email,
+        "email_verified": True,
+    })
+    approved = owner_client.post(f"/api/booking-requests/{req.public_id}/approve", json={})
+    assert approved.status_code == 200, approved.text
+
+    db_session.refresh(promo)
+    promotion = db_session.query(BookingPromotion).filter(BookingPromotion.booking_request_id == req.id).one()
+    assert promo.total_redemptions == 1
+    assert promotion.discount_amount == 2000
+    assert promotion.promo_code_snapshot["code"] == "SUMMER20"
+    assert promotion.promo_code_snapshot["description"] == "Summer launch"
+
+    invoices = owner_client.get("/api/invoices")
+    assert invoices.status_code == 200, invoices.text
+    assert any("Promo SUMMER20" in invoice["description"] for invoice in invoices.json())
+
+
+def test_promo_preview_rejects_expired_inactive_and_limit_reached(db_session, client_factory):
+    _, space = _seed_owner_space(db_session)
+    _publish_space_for_preview(db_session, space)
+    member = User(
+        email="promo-errors@example.com",
+        auth_subject="sub-promo-errors",
+        role=UserAppRole.MEMBER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add_all(
+        [
+            member,
+            PromoCode(
+                tenant_id=space.tenant_id,
+                code="EXPIRED",
+                discount_type="percent",
+                discount_value=10,
+                expires_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                is_active=True,
+            ),
+            PromoCode(
+                tenant_id=space.tenant_id,
+                code="INACTIVE",
+                discount_type="percent",
+                discount_value=10,
+                is_active=False,
+            ),
+            PromoCode(
+                tenant_id=space.tenant_id,
+                code="MAXED",
+                discount_type="percent",
+                discount_value=10,
+                max_redemptions=1,
+                total_redemptions=1,
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+    client = client_factory({
+        "sub": member.auth_subject,
+        "email": member.email,
+        "email_verified": True,
+    })
+    base_payload = {
+        "space_public_id": space.public_id,
+        "start_datetime": datetime(2026, 3, 24, 10, 0, tzinfo=timezone.utc).isoformat(),
+        "end_datetime": datetime(2026, 3, 24, 12, 0, tzinfo=timezone.utc).isoformat(),
+        "booking_mode": "hourly",
+        "full_day": False,
+    }
+
+    expired = client.post("/api/booking-requests/preview", json={**base_payload, "promo_code": "EXPIRED"})
+    inactive = client.post("/api/booking-requests/preview", json={**base_payload, "promo_code": "INACTIVE"})
+    maxed = client.post("/api/booking-requests/preview", json={**base_payload, "promo_code": "MAXED"})
+
+    assert expired.status_code == 400
+    assert expired.json()["detail"] == "Promo code expired"
+    assert inactive.status_code == 400
+    assert inactive.json()["detail"] == "Promo code inactive"
+    assert maxed.status_code == 400
+    assert maxed.json()["detail"] == "Redemption limit reached"
 
 
 def test_manual_booking_charge_uses_setup_fee_snapshot_after_fee_changes(db_session, client_factory, monkeypatch):

@@ -68,6 +68,7 @@ class BookingRequestCreate(BaseModel):
     payment_authorization_consent: bool = False
     redemption_lock_public_id: str | None = None
     source_waitlist_public_id: str | None = None
+    promo_code: str | None = Field(default=None, max_length=64)
 
     # Explicit pricing-mode signals from the booking widget. Optional for backwards
     # compat with older clients; modern widgets always send one of these.
@@ -86,6 +87,8 @@ class BookingRequestCreate(BaseModel):
                 "Provide either booking fields (space_public_id + start/end_datetime) OR "
                 "membership fields (membership_plan_public_id + desired_start_date), not both"
             )
+        if self.promo_code and is_membership:
+            raise ValueError("Promo codes can only be used for direct bookings")
         if not is_booking and not is_membership:
             raise ValueError(
                 "Provide booking fields (space_public_id + start/end_datetime) OR "
@@ -103,6 +106,7 @@ class BookingPricePreviewCreate(BaseModel):
     booking_mode: str | None = None
     full_day: bool = False
     seats_requested: int = Field(default=1, ge=1)
+    promo_code: str | None = Field(default=None, max_length=64)
 
     membership_plan_public_id: str | None = None
     desired_start_date: date | None = None
@@ -115,6 +119,8 @@ class BookingPricePreviewCreate(BaseModel):
         plan = bool(self.membership_plan_public_id and self.desired_start_date)
         if direct and plan:
             raise ValueError("Preview either a direct booking or a membership/lease, not both")
+        if self.promo_code and plan:
+            raise ValueError("Promo codes can only be used for direct bookings")
         if not direct and not plan:
             raise ValueError("Provide direct booking fields or membership fields")
         return self
@@ -130,6 +136,11 @@ class BookingPricePreviewOut(BaseModel):
     base_amount_cents: int
     setup_fee_amount_cents: int = 0
     discount_amount_cents: int = 0
+    promo_code: str | None = None
+    promo_code_public_id: str | None = None
+    promo_description: str | None = None
+    promo_discount_amount_cents: int = 0
+    subtotal_after_promo_cents: int | None = None
     tax_amount_cents: int = 0
     total_amount_cents: int
     rate_basis: str | None = None
@@ -226,6 +237,9 @@ class BookingRequestOut(BaseModel):
     redemption_lock_public_id: str | None = None
     loyalty_points_used: int = 0
     loyalty_discount_cents: int = 0
+    promo_code: str | None = None
+    promo_description: str | None = None
+    promo_discount_amount_cents: int = 0
     approved_at: datetime | None = None
     rejected_at: datetime | None = None
     cancelled_at: datetime | None = None

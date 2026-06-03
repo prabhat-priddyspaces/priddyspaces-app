@@ -314,6 +314,23 @@ describe("booking approval and recovery mobile flows", () => {
         });
       }
       if (path === "/api/booking-requests/preview") {
+        const body = JSON.parse(String(init?.body || "{}"));
+        if (body.promo_code === "SUMMER20") {
+          return Promise.resolve({
+            base_amount_cents: 20000,
+            setup_fee_amount_cents: 2500,
+            discount_amount_cents: -4500,
+            promo_code: "SUMMER20",
+            promo_discount_amount_cents: 4500,
+            subtotal_after_promo_cents: 18000,
+            tax_amount_cents: 0,
+            total_amount_cents: 18000,
+            line_items: [
+              { label: "Day Rate", amount_cents: 20000 },
+              { label: "Room setup", amount_cents: 2500 },
+            ],
+          });
+        }
         return Promise.resolve({
           base_amount_cents: 20000,
           setup_fee_amount_cents: 2500,
@@ -343,6 +360,10 @@ describe("booking approval and recovery mobile flows", () => {
     expect(await screen.findByText("Checkout summary")).toBeTruthy();
     expect(screen.getByText("Room setup")).toBeTruthy();
     expect(screen.getByText("$225")).toBeTruthy();
+    fireEvent.changeText(screen.getByPlaceholderText("Promo code"), "summer20");
+    fireEvent.press(screen.getByText("Apply promo"));
+    expect(await screen.findByText("Promo SUMMER20")).toBeTruthy();
+    expect(screen.getByText("$180")).toBeTruthy();
     fireEvent.press(screen.getByText("Continue"));
 
     await waitFor(() => {
@@ -351,6 +372,13 @@ describe("booking approval and recovery mobile flows", () => {
         expect.objectContaining({
           method: "POST",
           body: expect.stringContaining('"booking_mode":"day_pass"'),
+        }),
+        "token",
+      );
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/booking-requests",
+        expect.objectContaining({
+          body: expect.stringContaining('"promo_code":"SUMMER20"'),
         }),
         "token",
       );

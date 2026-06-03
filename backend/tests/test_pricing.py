@@ -92,6 +92,61 @@ def test_pricing_rule_and_promo_tax(db_session, client_factory):
         }
     )
     assert promo.status_code == 200
+    duplicate = client.post(
+        f"/api/promo-codes?organization_public_id={org.public_id}",
+        json={
+            "code": "welcome10",
+            "discount_type": "percent",
+            "discount_value": 10,
+            "is_active": True
+        }
+    )
+    assert duplicate.status_code == 400
+
+    owner_two = User(
+        email="owner-two@example.com",
+        auth_subject="sub-owner-two",
+        role=UserAppRole.OWNER,
+        email_verified=True,
+        is_active=True,
+    )
+    db_session.add(owner_two)
+    db_session.commit()
+    db_session.refresh(owner_two)
+    org_two = Organization(name="Owner Org Two", owner_id=owner_two.id)
+    db_session.add(org_two)
+    db_session.commit()
+    db_session.refresh(org_two)
+    db_session.add(
+        OrganizationMember(
+            organization_id=org_two.id,
+            tenant_id=org_two.id,
+            user_id=owner_two.id,
+            role=UserRole.OWNER,
+            can_override_pricing=True,
+        )
+    )
+    db_session.commit()
+    other_client = client_factory({
+        "sub": owner_two.auth_subject,
+        "email": owner_two.email,
+        "email_verified": True,
+    })
+    other_promo = other_client.post(
+        f"/api/promo-codes?organization_public_id={org_two.public_id}",
+        json={
+            "code": "WELCOME10",
+            "discount_type": "percent",
+            "discount_value": 10,
+            "is_active": True
+        }
+    )
+    assert other_promo.status_code == 200
+    client = client_factory({
+        "sub": "sub-owner",
+        "email": owner.email,
+        "email_verified": True
+    })
 
     promos = client.get(f"/api/promo-codes?organization_public_id={org.public_id}")
     assert promos.status_code == 200

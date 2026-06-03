@@ -39,6 +39,11 @@ from app.services.access_passes import ensure_access_pass_for_booking, ensure_ac
 from app.services.booking_inventory import booking_blocks_inventory
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
 from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
+from app.services.promo_codes import (
+    apply_promo_to_snapshot,
+    record_promo_redemption,
+    revalidate_promo_snapshot,
+)
 from app.services.cancellation_refunds import policy_for_space, policy_snapshot, refund_percent_from_snapshot
 from app.services.setup_fees import setup_fee_snapshot_items
 from app.services.loyalty import (
@@ -278,17 +283,20 @@ def _snapshot_from_estimate(
         if int(item.get("amount_cents") or 0) > 0
     ]
     setup_fee_cents = sum(int(item["amount_cents"]) for item in setup_items)
-    setup_fee_tax_cents = int(round(setup_fee_cents * (tax_rate_percent / 100.0))) if tax_rate_percent else 0
     base_cents = estimate.base_cents * multiplier
     discount_cents = estimate.discount_cents * multiplier
-    tax_cents = (estimate.tax_cents * multiplier) + setup_fee_tax_cents
-    total_cents = base_cents + discount_cents + setup_fee_cents + tax_cents
+    subtotal_after_discount_cents = max(0, base_cents + discount_cents + setup_fee_cents)
+    tax_cents = int(round(subtotal_after_discount_cents * (tax_rate_percent / 100.0))) if tax_rate_percent else 0
+    total_cents = subtotal_after_discount_cents + tax_cents
     return {
         "base_cents": base_cents,
         "setup_fee_cents": setup_fee_cents,
         "subtotal_cents": base_cents + setup_fee_cents,
         "discount_cents": discount_cents,
+        "volume_discount_cents": discount_cents,
+        "subtotal_after_promo_cents": subtotal_after_discount_cents,
         "tax_cents": tax_cents,
+        "tax_rate_percent": tax_rate_percent,
         "total_cents": total_cents,
         "rate_basis": estimate.rate_basis,
         "units": estimate.units,
@@ -328,6 +336,8 @@ def build_direct_booking_pricing_snapshot(
     full_day: bool,
     seats_requested: int = 1,
     occurrence_count: int = 1,
+    promo_code: str | None = None,
+    user_id: int | None = None,
 ) -> dict:
     rule = get_active_pricing_rule(db, space.id)
     tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
@@ -357,7 +367,7 @@ def build_direct_booking_pricing_snapshot(
         if is_day_pass and _space_type_value(space) == SpaceType.SHARED_DESK.value
         else 1
     )
-    return _snapshot_from_estimate(
+    snapshot = _snapshot_from_estimate(
         estimate,
         occurrence_count=occurrence_count,
         refund_snapshot=refund_snapshot,
@@ -365,6 +375,14 @@ def build_direct_booking_pricing_snapshot(
         setup_fee_items=setup_fee_snapshot_items(db, space.id),
         tax_rate_percent=tax.rate_percent if tax else None,
         base_label=_direct_booking_base_label(space, is_day_pass=is_day_pass),
+    )
+    return apply_promo_to_snapshot(
+        db,
+        space=space,
+        snapshot=snapshot,
+        promo_code=promo_code,
+        user_id=user_id,
+        tax_rate_percent=tax.rate_percent if tax else None,
     )
 
 
@@ -404,7 +422,7 @@ def _estimate_request_snapshot(db: Session, req: BookingRequest, space: Space) -
         try:
             parsed = json.loads(req.pricing_snapshot)
             if isinstance(parsed, dict) and parsed.get("total_cents") is not None:
-                return parsed
+                return revalidate_promo_snapshot(db, req=req, space=space, snapshot=parsed)
         except json.JSONDecodeError:
             pass
 
@@ -555,6 +573,12 @@ def finalize_successful_booking_request_payment(
         req.pricing_snapshot = json.dumps(payment.pricing_snapshot)
     if payment_snapshot is None and not req.refund_policy_snapshot and payment.refund_policy_snapshot:
         req.refund_policy_snapshot = json.dumps(payment.refund_policy_snapshot)
+    record_promo_redemption(
+        db,
+        req=req,
+        booking=booking,
+        snapshot=payment_snapshot if payment_snapshot is not None else payment.pricing_snapshot,
+    )
     _create_invoice(db, req=req, booking=booking, payment=payment)
     db.add(payment)
     db.add(req)
@@ -799,6 +823,7 @@ def charge_booking_request(
         req.approved_at = datetime.now(timezone.utc)
         req.pricing_snapshot = json.dumps(payment_snapshot)
         req.refund_policy_snapshot = json.dumps(payment_snapshot.get("refund_policy") or {})
+        record_promo_redemption(db, req=req, booking=booking, snapshot=payment_snapshot)
         _create_invoice(db, req=req, booking=booking, payment=payment)
         db.add(payment)
         db.add(req)

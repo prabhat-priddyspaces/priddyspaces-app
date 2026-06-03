@@ -10,6 +10,7 @@ from app.models.assistant import (
 )
 from app.models.booking import Booking
 from app.models.booking_payment_link import BookingPaymentLink
+from app.models.booking_promotion import BookingPromotion
 from app.models.booking_request import BookingRequest
 from app.models.booking_series import BookingSeries
 from app.models.booking_waitlist import BookingWaitlistEntry
@@ -88,6 +89,7 @@ __all__ = [
     "SupportTicket",
     "Booking",
     "BookingPaymentLink",
+    "BookingPromotion",
     "BookingRequest",
     "BookingSeries",
     "BookingWaitlistEntry",

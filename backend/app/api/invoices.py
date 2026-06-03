@@ -15,6 +15,7 @@ from app.schemas.invoice import InvoiceOut
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids, list_org_members
 from app.services.invoices import generate_invoice_pdf
+from app.services.promo_codes import payment_description_from_snapshot
 
 router = APIRouter()
 
@@ -48,9 +49,12 @@ def _invoice_context(
     return payment, booking, subscription, space, location, member
 
 
-def _description(booking: Booking | None, subscription: Subscription | None) -> str:
+def _description(payment: Payment | None, booking: Booking | None, subscription: Subscription | None) -> str:
     if booking:
-        return "Booking receipt"
+        return payment_description_from_snapshot(
+            payment.pricing_snapshot if payment and isinstance(payment.pricing_snapshot, dict) else None,
+            base="Booking receipt",
+        )
     if subscription:
         return "Membership invoice"
     return "Invoice"
@@ -81,7 +85,7 @@ def _to_out(db: Session, invoice: Invoice) -> InvoiceOut:
         location_city=location.city if location else None,
         member_name=_member_name(member),
         member_email=member.email if member else None,
-        description=_description(booking, subscription),
+        description=_description(payment, booking, subscription),
         pdf_url=invoice.pdf_url,
         created_at=invoice.created_at,
     )
