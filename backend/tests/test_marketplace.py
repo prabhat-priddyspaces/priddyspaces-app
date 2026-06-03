@@ -624,8 +624,33 @@ def test_public_private_office_marketplace_excludes_leased_inventory(db_session,
     )
     assert detail.status_code == 404
 
+    org = db_session.query(Organization).filter(Organization.id == private_office.tenant_id).first()
+    org.waitlist_private_office_enabled = True
+    org.waitlist_enabled = True
+    db_session.add(org)
+    db_session.commit()
+
+    waitlistable = client.get("/api/marketplace/locations?category=private_office")
+    assert waitlistable.status_code == 200
+    waitlistable_spaces = [
+        space
+        for location in waitlistable.json()["results"]
+        for space in location["spaces"]
+    ]
+    waitlistable_space = next(space for space in waitlistable_spaces if space["public_id"] == private_office.public_id)
+    assert waitlistable_space["availability_status"] == "waitlist_available"
+    assert waitlistable_space["waitlist_enabled"] is True
+
+    waitlistable_detail = client.get(
+        f"/api/marketplace/locations/{seeded['coworking_location'].public_id}?category=private_office"
+    )
+    assert waitlistable_detail.status_code == 200
+
     lease.status = "canceled"
+    org.waitlist_private_office_enabled = False
+    org.waitlist_enabled = False
     db_session.add(lease)
+    db_session.add(org)
     db_session.commit()
 
     reopened = client.get("/api/marketplace/locations?category=private_office")
@@ -683,6 +708,21 @@ def test_public_private_office_marketplace_honors_searched_move_in_date(db_sessi
     assert private_office.public_id not in blocked_public_ids
     assert private_office.public_id in open_public_ids
 
+    org = db_session.query(Organization).filter(Organization.id == private_office.tenant_id).first()
+    org.waitlist_private_office_enabled = True
+    org.waitlist_enabled = True
+    db_session.add(org)
+    db_session.commit()
+
+    waitlistable_blocked = client.get("/api/marketplace/locations?category=private_office&date=2026-05-15")
+    waitlistable_spaces = [
+        space
+        for location in waitlistable_blocked.json()["results"]
+        for space in location["spaces"]
+    ]
+    waitlistable_space = next(space for space in waitlistable_spaces if space["public_id"] == private_office.public_id)
+    assert waitlistable_space["availability_status"] == "waitlist_available"
+
 
 def test_public_private_office_marketplace_excludes_requested_lease_inventory(db_session, client_factory):
     seeded = _seed_public_location_marketplace(db_session)
@@ -710,6 +750,21 @@ def test_public_private_office_marketplace_excludes_requested_lease_inventory(db
         for space in location["spaces"]
     ]
     assert private_office.public_id not in public_ids
+
+    org = db_session.query(Organization).filter(Organization.id == private_office.tenant_id).first()
+    org.waitlist_private_office_enabled = True
+    org.waitlist_enabled = True
+    db_session.add(org)
+    db_session.commit()
+
+    waitlistable = client.get("/api/marketplace/locations?category=private_office&date=2026-05-15")
+    waitlistable_spaces = [
+        space
+        for location in waitlistable.json()["results"]
+        for space in location["spaces"]
+    ]
+    waitlistable_space = next(space for space in waitlistable_spaces if space["public_id"] == private_office.public_id)
+    assert waitlistable_space["availability_status"] == "waitlist_available"
 
 
 def test_public_location_search_includes_locations_without_coordinates(db_session, client_factory):

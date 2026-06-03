@@ -28,6 +28,7 @@ import {
   MembershipPlanPublic,
   MarketplaceSpaceDetailResponse,
   SpaceAvailabilityResponse,
+  waitlistEnabledForSpaceType,
 } from "@/lib/public-marketplace";
 import { LeaseBookingWidget } from "@/components/lease-booking-widget";
 import { CheckoutSummaryModal } from "@/components/checkout-summary-modal";
@@ -360,7 +361,9 @@ export function PublicSpaceDetailView({
     availability?.hourly_price ?? detail?.space.hourly_price ?? null;
   const dailyPrice =
     availability?.daily_price ?? detail?.space.price_daily ?? null;
-  const waitlistEnabled = Boolean(detail?.location.waitlist_enabled || availability?.waitlist_enabled);
+  const waitlistEnabled = detail
+    ? waitlistEnabledForSpaceType(detail.location, detail.space.space_type)
+    : waitlistEnabledForSpaceType(availability, "");
   const hourlyAmount = moneyToNumber(hourlyPrice);
   const dailyAmount = moneyToNumber(dailyPrice);
   const conferenceDayRateAvailable = isConferenceRoom && dailyAmount != null;

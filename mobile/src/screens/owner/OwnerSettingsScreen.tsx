@@ -13,7 +13,35 @@ type BookingSettings = {
   booking_approval_mode: "manual" | "auto";
   membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
+  waitlist_enabled: boolean;
+  waitlist_conference_room_enabled: boolean;
+  waitlist_private_office_enabled: boolean;
+  waitlist_shared_desk_enabled: boolean;
+  waitlist_suite_enabled: boolean;
+  waitlist_virtual_office_enabled: boolean;
 };
+
+type WaitlistTypeKey =
+  | "waitlist_conference_room_enabled"
+  | "waitlist_private_office_enabled"
+  | "waitlist_shared_desk_enabled"
+  | "waitlist_suite_enabled"
+  | "waitlist_virtual_office_enabled";
+
+const WAITLIST_TYPE_OPTIONS: Array<{ key: WaitlistTypeKey; label: string; summary: string }> = [
+  { key: "waitlist_conference_room_enabled", label: "Conference room", summary: "Conference rooms" },
+  { key: "waitlist_private_office_enabled", label: "Private office", summary: "Private offices" },
+  { key: "waitlist_shared_desk_enabled", label: "Shared desk", summary: "Shared desks" },
+  { key: "waitlist_suite_enabled", label: "Suite", summary: "Suites" },
+  { key: "waitlist_virtual_office_enabled", label: "Virtual office", summary: "Virtual offices" },
+];
+
+function waitlistSummary(settings: (Pick<BookingSettings, WaitlistTypeKey> & { waitlist_enabled?: boolean }) | null) {
+  if (!settings) return "off";
+  const enabled = WAITLIST_TYPE_OPTIONS.filter((option) => settings[option.key]).map((option) => option.summary);
+  if (enabled.length > 0) return enabled.join(", ");
+  return settings.waitlist_enabled ? "All space types" : "off";
+}
 
 export function OwnerSettingsScreen() {
   const { token } = useAuth();
@@ -36,7 +64,12 @@ export function OwnerSettingsScreen() {
   const [bookingSettingsForm, setBookingSettingsForm] = useState({
     booking_approval_mode: "manual" as "manual" | "auto",
     membership_lease_approval_mode: "manual" as "manual" | "auto",
-    payment_failure_hold_minutes: "30"
+    payment_failure_hold_minutes: "30",
+    waitlist_conference_room_enabled: false,
+    waitlist_private_office_enabled: false,
+    waitlist_shared_desk_enabled: false,
+    waitlist_suite_enabled: false,
+    waitlist_virtual_office_enabled: false
   });
   const [flagForm, setFlagForm] = useState({
     flag_key: "instant_booking_enabled",
@@ -83,7 +116,12 @@ export function OwnerSettingsScreen() {
           setBookingSettingsForm({
             booking_approval_mode: booking.booking_approval_mode,
             membership_lease_approval_mode: booking.membership_lease_approval_mode ?? "manual",
-            payment_failure_hold_minutes: String(booking.payment_failure_hold_minutes)
+            payment_failure_hold_minutes: String(booking.payment_failure_hold_minutes),
+            waitlist_conference_room_enabled: Boolean(booking.waitlist_conference_room_enabled),
+            waitlist_private_office_enabled: Boolean(booking.waitlist_private_office_enabled),
+            waitlist_shared_desk_enabled: Boolean(booking.waitlist_shared_desk_enabled),
+            waitlist_suite_enabled: Boolean(booking.waitlist_suite_enabled),
+            waitlist_virtual_office_enabled: Boolean(booking.waitlist_virtual_office_enabled)
           });
         }
         setConnectStatus(connect.connected ? "Connected" : "Not connected");
@@ -175,7 +213,12 @@ export function OwnerSettingsScreen() {
         body: JSON.stringify({
           booking_approval_mode: bookingSettingsForm.booking_approval_mode,
           membership_lease_approval_mode: bookingSettingsForm.membership_lease_approval_mode,
-          payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes)
+          payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes),
+          waitlist_conference_room_enabled: bookingSettingsForm.waitlist_conference_room_enabled,
+          waitlist_private_office_enabled: bookingSettingsForm.waitlist_private_office_enabled,
+          waitlist_shared_desk_enabled: bookingSettingsForm.waitlist_shared_desk_enabled,
+          waitlist_suite_enabled: bookingSettingsForm.waitlist_suite_enabled,
+          waitlist_virtual_office_enabled: bookingSettingsForm.waitlist_virtual_office_enabled
         })
       },
       token
@@ -184,7 +227,12 @@ export function OwnerSettingsScreen() {
     setBookingSettingsForm({
       booking_approval_mode: saved.booking_approval_mode,
       membership_lease_approval_mode: saved.membership_lease_approval_mode ?? "manual",
-      payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes)
+      payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes),
+      waitlist_conference_room_enabled: Boolean(saved.waitlist_conference_room_enabled),
+      waitlist_private_office_enabled: Boolean(saved.waitlist_private_office_enabled),
+      waitlist_shared_desk_enabled: Boolean(saved.waitlist_shared_desk_enabled),
+      waitlist_suite_enabled: Boolean(saved.waitlist_suite_enabled),
+      waitlist_virtual_office_enabled: Boolean(saved.waitlist_virtual_office_enabled)
     });
     setMessage("Booking approval saved");
   }
@@ -340,7 +388,8 @@ export function OwnerSettingsScreen() {
         membership & lease {bookingSettings?.membership_lease_approval_mode === "auto" ? "auto approve" : "manual approval"} ·{" "}
         {bookingSettings?.payment_failure_hold_minutes === 0
           ? "cancel immediately"
-          : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min recovery`}
+          : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min recovery`}{" "}
+        · waitlist: {waitlistSummary(bookingSettings)}
       </Text>
       <Text style={styles.label}>Hourly/day-pass approval</Text>
       <View style={styles.optionRow}>
@@ -384,6 +433,23 @@ export function OwnerSettingsScreen() {
             key={opt.value}
             style={[styles.optionButton, bookingSettingsForm.payment_failure_hold_minutes === opt.value && styles.optionActive]}
             onPress={() => setBookingSettingsForm({ ...bookingSettingsForm, payment_failure_hold_minutes: opt.value })}
+          >
+            <Text style={styles.optionText}>{opt.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.label}>Waitlist by space type</Text>
+      <View style={styles.optionRow}>
+        {WAITLIST_TYPE_OPTIONS.map((opt) => (
+          <TouchableOpacity
+            key={opt.key}
+            style={[styles.optionButton, bookingSettingsForm[opt.key] && styles.optionActive]}
+            onPress={() =>
+              setBookingSettingsForm((current) => ({
+                ...current,
+                [opt.key]: !current[opt.key]
+              }))
+            }
           >
             <Text style={styles.optionText}>{opt.label}</Text>
           </TouchableOpacity>

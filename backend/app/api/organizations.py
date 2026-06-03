@@ -24,6 +24,11 @@ from app.services.organization_approval import (
 )
 from app.services.platform_auth import get_audit_actor_context
 from app.services.transactional_templates import ensure_default_transactional_templates
+from app.services.waitlist_settings import (
+    WAITLIST_SPACE_TYPE_FIELDS,
+    sync_legacy_waitlist_enabled,
+    waitlist_settings_payload,
+)
 
 router = APIRouter()
 
@@ -184,7 +189,7 @@ def update_org_booking_settings(
         "booking_approval_mode": org.booking_approval_mode,
         "membership_lease_approval_mode": org.membership_lease_approval_mode,
         "payment_failure_hold_minutes": org.payment_failure_hold_minutes,
-        "waitlist_enabled": org.waitlist_enabled,
+        **waitlist_settings_payload(org),
     }
     if payload.booking_approval_mode is not None:
         org.booking_approval_mode = payload.booking_approval_mode
@@ -192,8 +197,17 @@ def update_org_booking_settings(
         org.membership_lease_approval_mode = payload.membership_lease_approval_mode
     if payload.payment_failure_hold_minutes is not None:
         org.payment_failure_hold_minutes = payload.payment_failure_hold_minutes
-    if payload.waitlist_enabled is not None:
-        org.waitlist_enabled = payload.waitlist_enabled
+    waitlist_fields = list(WAITLIST_SPACE_TYPE_FIELDS.values())
+    waitlist_type_update_present = any(getattr(payload, field) is not None for field in waitlist_fields)
+    if payload.waitlist_enabled is not None and not waitlist_type_update_present:
+        for field in waitlist_fields:
+            setattr(org, field, payload.waitlist_enabled)
+    for field in waitlist_fields:
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(org, field, value)
+    if payload.waitlist_enabled is not None or waitlist_type_update_present:
+        sync_legacy_waitlist_enabled(org)
     db.add(org)
     db.commit()
     db.refresh(org)
@@ -210,7 +224,7 @@ def update_org_booking_settings(
             "booking_approval_mode": org.booking_approval_mode,
             "membership_lease_approval_mode": org.membership_lease_approval_mode,
             "payment_failure_hold_minutes": org.payment_failure_hold_minutes,
-            "waitlist_enabled": org.waitlist_enabled,
+            **waitlist_settings_payload(org),
         },
         acting_as_user_id=acting_as_user_id,
         context=context,

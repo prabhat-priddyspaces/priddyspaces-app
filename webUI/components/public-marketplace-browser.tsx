@@ -637,6 +637,9 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
               const listingImage = space?.image_url || location.featured_image_url;
               const primaryPrice = spaceChips[0] ?? (chips[0] ? `${chips[0].value} ${chips[0].label.toLowerCase()}` : null);
               const featured = index === 0;
+              const waitlistAvailable = Boolean(
+                space?.waitlist_enabled && space.availability_status === "waitlist_available",
+              );
 
               function handleCardActivate() {
                 handleSelectLocation(location.location_public_id);
@@ -714,6 +717,11 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                             <div className="text-[11px] text-text-3 mt-0.5 truncate">
                               {formatLocationAddress(location)}
                             </div>
+                            {waitlistAvailable ? (
+                              <Badge variant="default" className="mt-2 bg-warning-soft text-warning">
+                                Currently leased · Waitlist available
+                              </Badge>
+                            ) : null}
                           </div>
                           {location.distance_miles != null ? (
                             <Badge variant="default" className="shrink-0">

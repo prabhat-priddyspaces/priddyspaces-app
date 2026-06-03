@@ -366,6 +366,65 @@ describe("public marketplace flows", () => {
     );
   });
 
+  it("marks leased private offices as waitlist available in search", async () => {
+    routePath.value = "/private-offices";
+    apiFetchMock.mockResolvedValueOnce({
+      meta: { total_locations: 1, page: 1, page_size: 20 },
+      results: [
+        {
+          location_public_id: "loc_1",
+          name: "Brickell Commons",
+          address: "100 Main St",
+          city: "Miami",
+          state: "FL",
+          postal_code: "33101",
+          neighborhood: "Downtown",
+          timezone: "America/New_York",
+          lat: 25.7616,
+          lng: -80.1918,
+          featured_image_url: null,
+          location_amenities: ["WiFi"],
+          matching_space_count: 1,
+          featured_space_public_id: "space_private_wait",
+          starting_day_pass_price: null,
+          starting_monthly_price: 1800,
+          starting_hourly_price: null,
+          starting_membership_price: null,
+          waitlist_enabled: true,
+          waitlist_private_office_enabled: true,
+          spaces: [
+            {
+              public_id: "space_private_wait",
+              name: "Private Office Waitlist",
+              space_type: "private_office",
+              capacity: 4,
+              availability_status: "waitlist_available",
+              availability_start_time: "09:00:00",
+              availability_end_time: "17:00:00",
+              price_daily: null,
+              price_monthly: null,
+              hourly_price: null,
+              membership_price: 1800,
+              setup_fee_amount_cents: 0,
+              waitlist_enabled: true,
+              amenities: ["WiFi"],
+              image_url: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    render(<PublicMarketplaceBrowser routeKey="private-offices" />);
+
+    expect(await screen.findByRole("heading", { name: "Private Office Waitlist" })).toBeInTheDocument();
+    expect(screen.getByText("Currently leased · Waitlist available")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open listing" })).toHaveAttribute(
+      "href",
+      "/spaces/space_private_wait?back=%2Fprivate-offices%3Fq%3DMiami",
+    );
+  });
+
   it("shows a designed fallback when a result image fails to load", async () => {
     apiFetchMock.mockResolvedValueOnce({
       meta: { total_locations: 1, page: 1, page_size: 20 },

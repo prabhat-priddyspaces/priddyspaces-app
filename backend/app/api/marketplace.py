@@ -38,6 +38,7 @@ from app.services.money import CENT, to_money_decimal
 from app.services.owner_payments import require_space_payment_ready_for_public_surface, space_payment_is_marketplace_ready
 from app.services.platform_auth import get_or_create_platform_settings
 from app.services.space_availability import get_space_availability
+from app.services.waitlist_settings import waitlist_enabled_for_space_type, waitlist_settings_payload
 
 router = APIRouter()
 
@@ -408,6 +409,7 @@ def get_marketplace_space_availability(
 
     raw_granularity = getattr(location.booking_granularity, "value", location.booking_granularity)
     granularity = _GRANULARITY_MINUTES.get(raw_granularity)
+    waitlist_payload = waitlist_settings_payload(organization)
 
     return SpaceAvailabilityOut(
         space_public_id=space.public_id,
@@ -425,6 +427,11 @@ def get_marketplace_space_availability(
             space_id=space.id,
             flag_key=BOOKING_CALENDAR_DAILY_PRICES_FLAG,
         ),
-        waitlist_enabled=bool(organization.waitlist_enabled),
+        waitlist_enabled=waitlist_enabled_for_space_type(organization, space.space_type),
+        waitlist_conference_room_enabled=waitlist_payload["waitlist_conference_room_enabled"],
+        waitlist_private_office_enabled=waitlist_payload["waitlist_private_office_enabled"],
+        waitlist_shared_desk_enabled=waitlist_payload["waitlist_shared_desk_enabled"],
+        waitlist_suite_enabled=waitlist_payload["waitlist_suite_enabled"],
+        waitlist_virtual_office_enabled=waitlist_payload["waitlist_virtual_office_enabled"],
         days=days,
     )

@@ -39,6 +39,7 @@ from app.services.booking_inventory import expand_occurrences, resolve_tz, valid
 from app.services.booking_products import booking_products_for_space
 from app.services.money import CENT, to_money_decimal
 from app.services.owner_payments import space_payment_is_marketplace_ready
+from app.services.waitlist_settings import waitlist_enabled_for_space_type, waitlist_settings_payload
 
 
 CATEGORY_SPACE_TYPES = {
@@ -56,6 +57,7 @@ DEFAULT_SORT = {
 EARTH_RADIUS_MILES = 3958.7613
 EXCLUSIVE_LEASE_SPACE_TYPES = {SpaceType.PRIVATE_OFFICE.value, SpaceType.SUITE.value}
 EXCLUSIVE_LEASE_MODES = {"private_office_lease", "suite_lease"}
+WAITLIST_AVAILABLE_STATUS = "waitlist_available"
 BLOCKING_LEASE_SUBSCRIPTION_STATUSES = {"pending_payment", "active", "past_due", "canceling"}
 BLOCKING_LEASE_REQUEST_STATUSES = {
     BookingRequestStatus.REQUESTED,
@@ -183,6 +185,19 @@ def _location_amenity_names(
 
 def _space_amenity_names(space: Space) -> list[str]:
     return _split_csv(space.amenities)
+
+
+def _marketplace_waitlist_payload(organization: Organization | None) -> dict[str, bool]:
+    if organization:
+        return waitlist_settings_payload(organization)
+    return {
+        "waitlist_enabled": False,
+        "waitlist_conference_room_enabled": False,
+        "waitlist_private_office_enabled": False,
+        "waitlist_shared_desk_enabled": False,
+        "waitlist_suite_enabled": False,
+        "waitlist_virtual_office_enabled": False,
+    }
 
 
 def _space_display_name(space: Space) -> str:
@@ -622,7 +637,7 @@ def _build_location_payload(
         )
         or "manual",
         "payment_failure_hold_minutes": organization.payment_failure_hold_minutes if organization else None,
-        "waitlist_enabled": bool(organization.waitlist_enabled) if organization else False,
+        **_marketplace_waitlist_payload(organization),
         "name": location.name,
         "address": location.address,
         "city": location.city,
@@ -715,15 +730,20 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
 
     grouped: dict[str, dict[str, object]] = {}
     for space, location, image in rows:
+        organization = orgs_by_id.get(location.organization_id)
         location_amenities = _location_amenity_names(location, location_amenity_map)
         space_amenities = _space_amenity_names(space)
         if filters.capacity is not None and space.capacity < filters.capacity:
             continue
-        if not _space_available_for_marketplace_inventory_date(
+        inventory_available = _space_available_for_marketplace_inventory_date(
             db,
             space=space,
             requested_date=parsed_date,
-        ):
+        )
+        space_waitlist_enabled = bool(
+            organization and waitlist_enabled_for_space_type(organization, space.space_type)
+        )
+        if not inventory_available and not space_waitlist_enabled:
             continue
         if not _space_matches_query(
             query,
@@ -793,7 +813,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             _build_location_payload(
                 location=location,
                 location_amenities=location_amenities,
-                organization=orgs_by_id.get(location.organization_id),
+                organization=organization,
                 distance_miles=round(distance_miles, 2) if distance_miles is not None else None,
             ),
         )
@@ -826,7 +846,9 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
                 "name": _space_display_name(space),
                 "space_type": space.space_type.value,
                 "capacity": space.capacity,
-                "availability_status": space.availability_status.value,
+                "availability_status": (
+                    space.availability_status.value if inventory_available else WAITLIST_AVAILABLE_STATUS
+                ),
                 "availability_start_time": _serialize_space_time(space.availability_start_time),
                 "availability_end_time": _serialize_space_time(space.availability_end_time),
                 "price_daily": space.price_daily,
@@ -834,6 +856,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
                 "hourly_price": min(hourly_prices) if hourly_prices else None,
                 "membership_price": min(membership_prices) if membership_prices else None,
                 "setup_fee_amount_cents": setup_fee_amounts.get(space.id, 0),
+                "waitlist_enabled": space_waitlist_enabled,
                 "amenities": location_amenities or space_amenities,
                 "image_url": image.image_url if image else None,
             }
@@ -907,11 +930,13 @@ def get_public_location_detail(
         space_amenities = _space_amenity_names(space)
         if filters.capacity is not None and space.capacity < filters.capacity:
             continue
-        if not _space_available_for_marketplace_inventory_date(
+        inventory_available = _space_available_for_marketplace_inventory_date(
             db,
             space=space,
             requested_date=parsed_date,
-        ):
+        )
+        space_waitlist_enabled = waitlist_enabled_for_space_type(organization, space.space_type) if organization else False
+        if not inventory_available and not space_waitlist_enabled:
             continue
         if not _space_matches_query(
             query,
@@ -986,7 +1011,9 @@ def get_public_location_detail(
                 "name": _space_display_name(space),
                 "space_type": space.space_type.value,
                 "capacity": space.capacity,
-                "availability_status": space.availability_status.value,
+                "availability_status": (
+                    space.availability_status.value if inventory_available else WAITLIST_AVAILABLE_STATUS
+                ),
                 "availability_start_time": _serialize_space_time(space.availability_start_time),
                 "availability_end_time": _serialize_space_time(space.availability_end_time),
                 "price_daily": space.price_daily,
@@ -994,6 +1021,7 @@ def get_public_location_detail(
                 "hourly_price": min(hourly_prices) if hourly_prices else None,
                 "membership_price": min(membership_prices) if membership_prices else None,
                 "setup_fee_amount_cents": setup_fee_amounts.get(space.id, 0),
+                "waitlist_enabled": space_waitlist_enabled,
                 "amenities": location_amenities or space_amenities,
                 "image_url": image.image_url if image else None,
             }
@@ -1185,6 +1213,7 @@ def get_public_space_detail(
             "booking_approval_mode": organization.booking_approval_mode or "manual",
             "membership_lease_approval_mode": organization.membership_lease_approval_mode or "manual",
             "payment_failure_hold_minutes": organization.payment_failure_hold_minutes,
+            **_marketplace_waitlist_payload(organization),
             "name": location.name,
             "address": location.address,
             "city": location.city,

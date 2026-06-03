@@ -22,6 +22,11 @@ interface Organization {
   membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
   waitlist_enabled: boolean;
+  waitlist_conference_room_enabled: boolean;
+  waitlist_private_office_enabled: boolean;
+  waitlist_shared_desk_enabled: boolean;
+  waitlist_suite_enabled: boolean;
+  waitlist_virtual_office_enabled: boolean;
 }
 
 interface LocationOption {
@@ -60,6 +65,11 @@ interface BookingSettings {
   membership_lease_approval_mode: "manual" | "auto";
   payment_failure_hold_minutes: number;
   waitlist_enabled: boolean;
+  waitlist_conference_room_enabled: boolean;
+  waitlist_private_office_enabled: boolean;
+  waitlist_shared_desk_enabled: boolean;
+  waitlist_suite_enabled: boolean;
+  waitlist_virtual_office_enabled: boolean;
 }
 
 interface CancellationPolicy {
@@ -88,6 +98,28 @@ interface SubscriptionPlan {
 interface SpaceResponse {
   public_id: string;
   space_type: string;
+}
+
+type WaitlistTypeKey =
+  | "waitlist_conference_room_enabled"
+  | "waitlist_private_office_enabled"
+  | "waitlist_shared_desk_enabled"
+  | "waitlist_suite_enabled"
+  | "waitlist_virtual_office_enabled";
+
+const WAITLIST_TYPE_OPTIONS: Array<{ key: WaitlistTypeKey; label: string; summary: string }> = [
+  { key: "waitlist_conference_room_enabled", label: "Conference room", summary: "Conference rooms" },
+  { key: "waitlist_private_office_enabled", label: "Private office", summary: "Private offices" },
+  { key: "waitlist_shared_desk_enabled", label: "Shared desk", summary: "Shared desks" },
+  { key: "waitlist_suite_enabled", label: "Suite", summary: "Suites" },
+  { key: "waitlist_virtual_office_enabled", label: "Virtual office", summary: "Virtual offices" },
+];
+
+function waitlistSummary(settings: (Pick<BookingSettings, WaitlistTypeKey> & { waitlist_enabled?: boolean }) | null) {
+  if (!settings) return "off";
+  const enabled = WAITLIST_TYPE_OPTIONS.filter((option) => settings[option.key]).map((option) => option.summary);
+  if (enabled.length > 0) return enabled.join(", ");
+  return settings.waitlist_enabled ? "All space types" : "off";
 }
 
 export default function OwnerSettingsPage() {
@@ -119,7 +151,11 @@ export default function OwnerSettingsPage() {
     booking_approval_mode: "manual" as "manual" | "auto",
     membership_lease_approval_mode: "manual" as "manual" | "auto",
     payment_failure_hold_minutes: "30",
-    waitlist_enabled: false,
+    waitlist_conference_room_enabled: false,
+    waitlist_private_office_enabled: false,
+    waitlist_shared_desk_enabled: false,
+    waitlist_suite_enabled: false,
+    waitlist_virtual_office_enabled: false,
   });
   const [policyForm, setPolicyForm] = useState({
     space_type: "conference_room",
@@ -255,7 +291,11 @@ export default function OwnerSettingsPage() {
         booking_approval_mode: "manual",
         membership_lease_approval_mode: "manual",
         payment_failure_hold_minutes: "30",
-        waitlist_enabled: false,
+        waitlist_conference_room_enabled: false,
+        waitlist_private_office_enabled: false,
+        waitlist_shared_desk_enabled: false,
+        waitlist_suite_enabled: false,
+        waitlist_virtual_office_enabled: false,
       });
       return;
     }
@@ -270,7 +310,11 @@ export default function OwnerSettingsPage() {
       booking_approval_mode: settings.booking_approval_mode,
       membership_lease_approval_mode: settings.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(settings.payment_failure_hold_minutes),
-      waitlist_enabled: Boolean(settings.waitlist_enabled),
+      waitlist_conference_room_enabled: Boolean(settings.waitlist_conference_room_enabled),
+      waitlist_private_office_enabled: Boolean(settings.waitlist_private_office_enabled),
+      waitlist_shared_desk_enabled: Boolean(settings.waitlist_shared_desk_enabled),
+      waitlist_suite_enabled: Boolean(settings.waitlist_suite_enabled),
+      waitlist_virtual_office_enabled: Boolean(settings.waitlist_virtual_office_enabled),
     });
   }
 
@@ -433,7 +477,11 @@ export default function OwnerSettingsPage() {
           booking_approval_mode: bookingSettingsForm.booking_approval_mode,
           membership_lease_approval_mode: bookingSettingsForm.membership_lease_approval_mode,
           payment_failure_hold_minutes: Number(bookingSettingsForm.payment_failure_hold_minutes),
-          waitlist_enabled: bookingSettingsForm.waitlist_enabled,
+          waitlist_conference_room_enabled: bookingSettingsForm.waitlist_conference_room_enabled,
+          waitlist_private_office_enabled: bookingSettingsForm.waitlist_private_office_enabled,
+          waitlist_shared_desk_enabled: bookingSettingsForm.waitlist_shared_desk_enabled,
+          waitlist_suite_enabled: bookingSettingsForm.waitlist_suite_enabled,
+          waitlist_virtual_office_enabled: bookingSettingsForm.waitlist_virtual_office_enabled,
         }),
       },
       token
@@ -443,7 +491,11 @@ export default function OwnerSettingsPage() {
       booking_approval_mode: saved.booking_approval_mode,
       membership_lease_approval_mode: saved.membership_lease_approval_mode ?? "manual",
       payment_failure_hold_minutes: String(saved.payment_failure_hold_minutes),
-      waitlist_enabled: Boolean(saved.waitlist_enabled),
+      waitlist_conference_room_enabled: Boolean(saved.waitlist_conference_room_enabled),
+      waitlist_private_office_enabled: Boolean(saved.waitlist_private_office_enabled),
+      waitlist_shared_desk_enabled: Boolean(saved.waitlist_shared_desk_enabled),
+      waitlist_suite_enabled: Boolean(saved.waitlist_suite_enabled),
+      waitlist_virtual_office_enabled: Boolean(saved.waitlist_virtual_office_enabled),
     });
     setMessage("Booking approval settings saved");
   }
@@ -738,11 +790,11 @@ export default function OwnerSettingsPage() {
                 {bookingSettings?.payment_failure_hold_minutes === 0
                   ? "Cancel failed payments immediately"
                   : `${bookingSettings?.payment_failure_hold_minutes ?? 30} min payment recovery hold`}{" "}
-                • Waitlist {bookingSettings?.waitlist_enabled ? "on" : "off"}
+                • Waitlist: {waitlistSummary(bookingSettings)}
               </div>
             </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-4">
             <div className="grid gap-2">
               <Label htmlFor="booking-approval-mode">Hourly/day-pass approval</Label>
               <select
@@ -796,20 +848,30 @@ export default function OwnerSettingsPage() {
                 <option value="60">60 min</option>
               </select>
             </div>
-            <label className="flex items-center gap-3 self-end rounded-md border border-border bg-surface px-3 py-2 text-sm text-textPrimary">
-              <input
-                type="checkbox"
-                checked={bookingSettingsForm.waitlist_enabled}
-                onChange={(e) =>
-                  setBookingSettingsForm((current) => ({
-                    ...current,
-                    waitlist_enabled: e.target.checked,
-                  }))
-                }
-              />
-              Enable waitlist
-            </label>
-            <div className="flex items-end">
+            <fieldset className="grid gap-2 md:col-span-3 xl:col-span-4">
+              <legend className="text-sm font-medium text-textPrimary">Waitlist by space type</legend>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {WAITLIST_TYPE_OPTIONS.map((option) => (
+                  <label
+                    key={option.key}
+                    className="flex items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm text-textPrimary"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={bookingSettingsForm[option.key]}
+                      onChange={(e) =>
+                        setBookingSettingsForm((current) => ({
+                          ...current,
+                          [option.key]: e.target.checked,
+                        }))
+                      }
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="flex items-end md:col-span-3 xl:col-span-4">
               <Button type="button" onClick={saveBookingSettings} disabled={!orgId}>
                 Save booking approval
               </Button>

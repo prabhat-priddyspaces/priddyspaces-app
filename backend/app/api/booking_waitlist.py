@@ -33,6 +33,7 @@ from app.services.booking_products import validate_direct_booking_product
 from app.services.meeting_room_balance import add_months
 from app.services.notifications import send_email
 from app.services.platform_auth import organization_is_publicly_visible
+from app.services.waitlist_settings import waitlist_enabled_for_space_type
 
 router = APIRouter()
 
@@ -86,9 +87,12 @@ def _require_public_waitlist_space(db: Session, space: Space) -> tuple[Location,
         or not organization_is_publicly_visible(organization)
     ):
         raise HTTPException(status_code=404, detail="Space not found")
-    if not organization.waitlist_enabled:
-        raise HTTPException(status_code=400, detail="This owner has not enabled waitlists")
     return location, organization
+
+
+def _require_waitlist_enabled_for_space(organization: Organization, space: Space) -> None:
+    if not waitlist_enabled_for_space_type(organization, space.space_type):
+        raise HTTPException(status_code=400, detail="This owner has not enabled waitlists for this space type")
 
 
 def _lease_request_overlaps(db: Session, *, space_id: int, start: date, end: date | None) -> bool:
@@ -269,6 +273,7 @@ def create_waitlist_entry(
         if not space:
             raise HTTPException(status_code=404, detail="Space not found")
         location, organization = _require_public_waitlist_space(db, space)
+        _require_waitlist_enabled_for_space(organization, space)
         mode_enabled = (
             db.query(SpaceBookingMode)
             .filter(
@@ -319,6 +324,7 @@ def create_waitlist_entry(
         if not space:
             raise HTTPException(status_code=404, detail="Space not found")
         location, organization = _require_public_waitlist_space(db, space)
+        _require_waitlist_enabled_for_space(organization, space)
         is_day_pass = bool(payload.full_day) or payload.booking_mode == "day_pass"
         validate_direct_booking_product(
             space,

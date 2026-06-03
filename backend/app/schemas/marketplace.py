@@ -41,6 +41,11 @@ class MarketplaceLocationSummaryOut(BaseModel):
     membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
     waitlist_enabled: bool = False
+    waitlist_conference_room_enabled: bool = False
+    waitlist_private_office_enabled: bool = False
+    waitlist_shared_desk_enabled: bool = False
+    waitlist_suite_enabled: bool = False
+    waitlist_virtual_office_enabled: bool = False
     name: str
     address: str
     city: str | None = None
@@ -82,6 +87,7 @@ class MarketplaceLocationSpaceOut(BaseModel):
     hourly_price: MoneyAmount | None = None
     membership_price: int | None = None
     setup_fee_amount_cents: int = 0
+    waitlist_enabled: bool = False
     amenities: list[str]
     image_url: str | None = None
 
@@ -151,6 +157,11 @@ class MarketplaceSpaceDetailLocationOut(BaseModel):
     membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
     waitlist_enabled: bool = False
+    waitlist_conference_room_enabled: bool = False
+    waitlist_private_office_enabled: bool = False
+    waitlist_shared_desk_enabled: bool = False
+    waitlist_suite_enabled: bool = False
+    waitlist_virtual_office_enabled: bool = False
     name: str
     address: str
     city: str | None = None
@@ -216,4 +227,9 @@ class SpaceAvailabilityOut(BaseModel):
     daily_price: MoneyAmount | None
     show_calendar_daily_prices: bool = False
     waitlist_enabled: bool = False
+    waitlist_conference_room_enabled: bool = False
+    waitlist_private_office_enabled: bool = False
+    waitlist_shared_desk_enabled: bool = False
+    waitlist_suite_enabled: bool = False
+    waitlist_virtual_office_enabled: bool = False
     days: list[SpaceAvailabilityDayOut]

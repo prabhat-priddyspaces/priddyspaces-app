@@ -230,6 +230,9 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
             {location.spaces.map((space) => {
               const chipsForSpace = getSpacePriceChips(activeConfig, space);
               const spaceHref = buildMarketplaceSpaceHref(space.public_id, activeRoute, filterQueryString);
+              const waitlistAvailable = Boolean(
+                space.waitlist_enabled && space.availability_status === "waitlist_available",
+              );
 
               return (
                 <div key={space.public_id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -250,7 +253,8 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                             {space.name}
                           </div>
                           <div className="mt-1 text-sm text-slate-600">
-                            {formatSpaceTypeLabel(space.space_type)} • Capacity {space.capacity} • {space.availability_status.replaceAll("_", " ")}
+                            {formatSpaceTypeLabel(space.space_type)} • Capacity {space.capacity} •{" "}
+                            {waitlistAvailable ? "currently leased · waitlist available" : space.availability_status.replaceAll("_", " ")}
                           </div>
                           {space.availability_start_time || space.availability_end_time ? (
                             <div className="mt-1 text-sm text-slate-500">
