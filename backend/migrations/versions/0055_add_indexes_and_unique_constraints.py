@@ -149,11 +149,6 @@ def upgrade() -> None:
     op.create_index("ix_member_owner_payment_methods_user_id", "member_owner_payment_methods", ["user_id"], if_not_exists=True)
     op.create_index("ix_member_owner_payment_methods_org_id", "member_owner_payment_methods", ["organization_id"], if_not_exists=True)
     op.create_index("ix_member_owner_payment_methods_tenant_id", "member_owner_payment_methods", ["tenant_id"], if_not_exists=True)
-    _add_unique_constraint_if_not_exists(
-        "uq_member_owner_payment_methods_user_org_provider",
-        "member_owner_payment_methods",
-        ["user_id", "organization_id", "provider"],
-    )
 
     # ── membership_plans ─────────────────────────────────────────────────────
     op.create_index("ix_membership_plans_tenant_id", "membership_plans", ["tenant_id"], if_not_exists=True)
@@ -191,7 +186,6 @@ def downgrade() -> None:
     op.drop_index("ix_subscription_plans_organization_id", table_name="subscription_plans", if_exists=True)
     op.drop_index("ix_membership_plans_organization_id", table_name="membership_plans", if_exists=True)
     op.drop_index("ix_membership_plans_tenant_id", table_name="membership_plans", if_exists=True)
-    op.execute(sa.text("ALTER TABLE member_owner_payment_methods DROP CONSTRAINT IF EXISTS uq_member_owner_payment_methods_user_org_provider"))
     op.drop_index("ix_member_owner_payment_methods_tenant_id", table_name="member_owner_payment_methods", if_exists=True)
     op.drop_index("ix_member_owner_payment_methods_org_id", table_name="member_owner_payment_methods", if_exists=True)
     op.drop_index("ix_member_owner_payment_methods_user_id", table_name="member_owner_payment_methods", if_exists=True)

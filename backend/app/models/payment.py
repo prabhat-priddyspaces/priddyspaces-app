@@ -13,7 +13,7 @@ class Payment(PublicIdMixin, TimestampMixin, Base):
     subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
     booking_request_id = Column(Integer, ForeignKey("booking_requests.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
     amount = Column(Integer, nullable=False)
     amount_cents = Column(Integer, nullable=True)
     subtotal_cents = Column(Integer, nullable=True)

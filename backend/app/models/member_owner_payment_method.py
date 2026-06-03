@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -6,9 +6,6 @@ from app.models.mixins import PublicIdMixin, TimestampMixin
 
 class MemberOwnerPaymentMethod(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "member_owner_payment_methods"
-    __table_args__ = (
-        UniqueConstraint("user_id", "organization_id", "provider", name="uq_member_owner_payment_methods_user_org_provider"),
-    )
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
