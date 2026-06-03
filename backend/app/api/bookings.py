@@ -37,15 +37,16 @@ def _as_utc(dt: datetime) -> datetime:
 
 def _booking_for_checkin(db: Session, public_id: str, token: dict) -> tuple[Booking, User, Location, Space]:
     user = get_or_create_user(db, token)
-    booking = db.query(Booking).filter(Booking.public_id == public_id).first()
-    if not booking:
+    result = (
+        db.query(Booking, Space, Location)
+        .join(Space, Space.id == Booking.space_id)
+        .join(Location, Location.id == Space.location_id)
+        .filter(Booking.public_id == public_id)
+        .first()
+    )
+    if not result:
         raise HTTPException(status_code=404, detail="Booking not found")
-    space = db.query(Space).filter(Space.id == booking.space_id).first()
-    if not space:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    location = db.query(Location).filter(Location.id == space.location_id).first()
-    if not location:
-        raise HTTPException(status_code=404, detail="Booking not found")
+    booking, space, location = result
     if user.role == UserAppRole.MEMBER:
         if booking.user_id != user.id:
             raise HTTPException(status_code=404, detail="Booking not found")
@@ -133,24 +134,27 @@ def get_booking(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
-    booking = db.query(Booking).filter(Booking.public_id == public_id).first()
-    if not booking:
+    result = (
+        db.query(Booking, Space, Location)
+        .join(Space, Space.id == Booking.space_id)
+        .join(Location, Location.id == Space.location_id)
+        .filter(Booking.public_id == public_id)
+        .first()
+    )
+    if not result:
         raise HTTPException(status_code=404, detail="Booking not found")
+    booking, space, location = result
     if user.role == UserAppRole.MEMBER and booking.user_id != user.id:
         raise HTTPException(status_code=404, detail="Booking not found")
     if user.role != UserAppRole.MEMBER:
-        space = db.query(Space).filter(Space.id == booking.space_id).first()
-        if space:
-            location = db.query(Location).filter(Location.id == space.location_id).first()
-            if location:
-                require_location_roles(
-                    db,
-                    user.id,
-                    location,
-                    {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF},
-                    detail="Booking not found",
-                    status_code=404,
-                )
+        require_location_roles(
+            db,
+            user.id,
+            location,
+            {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF},
+            detail="Booking not found",
+            status_code=404,
+        )
     return booking
 
 
@@ -162,9 +166,16 @@ def update_booking(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
-    booking = db.query(Booking).filter(Booking.public_id == public_id).first()
-    if not booking:
+    result = (
+        db.query(Booking, Space, Location)
+        .join(Space, Space.id == Booking.space_id)
+        .join(Location, Location.id == Space.location_id)
+        .filter(Booking.public_id == public_id)
+        .first()
+    )
+    if not result:
         raise HTTPException(status_code=404, detail="Booking not found")
+    booking, space, location = result
 
     if payload.status not in (BookingStatus.CONFIRMED, BookingStatus.CANCELED):
         raise HTTPException(status_code=400, detail="Status must be confirmed or canceled")
@@ -175,12 +186,6 @@ def update_booking(
         if payload.status != BookingStatus.CANCELED:
             raise HTTPException(status_code=403, detail="Members can only cancel their own booking")
     else:
-        space = db.query(Space).filter(Space.id == booking.space_id).first()
-        if not space:
-            raise HTTPException(status_code=404, detail="Booking not found")
-        location = db.query(Location).filter(Location.id == space.location_id).first()
-        if not location:
-            raise HTTPException(status_code=404, detail="Booking not found")
         require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
 
     booking.status = payload.status
@@ -201,17 +206,16 @@ def cancel_booking(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
-    booking = db.query(Booking).filter(Booking.public_id == public_id).first()
-    if not booking:
+    result = (
+        db.query(Booking, Space, Location)
+        .join(Space, Space.id == Booking.space_id)
+        .join(Location, Location.id == Space.location_id)
+        .filter(Booking.public_id == public_id)
+        .first()
+    )
+    if not result:
         raise HTTPException(status_code=404, detail="Booking not found")
-
-    space = db.query(Space).filter(Space.id == booking.space_id).first()
-    if not space:
-        raise HTTPException(status_code=404, detail="Booking not found")
-
-    location = db.query(Location).filter(Location.id == space.location_id).first()
-    if not location:
-        raise HTTPException(status_code=404, detail="Booking not found")
+    booking, space, location = result
 
     if user.role == UserAppRole.MEMBER:
         if booking.user_id != user.id:
@@ -340,16 +344,16 @@ def refund_booking(
     token: dict = Depends(get_current_user)
 ):
     user = get_or_create_user(db, token)
-    booking = db.query(Booking).filter(Booking.public_id == public_id).first()
-    if not booking:
+    result = (
+        db.query(Booking, Space, Location)
+        .join(Space, Space.id == Booking.space_id)
+        .join(Location, Location.id == Space.location_id)
+        .filter(Booking.public_id == public_id)
+        .first()
+    )
+    if not result:
         raise HTTPException(status_code=404, detail="Booking not found")
-
-    space = db.query(Space).filter(Space.id == booking.space_id).first()
-    if not space:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    location = db.query(Location).filter(Location.id == space.location_id).first()
-    if not location:
-        raise HTTPException(status_code=404, detail="Booking not found")
+    booking, space, location = result
 
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN})
 

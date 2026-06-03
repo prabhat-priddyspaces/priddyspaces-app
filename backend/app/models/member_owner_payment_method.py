@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -6,13 +6,16 @@ from app.models.mixins import PublicIdMixin, TimestampMixin
 
 class MemberOwnerPaymentMethod(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "member_owner_payment_methods"
+    __table_args__ = (
+        UniqueConstraint("user_id", "organization_id", "provider", name="uq_member_owner_payment_methods_user_org_provider"),
+    )
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
-    organization_id = Column(Integer, nullable=False)
-    tenant_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
     provider = Column(String(32), nullable=False)
-    owner_payment_setting_id = Column(Integer, nullable=False)
+    owner_payment_setting_id = Column(Integer, ForeignKey("owner_payment_settings.id", ondelete="RESTRICT"), nullable=False)
 
     provider_customer_id = Column(String(255), nullable=True)
     provider_payment_method_id = Column(String(255), nullable=True)

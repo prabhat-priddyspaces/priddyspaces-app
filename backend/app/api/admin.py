@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -148,12 +148,22 @@ def _build_metrics(db: Session) -> dict[str, int | float]:
         .filter(Organization.review_status == OrganizationReviewStatus.APPROVED)
         .count()
     )
-    payments = db.query(Payment).all()
-    payment_total = sum(payment.amount or 0 for payment in payments)
-    succeeded_payments = [payment for payment in payments if payment.status == PaymentStatus.SUCCEEDED]
-    gmv = sum(payment.amount or 0 for payment in succeeded_payments)
-    platform_earnings = sum(payment.platform_fee_amount or 0 for payment in succeeded_payments)
-    owner_net = sum(payment.owner_net_amount or 0 for payment in succeeded_payments)
+    payment_agg = db.query(
+        func.coalesce(func.sum(Payment.amount), 0).label("payment_total"),
+        func.coalesce(
+            func.sum(case((Payment.status == PaymentStatus.SUCCEEDED, Payment.amount), else_=0)), 0
+        ).label("gmv"),
+        func.coalesce(
+            func.sum(case((Payment.status == PaymentStatus.SUCCEEDED, Payment.platform_fee_amount), else_=0)), 0
+        ).label("platform_earnings"),
+        func.coalesce(
+            func.sum(case((Payment.status == PaymentStatus.SUCCEEDED, Payment.owner_net_amount), else_=0)), 0
+        ).label("owner_net"),
+    ).one()
+    payment_total = payment_agg.payment_total
+    gmv = payment_agg.gmv
+    platform_earnings = payment_agg.platform_earnings
+    owner_net = payment_agg.owner_net
     return {
         "tenants": tenant_count,
         "users": user_count,

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Integer, String
+from sqlalchemy import Column, Date, ForeignKey, Integer, String
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -14,9 +14,9 @@ class MeetingRoomHourLedger(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "meeting_room_hour_ledger"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, nullable=False)
-    subscription_id = Column(Integer, nullable=False, index=True)
-    booking_id = Column(Integer, nullable=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="RESTRICT"), nullable=False, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True, index=True)
     billing_period_start = Column(Date, nullable=False)
     billing_period_end = Column(Date, nullable=False)
     entry_type = Column(String(32), nullable=False)
