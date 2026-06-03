@@ -738,6 +738,8 @@ def test_owner_can_update_organization_booking_settings(db_session, client_facto
     assert current.json()["booking_approval_mode"] == "manual"
     assert current.json()["membership_lease_approval_mode"] == "manual"
     assert current.json()["payment_failure_hold_minutes"] == 30
+    assert current.json()["waitlist_enabled"] is False
+    assert current.json()["waitlist_conference_room_enabled"] is False
 
     updated = owner_client.patch(
         f"/api/orgs/{org.public_id}/booking-settings",
@@ -745,6 +747,11 @@ def test_owner_can_update_organization_booking_settings(db_session, client_facto
             "booking_approval_mode": "auto",
             "membership_lease_approval_mode": "auto",
             "payment_failure_hold_minutes": 15,
+            "waitlist_conference_room_enabled": True,
+            "waitlist_private_office_enabled": False,
+            "waitlist_shared_desk_enabled": True,
+            "waitlist_suite_enabled": False,
+            "waitlist_virtual_office_enabled": True,
         },
     )
 
@@ -752,6 +759,21 @@ def test_owner_can_update_organization_booking_settings(db_session, client_facto
     assert updated.json()["booking_approval_mode"] == "auto"
     assert updated.json()["membership_lease_approval_mode"] == "auto"
     assert updated.json()["payment_failure_hold_minutes"] == 15
+    assert updated.json()["waitlist_enabled"] is True
+    assert updated.json()["waitlist_conference_room_enabled"] is True
+    assert updated.json()["waitlist_private_office_enabled"] is False
+    assert updated.json()["waitlist_shared_desk_enabled"] is True
+    assert updated.json()["waitlist_suite_enabled"] is False
+    assert updated.json()["waitlist_virtual_office_enabled"] is True
+
+    legacy_update = owner_client.patch(
+        f"/api/orgs/{org.public_id}/booking-settings",
+        json={"waitlist_enabled": False},
+    )
+    assert legacy_update.status_code == 200
+    assert legacy_update.json()["waitlist_enabled"] is False
+    assert legacy_update.json()["waitlist_conference_room_enabled"] is False
+    assert legacy_update.json()["waitlist_shared_desk_enabled"] is False
 
 
 def test_owner_notification_recipients_require_opt_in_and_location_access(db_session):

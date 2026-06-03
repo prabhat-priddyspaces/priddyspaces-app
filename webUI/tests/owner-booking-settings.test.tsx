@@ -40,6 +40,11 @@ describe("OwnerSettingsPage booking approval settings", () => {
             membership_lease_approval_mode: "manual",
             payment_failure_hold_minutes: 30,
             waitlist_enabled: false,
+            waitlist_conference_room_enabled: false,
+            waitlist_private_office_enabled: false,
+            waitlist_shared_desk_enabled: false,
+            waitlist_suite_enabled: false,
+            waitlist_virtual_office_enabled: false,
           },
         ]);
       }
@@ -52,6 +57,11 @@ describe("OwnerSettingsPage booking approval settings", () => {
           membership_lease_approval_mode: "manual",
           payment_failure_hold_minutes: 30,
           waitlist_enabled: false,
+          waitlist_conference_room_enabled: false,
+          waitlist_private_office_enabled: false,
+          waitlist_shared_desk_enabled: false,
+          waitlist_suite_enabled: false,
+          waitlist_virtual_office_enabled: false,
         });
       }
       if (url === "/api/orgs/org_1/booking-settings" && init?.method === "PATCH") {
@@ -62,6 +72,11 @@ describe("OwnerSettingsPage booking approval settings", () => {
           membership_lease_approval_mode: "auto",
           payment_failure_hold_minutes: 15,
           waitlist_enabled: true,
+          waitlist_conference_room_enabled: true,
+          waitlist_private_office_enabled: true,
+          waitlist_shared_desk_enabled: true,
+          waitlist_suite_enabled: true,
+          waitlist_virtual_office_enabled: true,
         });
       }
       if (url.startsWith("/api/promo-codes")) return Promise.resolve([]);
@@ -82,7 +97,9 @@ describe("OwnerSettingsPage booking approval settings", () => {
     fireEvent.change(screen.getByLabelText("Hourly/day-pass approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Membership & lease approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Payment failure recovery"), { target: { value: "15" } });
-    fireEvent.click(screen.getByLabelText("Enable waitlist"));
+    for (const label of ["Conference room", "Private office", "Shared desk", "Suite", "Virtual office"]) {
+      fireEvent.click(screen.getByLabelText(label));
+    }
     fireEvent.click(screen.getByRole("button", { name: "Save booking approval" }));
 
     await waitFor(() => {
@@ -94,7 +111,11 @@ describe("OwnerSettingsPage booking approval settings", () => {
             booking_approval_mode: "auto",
             membership_lease_approval_mode: "auto",
             payment_failure_hold_minutes: 15,
-            waitlist_enabled: true,
+            waitlist_conference_room_enabled: true,
+            waitlist_private_office_enabled: true,
+            waitlist_shared_desk_enabled: true,
+            waitlist_suite_enabled: true,
+            waitlist_virtual_office_enabled: true,
           }),
         },
         "token",

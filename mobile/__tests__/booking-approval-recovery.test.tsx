@@ -53,6 +53,12 @@ describe("booking approval and recovery mobile flows", () => {
           booking_approval_mode: "manual",
           membership_lease_approval_mode: "manual",
           payment_failure_hold_minutes: 30,
+          waitlist_enabled: false,
+          waitlist_conference_room_enabled: false,
+          waitlist_private_office_enabled: false,
+          waitlist_shared_desk_enabled: false,
+          waitlist_suite_enabled: false,
+          waitlist_virtual_office_enabled: false,
         });
       }
       if (path === "/api/orgs/org_1/booking-settings" && init?.method === "PATCH") {
@@ -60,6 +66,12 @@ describe("booking approval and recovery mobile flows", () => {
           booking_approval_mode: "auto",
           membership_lease_approval_mode: "auto",
           payment_failure_hold_minutes: 15,
+          waitlist_enabled: true,
+          waitlist_conference_room_enabled: true,
+          waitlist_private_office_enabled: true,
+          waitlist_shared_desk_enabled: true,
+          waitlist_suite_enabled: true,
+          waitlist_virtual_office_enabled: true,
         });
       }
       if (path.startsWith("/api/promo-codes")) return Promise.resolve([]);
@@ -78,6 +90,9 @@ describe("booking approval and recovery mobile flows", () => {
     fireEvent.press(autoApproveButtons[0]);
     fireEvent.press(autoApproveButtons[1]);
     fireEvent.press(screen.getByText("15 min"));
+    for (const label of ["Conference room", "Private office", "Shared desk", "Suite", "Virtual office"]) {
+      fireEvent.press(screen.getByText(label));
+    }
     fireEvent.press(screen.getByText("Save booking approval"));
 
     await waitFor(() => {
@@ -89,6 +104,11 @@ describe("booking approval and recovery mobile flows", () => {
             booking_approval_mode: "auto",
             membership_lease_approval_mode: "auto",
             payment_failure_hold_minutes: 15,
+            waitlist_conference_room_enabled: true,
+            waitlist_private_office_enabled: true,
+            waitlist_shared_desk_enabled: true,
+            waitlist_suite_enabled: true,
+            waitlist_virtual_office_enabled: true,
           }),
         },
         "token",

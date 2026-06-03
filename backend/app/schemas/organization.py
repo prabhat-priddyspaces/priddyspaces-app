@@ -29,6 +29,11 @@ class OrganizationOut(BaseModel):
     membership_lease_approval_mode: Literal["manual", "auto"] = "manual"
     payment_failure_hold_minutes: int = 30
     waitlist_enabled: bool = False
+    waitlist_conference_room_enabled: bool = False
+    waitlist_private_office_enabled: bool = False
+    waitlist_shared_desk_enabled: bool = False
+    waitlist_suite_enabled: bool = False
+    waitlist_virtual_office_enabled: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -45,6 +50,11 @@ class OrganizationBookingSettingsOut(BaseModel):
     membership_lease_approval_mode: Literal["manual", "auto"] = "manual"
     payment_failure_hold_minutes: int = 30
     waitlist_enabled: bool = False
+    waitlist_conference_room_enabled: bool = False
+    waitlist_private_office_enabled: bool = False
+    waitlist_shared_desk_enabled: bool = False
+    waitlist_suite_enabled: bool = False
+    waitlist_virtual_office_enabled: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,3 +64,8 @@ class OrganizationBookingSettingsUpdate(BaseModel):
     membership_lease_approval_mode: Literal["manual", "auto"] | None = None
     payment_failure_hold_minutes: int | None = Field(default=None, ge=0)
     waitlist_enabled: bool | None = None
+    waitlist_conference_room_enabled: bool | None = None
+    waitlist_private_office_enabled: bool | None = None
+    waitlist_shared_desk_enabled: bool | None = None
+    waitlist_suite_enabled: bool | None = None
+    waitlist_virtual_office_enabled: bool | None = None

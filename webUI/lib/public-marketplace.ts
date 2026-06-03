@@ -24,6 +24,11 @@ export interface MarketplaceLocationSummary {
   membership_lease_approval_mode?: "manual" | "auto" | string;
   payment_failure_hold_minutes?: number | null;
   waitlist_enabled?: boolean;
+  waitlist_conference_room_enabled?: boolean;
+  waitlist_private_office_enabled?: boolean;
+  waitlist_shared_desk_enabled?: boolean;
+  waitlist_suite_enabled?: boolean;
+  waitlist_virtual_office_enabled?: boolean;
   name: string;
   address: string;
   city: string | null;
@@ -145,6 +150,11 @@ export interface MarketplaceSpaceDetailLocation {
   membership_lease_approval_mode?: "manual" | "auto" | string;
   payment_failure_hold_minutes?: number | null;
   waitlist_enabled?: boolean;
+  waitlist_conference_room_enabled?: boolean;
+  waitlist_private_office_enabled?: boolean;
+  waitlist_shared_desk_enabled?: boolean;
+  waitlist_suite_enabled?: boolean;
+  waitlist_virtual_office_enabled?: boolean;
   name: string;
   address: string;
   city: string | null;
@@ -213,7 +223,44 @@ export interface SpaceAvailabilityResponse {
   daily_price: MoneyValue | null;
   show_calendar_daily_prices?: boolean;
   waitlist_enabled?: boolean;
+  waitlist_conference_room_enabled?: boolean;
+  waitlist_private_office_enabled?: boolean;
+  waitlist_shared_desk_enabled?: boolean;
+  waitlist_suite_enabled?: boolean;
+  waitlist_virtual_office_enabled?: boolean;
   days: SpaceAvailabilityDay[];
+}
+
+export function waitlistEnabledForSpaceType(
+  source:
+    | Pick<
+        MarketplaceLocationSummary | MarketplaceSpaceDetailLocation | SpaceAvailabilityResponse,
+        | "waitlist_enabled"
+        | "waitlist_conference_room_enabled"
+        | "waitlist_private_office_enabled"
+        | "waitlist_shared_desk_enabled"
+        | "waitlist_suite_enabled"
+        | "waitlist_virtual_office_enabled"
+      >
+    | null
+    | undefined,
+  spaceType: string,
+) {
+  if (!source) return false;
+  switch (spaceType) {
+    case "conference_room":
+      return Boolean(source.waitlist_conference_room_enabled ?? source.waitlist_enabled);
+    case "private_office":
+      return Boolean(source.waitlist_private_office_enabled ?? source.waitlist_enabled);
+    case "shared_desk":
+      return Boolean(source.waitlist_shared_desk_enabled ?? source.waitlist_enabled);
+    case "suite":
+      return Boolean(source.waitlist_suite_enabled ?? source.waitlist_enabled);
+    case "virtual_office":
+      return Boolean(source.waitlist_virtual_office_enabled ?? source.waitlist_enabled);
+    default:
+      return Boolean(source.waitlist_enabled);
+  }
 }
 
 export const PUBLIC_MARKETPLACE_CONFIGS: Record<PublicMarketplaceRoute, PublicMarketplaceConfig> = {
