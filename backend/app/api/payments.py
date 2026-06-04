@@ -33,12 +33,12 @@ from app.models.enums import (
     UserAppRole,
     UserRole,
 )
-from app.models.pricing_rule import PricingRule
 from app.models.tax_config import TaxConfig
 from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import accessible_location_ids, get_org_member, list_org_members, require_owner_or_admin
 from app.services.platform_auth import organization_is_publicly_visible
 from app.services.pricing import estimate_booking_amount
+from app.services.pricing_rules import get_active_pricing_rule
 from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.promo_codes import payment_description_from_snapshot
 from app.services.stripe_payments import (
@@ -139,20 +139,6 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
     )
 
 
-def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
-    now = datetime.now(timezone.utc)
-    return (
-        db.query(PricingRule)
-        .filter(
-            PricingRule.space_id == space_id,
-            (PricingRule.active_from.is_(None) | (PricingRule.active_from <= now)),
-            (PricingRule.active_to.is_(None) | (PricingRule.active_to >= now)),
-        )
-        .order_by(PricingRule.created_at.desc())
-        .first()
-    )
-
-
 def _booking_request_for_booking(db: Session, booking: Booking) -> BookingRequest | None:
     if booking.booking_request_id:
         return (
@@ -208,7 +194,7 @@ def _booking_charge_amount(db: Session, booking: Booking) -> int:
         booking_mode = "day_pass"
         full_day = True
 
-    rule = _get_active_pricing_rule(db, space.id)
+    rule = get_active_pricing_rule(db, space.id)
     tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
     amount = estimate_booking_amount(
         booking.start_datetime,
