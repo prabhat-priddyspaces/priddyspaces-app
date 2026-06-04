@@ -25,9 +25,7 @@ from datetime import datetime, timezone
 
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.membership_plan import MembershipPlan
-from app.models.organization_member import OrganizationMember
 from app.models.owner_payment_setting import OwnerPaymentSetting
-from app.models.payment import Payment
 from app.models.space import Space
 from app.models.feature_flag import FeatureFlag
 from app.models.user import User
@@ -47,7 +45,7 @@ from app.schemas.booking_request import (
     GuestBookingRequestOut,
 )
 from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
-from app.services.authz import accessible_location_ids, require_location_roles, user_can_access_location
+from app.services.authz import accessible_location_ids, require_location_roles
 from app.services.booking_email_delivery import (
     BOOKING_EMAIL_CANCELLED,
     BOOKING_EMAIL_CONFIRMED,
@@ -86,7 +84,6 @@ from app.services.owner_payments import (
     require_space_payment_ready_for_booking,
     require_space_payment_ready_for_public_surface,
 )
-from app.services.payment_metadata import normalize_payment_failure_reason
 from app.services.money import cents_to_money
 from app.services.loyalty import active_lock_by_public_id, attach_lock_to_booking_request, release_redemption_for_request
 from app.services.notifications import (
@@ -96,10 +93,6 @@ from app.services.notifications import (
     send_booking_payment_failed_email,
     send_booking_rejected_email,
     send_booking_request_submitted_email,
-    send_owner_booking_cancelled_notification,
-    send_owner_confirmed_booking_notification,
-    send_owner_booking_payment_failed_notification,
-    send_owner_booking_request_notification,
 )
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
@@ -117,6 +110,15 @@ from app.services.membership_requests import (
     create_membership_purchase_request,
 )
 from app.services.public_booking import require_public_booking_space
+from app.services.booking_request_notifications import (
+    notify_owner_team_of_cancelled_booking,
+    notify_owner_team_of_confirmed_booking,
+    notify_owner_team_of_payment_failed,
+    notify_owner_team_of_request,
+    send_booking_request_notifications,
+    send_cancelled_notifications,
+    send_payment_failed_notifications,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -159,244 +161,6 @@ def _payment_hold_is_expired(req: BookingRequest) -> bool:
     return datetime.now(timezone.utc) > _as_utc(req.payment_hold_expires_at)
 
 
-def _owner_notification_recipients_for_space(db: Session, space: Space) -> list[tuple[str, str, int]]:
-    """Return opted-in owner-side users who can access this space's location."""
-    location = db.query(Location).filter(Location.id == space.location_id).first()
-    if not location:
-        return []
-    roles = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
-    members = (
-        db.query(OrganizationMember)
-        .filter(
-            OrganizationMember.organization_id == location.organization_id,
-            OrganizationMember.is_active.is_(True),
-            OrganizationMember.receives_new_booking_email.is_(True),
-            OrganizationMember.role.in_(roles),
-        )
-        .all()
-    )
-    accessible_members = [
-        member
-        for member in members
-        if user_can_access_location(db, member.user_id, location, roles)
-    ]
-    user_ids = {member.user_id for member in accessible_members}
-    if not user_ids:
-        return []
-    users = {user.id: user for user in db.query(User).filter(User.id.in_(user_ids)).all()}
-    recipients = []
-    seen_emails: set[str] = set()
-    for member in accessible_members:
-        user = users.get(member.user_id)
-        if not user or not user.email or user.email in seen_emails:
-            continue
-        seen_emails.add(user.email)
-        recipients.append((user.email, member.role.value, user.id))
-    return sorted(recipients, key=lambda item: item[0])
-
-
-def _owner_notification_emails_for_space(db: Session, space: Space) -> list[str]:
-    return [email for email, _role, _user_id in _owner_notification_recipients_for_space(db, space)]
-
-
-def _notify_owner_team_of_request(
-    db: Session,
-    req: BookingRequest,
-    space: Space,
-    location: Location,
-    *,
-    actor_user_id: int | None = None,
-    resend: bool = False,
-) -> None:
-    for owner_email, role, user_id in _owner_notification_recipients_for_space(db, space):
-        send_owner_booking_request_notification(
-            db,
-            owner_email,
-            req,
-            space,
-            location,
-            recipient_role=role,
-            recipient_user_id=user_id,
-            actor_user_id=actor_user_id,
-            resend=resend,
-        )
-
-
-def _send_booking_request_notifications(
-    db: Session,
-    req: BookingRequest,
-    space: Space,
-    location: Location,
-    *,
-    actor_user_id: int | None = None,
-) -> None:
-    try:
-        send_booking_request_submitted_email(db, req, space, location, actor_user_id=actor_user_id)
-    except Exception:
-        logger.exception(
-            "Failed to send booking request submitted email request_public_id=%s",
-            req.public_id,
-        )
-    try:
-        _notify_owner_team_of_request(db, req, space, location, actor_user_id=actor_user_id)
-    except Exception:
-        logger.exception(
-            "Failed to notify owner team for booking request request_public_id=%s",
-            req.public_id,
-        )
-
-
-def _notify_owner_team_of_confirmed_booking(
-    db: Session,
-    req: BookingRequest,
-    booking: Booking | None,
-    space: Space,
-    location: Location,
-    *,
-    actor_user_id: int | None = None,
-    resend: bool = False,
-) -> None:
-    if not booking:
-        return
-    for owner_email, role, user_id in _owner_notification_recipients_for_space(db, space):
-        send_owner_confirmed_booking_notification(
-            db,
-            owner_email,
-            req,
-            booking,
-            space,
-            location,
-            recipient_role=role,
-            recipient_user_id=user_id,
-            actor_user_id=actor_user_id,
-            resend=resend,
-        )
-
-
-def _notify_owner_team_of_payment_failed(
-    db: Session,
-    req: BookingRequest,
-    space: Space,
-    location: Location,
-    *,
-    actor_user_id: int | None = None,
-    resend: bool = False,
-) -> None:
-    reason = None
-    last_payment = (
-        db.query(Payment)
-        .filter(Payment.booking_request_id == req.id)
-        .order_by(Payment.created_at.desc())
-        .first()
-    )
-    if last_payment and last_payment.failure_reason:
-        reason = normalize_payment_failure_reason(last_payment.failure_reason)
-    for owner_email, role, user_id in _owner_notification_recipients_for_space(db, space):
-        send_owner_booking_payment_failed_notification(
-            db,
-            owner_email,
-            req,
-            space,
-            location,
-            failure_reason=reason,
-            recipient_role=role,
-            recipient_user_id=user_id,
-            actor_user_id=actor_user_id,
-            resend=resend,
-        )
-
-
-def _send_payment_failed_notifications(
-    db: Session,
-    req: BookingRequest,
-    space: Space,
-    location: Location,
-    *,
-    actor_user_id: int | None = None,
-    resend: bool = False,
-) -> None:
-    try:
-        send_booking_payment_failed_email(db, req, space, location, actor_user_id=actor_user_id, resend=resend)
-    except Exception:
-        logger.exception(
-            "Failed to send booking payment failed email request_public_id=%s",
-            req.public_id,
-        )
-    try:
-        _notify_owner_team_of_payment_failed(db, req, space, location, actor_user_id=actor_user_id, resend=resend)
-    except Exception:
-        logger.exception(
-            "Failed to notify owner team of payment failure request_public_id=%s",
-            req.public_id,
-        )
-
-
-def _notify_owner_team_of_cancelled_booking(
-    db: Session,
-    req: BookingRequest,
-    booking: Booking | None,
-    space: Space,
-    location: Location,
-    *,
-    reason: str | None = None,
-    actor_user_id: int | None = None,
-    resend: bool = False,
-) -> None:
-    for owner_email, role, user_id in _owner_notification_recipients_for_space(db, space):
-        send_owner_booking_cancelled_notification(
-            db,
-            owner_email,
-            req,
-            space,
-            location,
-            booking=booking,
-            reason=reason,
-            recipient_role=role,
-            recipient_user_id=user_id,
-            actor_user_id=actor_user_id,
-            resend=resend,
-        )
-
-
-def _send_cancelled_notifications(
-    db: Session,
-    req: BookingRequest,
-    booking: Booking | None,
-    space: Space,
-    location: Location,
-    *,
-    reason: str | None = None,
-    actor_user_id: int | None = None,
-    resend: bool = False,
-) -> None:
-    try:
-        if booking:
-            send_booking_cancelled_email(db, booking, req, space, location, actor_user_id=actor_user_id, resend=resend)
-        else:
-            send_booking_request_cancelled_email(db, req, space, location, actor_user_id=actor_user_id, resend=resend)
-    except Exception:
-        logger.exception(
-            "Failed to send booking cancellation email request_public_id=%s",
-            req.public_id,
-        )
-    try:
-        _notify_owner_team_of_cancelled_booking(
-            db,
-            req,
-            booking,
-            space,
-            location,
-            reason=reason,
-            actor_user_id=actor_user_id,
-            resend=resend,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to notify owner team of cancellation request_public_id=%s",
-            req.public_id,
-        )
-
-
 def _expire_failed_payment_hold_or_raise(
     db: Session,
     req: BookingRequest,
@@ -412,7 +176,7 @@ def _expire_failed_payment_hold_or_raise(
     db.refresh(req)
     if booking:
         db.refresh(booking)
-    _send_cancelled_notifications(
+    send_cancelled_notifications(
         db,
         req,
         booking,
@@ -701,7 +465,7 @@ def create_guest_booking_request(
     db.commit()
     db.refresh(req)
 
-    _send_booking_request_notifications(db, req, space, location)
+    send_booking_request_notifications(db, req, space, location)
 
     return GuestBookingRequestOut(
         public_id=req.public_id,
@@ -862,7 +626,7 @@ def create_booking_request(
                         ),
                     )
                     return serialize_booking_request_out(req, space, None, db)
-                _send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
+                send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
         return serialize_booking_request_out(req, space, None, db)
 
     space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
@@ -1050,13 +814,13 @@ def create_booking_request(
             _run_booking_request_side_effect(
                 db,
                 "notify_owner_team_confirmed_booking",
-                lambda: _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=user.id),
+                lambda: notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=user.id),
             )
         elif req.status == BookingRequestStatus.PAYMENT_FAILED:
-            _send_payment_failed_notifications(db, req, space, location, actor_user_id=user.id)
+            send_payment_failed_notifications(db, req, space, location, actor_user_id=user.id)
         elif req.status == BookingRequestStatus.CANCELLED:
             booking = _booking_for_request(db, req)
-            _send_cancelled_notifications(
+            send_cancelled_notifications(
                 db,
                 req,
                 booking,
@@ -1066,7 +830,7 @@ def create_booking_request(
                 actor_user_id=user.id,
             )
         return serialize_booking_request_out(req, space, booking, db)
-    _send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
+    send_booking_request_notifications(db, req, space, location, actor_user_id=user.id)
     return serialize_booking_request_out(req, space, None, db)
 
 
@@ -1174,11 +938,11 @@ def resend_booking_request_email(
     if notification_type == BOOKING_EMAIL_REQUEST_SUBMITTED:
         send_booking_request_submitted_email(db, req, space, location, actor_user_id=actor_id, resend=True)
     elif notification_type == BOOKING_EMAIL_OWNER_REQUEST:
-        _notify_owner_team_of_request(db, req, space, location, actor_user_id=actor_id, resend=True)
+        notify_owner_team_of_request(db, req, space, location, actor_user_id=actor_id, resend=True)
     elif notification_type == BOOKING_EMAIL_OWNER_CONFIRMED:
         if not booking:
             raise HTTPException(status_code=400, detail="No confirmed booking exists for this request")
-        _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id, resend=True)
+        notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id, resend=True)
     elif notification_type == BOOKING_EMAIL_CONFIRMED:
         if req.status != BookingRequestStatus.APPROVED:
             raise HTTPException(status_code=400, detail="Only approved requests can resend confirmation email")
@@ -1194,7 +958,7 @@ def resend_booking_request_email(
     elif notification_type == BOOKING_EMAIL_OWNER_PAYMENT_FAILED:
         if req.status != BookingRequestStatus.PAYMENT_FAILED:
             raise HTTPException(status_code=400, detail="Only payment failed requests can resend owner payment failure email")
-        _notify_owner_team_of_payment_failed(db, req, space, location, actor_user_id=actor_id, resend=True)
+        notify_owner_team_of_payment_failed(db, req, space, location, actor_user_id=actor_id, resend=True)
     elif notification_type == BOOKING_EMAIL_CANCELLED:
         if not booking:
             raise HTTPException(status_code=400, detail="No booking exists for cancellation email")
@@ -1206,7 +970,7 @@ def resend_booking_request_email(
     elif notification_type == BOOKING_EMAIL_OWNER_CANCELLED:
         if req.status != BookingRequestStatus.CANCELLED:
             raise HTTPException(status_code=400, detail="Only cancelled requests can resend owner cancellation email")
-        _notify_owner_team_of_cancelled_booking(
+        notify_owner_team_of_cancelled_booking(
             db,
             req,
             booking,
@@ -1458,10 +1222,10 @@ def approve_booking_request(
             lambda: send_booking_confirmed_email(db, req, booking_for_email, space, location, actor_user_id=actor_id),
         )
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
-        _send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
+        send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.CANCELLED:
         cancelled_booking = _booking_for_request(db, req)
-        _send_cancelled_notifications(
+        send_cancelled_notifications(
             db,
             req,
             cancelled_booking,
@@ -1649,13 +1413,13 @@ def retry_booking_request_payment(
         _run_booking_request_side_effect(
             db,
             "notify_owner_team_confirmed_booking",
-            lambda: _notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id),
+            lambda: notify_owner_team_of_confirmed_booking(db, req, booking, space, location, actor_user_id=actor_id),
         )
     elif req.status == BookingRequestStatus.PAYMENT_FAILED:
-        _send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
+        send_payment_failed_notifications(db, req, space, location, actor_user_id=actor_id)
     elif req.status == BookingRequestStatus.CANCELLED:
         cancelled_booking = _booking_for_request(db, req)
-        _send_cancelled_notifications(
+        send_cancelled_notifications(
             db,
             req,
             cancelled_booking,
@@ -1766,7 +1530,7 @@ def cancel_booking_request(
     if booking:
         db.refresh(booking)
     if booking:
-        _send_cancelled_notifications(db, req, booking, space, location, actor_user_id=user.id)
+        send_cancelled_notifications(db, req, booking, space, location, actor_user_id=user.id)
     else:
-        _send_cancelled_notifications(db, req, None, space, location, actor_user_id=user.id)
+        send_cancelled_notifications(db, req, None, space, location, actor_user_id=user.id)
     return serialize_booking_request_out(req, space, booking, db, include_email_delivery=not is_member)

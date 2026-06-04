@@ -35,7 +35,7 @@ from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.marketing import OutboundMessage
 from app.services.booking_email_delivery import safe_error_label
 from app.services.payment_providers import ChargeResult
-from app.api.booking_requests import _owner_notification_emails_for_space
+from app.services.booking_request_notifications import owner_notification_emails_for_space
 
 
 def _seed_owner_space(db):
@@ -998,7 +998,7 @@ def test_owner_notification_recipients_require_opt_in_and_location_access(db_ses
     )
     db_session.commit()
 
-    assert _owner_notification_emails_for_space(db_session, space) == [
+    assert owner_notification_emails_for_space(db_session, space) == [
         "admin-recipient@example.com",
         "owner@example.com",
         "staff-recipient@example.com",
@@ -1249,11 +1249,11 @@ def test_guest_booking_request_survives_notification_failure(db_session, client_
         raise RuntimeError("email service unavailable")
 
     monkeypatch.setattr(
-        "app.api.booking_requests.send_booking_request_submitted_email",
+        "app.services.booking_request_notifications.send_booking_request_submitted_email",
         fail_notification,
     )
     monkeypatch.setattr(
-        "app.api.booking_requests._notify_owner_team_of_request",
+        "app.services.booking_request_notifications.notify_owner_team_of_request",
         fail_notification,
     )
 
