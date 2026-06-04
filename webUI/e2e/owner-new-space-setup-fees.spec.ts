@@ -84,6 +84,9 @@ test("owner creates a new space with setup fees and sees them on edit", async ({
 
   await expect(page.getByRole("heading", { name: "Create a Space" })).toBeVisible();
   await page.getByLabel("Listing name").fill("Board Room");
+  // Conference rooms require both an hourly and a day rate before saving.
+  await page.getByLabel("Hourly price (USD)").fill("75");
+  await page.getByLabel("Day rate price (USD)").fill("300");
   await page.getByRole("button", { name: "Add fee" }).click();
   await page.getByRole("button", { name: "Add fee" }).click();
   await page.getByLabel("Line item").nth(0).fill("Room setup");

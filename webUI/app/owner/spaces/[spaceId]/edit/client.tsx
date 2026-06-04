@@ -38,9 +38,11 @@ function typeConfig(spaceType: string) {
       capacityLabel: "Room capacity",
       capacityHelp: "Number of people the room can seat.",
       showHourly: true,
+      requireHourly: true,
       showDaily: true,
+      requireDaily: true,
       dailyLabel: "Day rate price (USD)",
-      dailyHelp: "Optional all-day conference room price.",
+      dailyHelp: "All-day conference room price.",
       showMonthly: false,
       showAvailability: true,
       showBuffers: true,
@@ -51,7 +53,9 @@ function typeConfig(spaceType: string) {
       capacityLabel: "Desks available per day",
       capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
       showHourly: false,
+      requireHourly: false,
       showDaily: true,
+      requireDaily: true,
       dailyLabel: "Day pass price (USD)",
       dailyHelp: "Charged per shared-desk day pass seat.",
       showMonthly: false,
@@ -64,7 +68,9 @@ function typeConfig(spaceType: string) {
       capacityLabel: "",
       capacityHelp: "",
       showHourly: false,
+      requireHourly: false,
       showDaily: false,
+      requireDaily: false,
       dailyLabel: "",
       dailyHelp: "",
       showMonthly: false,
@@ -76,7 +82,9 @@ function typeConfig(spaceType: string) {
     capacityLabel: spaceType === "suite" ? "Suite seats" : "Office seats",
     capacityHelp: "Number of people included in this office or suite.",
     showHourly: false,
+    requireHourly: false,
     showDaily: false,
+    requireDaily: false,
     dailyLabel: "",
     dailyHelp: "",
     showMonthly: false,
@@ -110,6 +118,9 @@ export function EditSpaceClient() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const config = typeConfig(form.space_type);
+  const isValid =
+    (!config.requireHourly || Number(form.price_hourly) > 0) &&
+    (!config.requireDaily || Number(form.price_daily) > 0);
 
   useEffect(() => {
     if (!spaceId) return;
@@ -229,7 +240,7 @@ export function EditSpaceClient() {
               <div className="grid gap-2 md:grid-cols-3">
                 {config.showHourly ? (
                 <div className="space-y-2">
-                <Label htmlFor="hourly">Hourly price (USD)</Label>
+                <Label htmlFor="hourly">Hourly price (USD)*</Label>
                 <Input
                   id="hourly"
                   type="number"
@@ -247,7 +258,7 @@ export function EditSpaceClient() {
                 ) : null}
                 {config.showDaily ? (
               <div className="space-y-2">
-                <Label htmlFor="daily">{config.dailyLabel}</Label>
+                <Label htmlFor="daily">{config.dailyLabel}{config.requireDaily ? "*" : ""}</Label>
                 <Input
                   id="daily"
                   type="number"
@@ -355,7 +366,7 @@ export function EditSpaceClient() {
             </div>
             ) : null}
             <div className="flex gap-3">
-              <Button type="button" onClick={handleSave}>
+              <Button type="button" onClick={handleSave} disabled={!isValid}>
                 Save Changes
               </Button>
               <Link href="/owner/locations/spaces">

@@ -65,6 +65,9 @@ describe("owner space reward controls", () => {
     expect(screen.queryByLabelText("Priddy Points")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Owner points")).not.toBeInTheDocument();
 
+    // Conference rooms now require hourly + day rate before saving.
+    fireEvent.change(screen.getByLabelText("Hourly price (USD)*"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Day rate price (USD)*"), { target: { value: "200" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Space" }));
 
     await waitFor(() => {
@@ -94,6 +97,8 @@ describe("owner space reward controls", () => {
     render(<NewSpacePage />);
 
     expect(await screen.findByText("Main, Austin")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Hourly price (USD)*"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Day rate price (USD)*"), { target: { value: "200" } });
     fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
     fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
 
@@ -135,6 +140,8 @@ describe("owner space reward controls", () => {
     render(<NewSpacePage />);
 
     expect(await screen.findByText("Main, Austin")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Hourly price (USD)*"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Day rate price (USD)*"), { target: { value: "200" } });
     fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
     fireEvent.click(screen.getByRole("button", { name: "Save Space" }));
 
@@ -164,6 +171,8 @@ describe("owner space reward controls", () => {
     render(<NewSpacePage />);
 
     expect(await screen.findByText("Main, Austin")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Hourly price (USD)*"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Day rate price (USD)*"), { target: { value: "200" } });
     fireEvent.click(screen.getByRole("button", { name: "Add fee" }));
     fireEvent.change(screen.getByLabelText("Line item"), { target: { value: "Room setup" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Space" }));
