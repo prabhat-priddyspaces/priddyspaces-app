@@ -4,16 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowUpRight,
-  CheckCircle2,
   ChevronLeft,
   Clock3,
   Gift,
-  Mail,
-  MapPin,
-  Phone,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
@@ -22,9 +16,7 @@ import { buildLoginHref } from "@/lib/auth-redirect";
 import { formatUsd, moneyToNumber } from "@/lib/money";
 import {
   formatLocationAddress,
-  formatSpaceTypeLabel,
   leaseBookingModeForSpaceType,
-  markLeaseEstimate,
   MembershipPlanPublic,
   MarketplaceSpaceDetailResponse,
   SpaceAvailabilityResponse,
@@ -32,7 +24,6 @@ import {
 } from "@/lib/public-marketplace";
 import { LeaseBookingWidget } from "@/components/lease-booking-widget";
 import { CheckoutSummaryModal } from "@/components/checkout-summary-modal";
-import { PublicImageWithFallback } from "@/components/public-image-with-fallback";
 import { PublicTopbar } from "@/components/public-topbar";
 import {
   DEFAULT_GRANULARITY_MINUTES,
@@ -53,12 +44,20 @@ import {
   zonedDateTimeToUtc,
 } from "@/lib/space-availability";
 import { AvailabilityCalendar } from "@/components/availability-calendar";
-import { PublicLocationMiniMap } from "@/components/public-location-mini-map";
 import { PaymentMethodModal } from "@/components/payment-method-modal";
 import { GuestCheckoutModal } from "@/components/guest-checkout-modal";
-import { PublicWorkingHours } from "@/components/public-working-hours";
 import type { LoyaltyRedemptionLock, LoyaltyRedemptionPreview } from "@/lib/loyalty";
 import { formatCents, formatPoints } from "@/lib/loyalty";
+import {
+  getPriceRows,
+  membershipBookingModeForSpaceType,
+} from "@/components/space-detail/helpers";
+import { SpaceGallery } from "@/components/space-detail/SpaceGallery";
+import { SpaceHeader } from "@/components/space-detail/SpaceHeader";
+import { LocationSection } from "@/components/space-detail/LocationSection";
+import { TransportationSection } from "@/components/space-detail/TransportationSection";
+import { IncludedItems } from "@/components/space-detail/IncludedItems";
+import { SupportContacts } from "@/components/space-detail/SupportContacts";
 
 const AVAILABILITY_RANGE_DAYS = 60;
 const AVAILABILITY_STALE_MS = 3 * 60 * 1000;
@@ -90,57 +89,6 @@ interface ReservationPayload {
   full_day: boolean;
   seats_requested?: number;
   promo_code?: string;
-}
-
-function membershipBookingModeForSpaceType(spaceType: string) {
-  if (spaceType === "shared_desk") return "monthly_membership";
-  if (spaceType === "virtual_office") return "virtual_membership";
-  return null;
-}
-
-function buildDirectionsHref(address: string, lat: number | null, lng: number | null) {
-  const query = lat != null && lng != null ? `${lat},${lng}` : address;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-}
-
-function buildInitials(name: string) {
-  const parts = name.split(" ").filter(Boolean).slice(0, 2);
-  return parts.map((part) => part[0]?.toUpperCase() || "").join("") || "VX";
-}
-
-function getPriceRows(space: MarketplaceSpaceDetailResponse["space"]) {
-  const rows: Array<{ label: string; value: string }> = [];
-  const productPrices = space.booking_products ?? [];
-  const firstPlan = productPrices
-    .filter((product) => product.price_cents != null)
-    .sort((a, b) => (a.price_cents ?? 0) - (b.price_cents ?? 0))[0];
-
-  if (space.space_type === "conference_room") {
-    if (space.hourly_price != null) rows.push({ label: "Hourly", value: formatUsd(space.hourly_price, "/hour") });
-    if (space.price_daily != null) rows.push({ label: "Day Rate", value: formatUsd(space.price_daily, "/day") });
-    return rows;
-  }
-  if (space.space_type === "shared_desk") {
-    if (space.price_daily != null) rows.push({ label: "Day Pass", value: formatUsd(space.price_daily, "/day") });
-    if (space.membership_price != null) rows.push({ label: "Membership", value: formatUsd(space.membership_price, "/month") });
-    return rows;
-  }
-  if (space.space_type === "virtual_office") {
-    if (space.membership_price != null) rows.push({ label: "Virtual Membership", value: formatUsd(space.membership_price, "/month") });
-    return rows;
-  }
-  if (firstPlan?.price_cents != null) {
-    rows.push({
-      label: "Lease",
-      value: markLeaseEstimate(formatCents(firstPlan.price_cents) + "/month"),
-    });
-  } else if (space.membership_price != null) {
-    rows.push({
-      label: "Lease",
-      value: markLeaseEstimate(formatUsd(space.membership_price, "/month")),
-    });
-  }
-  return rows;
 }
 
 export function PublicSpaceDetailView({
@@ -1047,199 +995,24 @@ export function PublicSpaceDetailView({
 
         <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-8">
-            <section className="rounded-2xl border border-line bg-surface p-4 shadow-pop">
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                <div className="overflow-hidden rounded-2xl bg-surface-2">
-                  <PublicImageWithFallback
-                    src={heroImage?.image_url}
-                    alt={detail.space.name}
-                    className="h-full min-h-[340px] w-full object-cover"
-                    fallbackClassName="flex min-h-[340px] items-center justify-center bg-[linear-gradient(135deg,var(--ps-violet-100),var(--ps-mint-100))] text-sm font-semibold uppercase tracking-[0.24em] text-text-2"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {galleryImages.length > 0 ? (
-                    galleryImages.map((image) => (
-                      <div key={image.public_id} className="overflow-hidden rounded-xl bg-surface-2">
-                        <PublicImageWithFallback
-                          src={image.image_url}
-                          alt={detail.space.name}
-                          className="h-full min-h-[164px] w-full object-cover"
-                          fallbackClassName="flex min-h-[164px] items-center justify-center bg-surface-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-text-3"
-                        />
-                      </div>
-                    ))
-                  ) : (
-                    Array.from({ length: 4 }).map((_, index) => (
-                      <div
-                        key={`placeholder-${index}`}
-                        className="flex min-h-[164px] items-center justify-center rounded-xl bg-surface-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-text-4"
-                      >
-                        Gallery
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </section>
+            <SpaceGallery
+              spaceName={detail.space.name}
+              heroImage={heroImage}
+              galleryImages={galleryImages}
+            />
 
-            <section className="border-b border-line pb-8">
-              <div className="flex flex-wrap items-start justify-between gap-6">
-                <div>
-                  <h1 className="text-[28px] font-semibold tracking-[-0.02em] text-text">{detail.space.name}</h1>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2">
-                      <Users className="h-4 w-4 text-text-3" />
-                      {detail.space.capacity} seats
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2">
-                      <CheckCircle2 className="h-4 w-4 text-text-3" />
-                      {formatSpaceTypeLabel(detail.space.space_type)}
-                    </span>
-                    {detail.space.amenities.slice(0, 6).map((amenity) => (
-                      <span
-                        key={amenity}
-                        className="rounded-full border border-line bg-surface-2 px-3 py-2 text-sm font-medium text-text-2"
-                      >
-                        {amenity}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="min-w-[220px] rounded-2xl border border-brand/30 bg-brand-soft px-5 py-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-brand">Pricing</div>
-                  <div className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-text">{primaryPrice}</div>
-                  {priceRows.length > 1 ? (
-                    <div className="mt-3 space-y-2 text-sm text-text-2">
-                      {priceRows.slice(1).map((row) => (
-                        <div key={row.label} className="flex items-center justify-between gap-4">
-                          <span>{row.label}</span>
-                          <span className="font-medium text-text">{row.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </section>
+            <SpaceHeader space={detail.space} priceRows={priceRows} primaryPrice={primaryPrice} />
 
-            <section className="grid gap-8 border-b border-line pb-8 md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-              <div className="space-y-5">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-3">Located At</div>
-                  <div className="mt-2 text-[22px] font-semibold tracking-[-0.02em] text-text">{detail.location.name}</div>
-                  <p className="mt-2 text-sm leading-6 text-text-2">{locationAddress}</p>
-                  <a
-                    href={buildDirectionsHref(locationAddress, detail.location.lat, detail.location.lng)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-brand hover:underline"
-                  >
-                    Get directions
-                    <ArrowUpRight className="h-4 w-4" />
-                  </a>
-                </div>
+            <LocationSection location={detail.location} locationAddress={locationAddress} />
 
-                <PublicLocationMiniMap
-                  lat={detail.location.lat}
-                  lng={detail.location.lng}
-                  name={detail.location.name}
-                />
-              </div>
+            <TransportationSection
+              parkingNotes={detail.location.public_parking_notes}
+              transitNotes={detail.location.public_transit_notes}
+            />
 
-              <div className="grid gap-5">
-                <PublicWorkingHours
-                  enabled={detail.location.public_working_hours_enabled}
-                  hours={detail.location.public_working_hours}
-                  legacyWeekdays={detail.location.public_hours_weekdays}
-                  legacyWeekends={detail.location.public_hours_weekends}
-                />
+            <IncludedItems items={detail.location.public_included_items} />
 
-                {(detail.location.public_phone || detail.location.public_email) ? (
-                  <div className="rounded-2xl border border-line bg-surface p-5">
-                    <div className="text-sm font-semibold text-text">Questions About This Listing?</div>
-                    <div className="mt-4 space-y-3 text-sm text-text-2">
-                      {detail.location.public_phone ? (
-                        <a href={`tel:${detail.location.public_phone}`} className="flex items-center gap-3 hover:text-text">
-                          <Phone className="h-4 w-4 text-text-4" />
-                          {detail.location.public_phone}
-                        </a>
-                      ) : null}
-                      {detail.location.public_email ? (
-                        <a href={`mailto:${detail.location.public_email}`} className="flex items-center gap-3 hover:text-text">
-                          <Mail className="h-4 w-4 text-text-4" />
-                          {detail.location.public_email}
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
-            {(detail.location.public_parking_notes.length > 0 || detail.location.public_transit_notes.length > 0) ? (
-              <section className="grid gap-6 border-b border-line pb-8 md:grid-cols-2">
-                {detail.location.public_parking_notes.length > 0 ? (
-                  <div>
-                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Parking</h2>
-                    <div className="mt-4 grid gap-3">
-                      {detail.location.public_parking_notes.map((item) => (
-                        <div key={item} className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-text-2">
-                          <MapPin className="mt-0.5 h-4 w-4 text-text-4" />
-                          <span>{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {detail.location.public_transit_notes.length > 0 ? (
-                  <div>
-                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Transit</h2>
-                    <div className="mt-4 grid gap-3">
-                      {detail.location.public_transit_notes.map((item) => (
-                        <div key={item} className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-text-2">
-                          <MapPin className="mt-0.5 h-4 w-4 text-text-4" />
-                          <span>{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-
-            {detail.location.public_included_items.length > 0 ? (
-              <section className="border-b border-line pb-8">
-                <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">Included With Your Reservation</h2>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {detail.location.public_included_items.map((item) => (
-                    <div key={item} className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-text-2">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
-                      <span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            {detail.support_contacts.length > 0 ? (
-              <section>
-                <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-text">We&apos;re Here To Help</h2>
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  {detail.support_contacts.map((contact) => (
-                    <div key={`${contact.name}-${contact.title}`} className="flex items-center gap-4 rounded-2xl border border-line bg-surface px-5 py-4">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--ps-mint-100),var(--surface-2))] text-sm font-semibold text-text">
-                        {buildInitials(contact.name)}
-                      </div>
-                      <div>
-                        <div className="text-base font-semibold text-text">{contact.name}</div>
-                        <div className="text-sm text-text-3">{contact.title}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
+            <SupportContacts contacts={detail.support_contacts} />
           </div>
 
           <aside className="lg:sticky lg:top-6 lg:self-start">
