@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.logging_config import log_event
 from app.core.observability import capture_exception
 from app.models.booking import Booking
 from app.models.booking_payment_link import BookingPaymentLink
@@ -163,6 +164,13 @@ def expire_payment_holds(db: Session, *, limit: int = 100) -> dict[str, int]:
         if booking:
             db.refresh(booking)
         expired += 1
+        log_event(
+            logger,
+            "payment_hold_expired",
+            request_public_id=req.public_id,
+            booking_public_id=booking.public_id if booking else None,
+            space_id=req.space_id,
+        )
         if not space or not location:
             continue
         try:

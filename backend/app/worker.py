@@ -18,6 +18,7 @@ from app.assistant.jobs import (
     send_space_alert_email,
 )
 from app.core.config import settings
+from app.core.logging_config import configure_logging
 from app.core.observability import init_sentry
 from app.db.session import SessionLocal
 from app.models.marketing import OutboundMessage
@@ -301,7 +302,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    configure_logging(json_logs=settings.LOG_JSON, level=settings.LOG_LEVEL)
     init_sentry()
     args = _build_parser().parse_args()
     config = WorkerConfig(
