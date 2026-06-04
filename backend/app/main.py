@@ -2,12 +2,16 @@ import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, booking_waitlist, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_bookings, owner_calendar, owner_payment_health, owner_payments, payments, pricing, space_booking_modes, space_setup_fees, space_volume_discounts, spaces, stripe_connect, subscriptions, webhooks, webhooks_clerk
 from app.core.config import settings
-from app.core.logging_config import RequestContextMiddleware, configure_logging
+from app.core.errors import error_code_for_status
+from app.core.logging_config import RequestContextMiddleware, configure_logging, request_id_ctx
 from app.core.observability import capture_exception, init_sentry
 from app.core.rate_limit import RateLimitMiddleware
 
@@ -50,29 +54,53 @@ def _cors_headers(origin: str | None) -> dict[str, str]:
     }
 
 
+def _error_response(
+    status_code: int,
+    detail,
+    *,
+    request: Request,
+    extra: dict | None = None,
+    headers: dict | None = None,
+) -> JSONResponse:
+    """Consistent error envelope: detail (kept for back-compat) + error_code +
+    request_id (from the request-context middleware)."""
+    response_headers = dict(_cors_headers(request.headers.get("origin")))
+    if headers:
+        response_headers.update(headers)
+    content = {
+        "detail": detail,
+        "error_code": error_code_for_status(status_code),
+        "request_id": request_id_ctx.get(),
+    }
+    if extra:
+        content.update(extra)
+    return JSONResponse(status_code=status_code, content=content, headers=response_headers)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    return _error_response(exc.status_code, exc.detail, request=request, headers=getattr(exc, "headers", None))
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return _error_response(422, jsonable_encoder(exc.errors()), request=request)
+
+
 @app.exception_handler(Exception)
 async def detailed_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """In DEBUG mode return full error detail and traceback for 500s."""
     # Custom Exception handlers mark the error "handled", so report it to
     # Sentry explicitly (no-op unless configured).
     capture_exception(exc)
-    origin = request.headers.get("origin")
-    headers = dict(_cors_headers(origin))
     if settings.DEBUG:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "detail": str(exc),
-                "type": type(exc).__name__,
-                "traceback": traceback.format_exc(),
-            },
-            headers=headers,
+        return _error_response(
+            500,
+            str(exc),
+            request=request,
+            extra={"type": type(exc).__name__, "traceback": traceback.format_exc()},
         )
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"},
-        headers=headers,
-    )
+    return _error_response(500, "Internal server error", request=request)
 
 
 if allowed_origins:

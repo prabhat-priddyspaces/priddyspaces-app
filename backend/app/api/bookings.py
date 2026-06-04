@@ -10,11 +10,10 @@ from app.models.booking_request import BookingRequest
 from app.models.enums import BookingRequestStatus, BookingStatus, UserAppRole, UserRole
 from app.models.location import Location
 from app.models.space import Space
-from app.schemas.booking import BookingCreate, BookingOut, BookingUpdateIn, BookingCancelOut, BookingCheckInOut
+from app.schemas.booking import BookingOut, BookingUpdateIn, BookingCancelOut, BookingCheckInOut
 from app.models.cancellation_policy import CancellationPolicy
 from app.services.auth_user import get_or_create_user
 from app.services.authz import accessible_location_ids, require_location_roles
-from app.services.availability import booking_overlaps, subscription_overlaps
 from app.services.audit import write_audit_log
 from app.services.platform_auth import get_audit_actor_context
 from app.services.notifications import send_booking_cancelled_email
@@ -62,36 +61,10 @@ def _booking_for_checkin(db: Session, public_id: str, token: dict) -> tuple[Book
     return booking, user, location, space
 
 
-@router.post("/bookings", response_model=BookingOut)
-def create_booking(
-    payload: BookingCreate,
-    db: Session = Depends(get_db),
-    token: dict = Depends(get_current_user)
-):
-    raise HTTPException(status_code=409, detail="Use booking requests")
-    user = get_or_create_user(db, token)
-    space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
-    if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
-
-    if subscription_overlaps(db, space.id, payload.start_datetime.date(), payload.end_datetime.date()):
-        raise HTTPException(status_code=409, detail="Space already subscribed for that date")
-
-    if booking_overlaps(db, space.id, payload.start_datetime, payload.end_datetime):
-        raise HTTPException(status_code=409, detail="Booking overlaps existing booking")
-
-    booking = Booking(
-        user_id=user.id,
-        space_id=space.id,
-        tenant_id=space.tenant_id,
-        start_datetime=payload.start_datetime,
-        end_datetime=payload.end_datetime,
-        status=BookingStatus.PENDING
-    )
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
-    return booking
+@router.post("/bookings", deprecated=True)
+def create_booking() -> None:
+    """Removed: direct booking creation was replaced by booking requests."""
+    raise HTTPException(status_code=410, detail="Use /api/booking-requests")
 
 
 @router.get("/bookings", response_model=list[BookingOut])
