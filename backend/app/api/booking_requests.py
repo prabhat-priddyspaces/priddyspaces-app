@@ -35,7 +35,6 @@ from app.models.owner_payment_setting import OwnerPaymentSetting
 from app.models.payment import Payment
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
-from app.models.pricing_rule import PricingRule
 from app.models.subscription import Subscription
 from app.models.tax_config import TaxConfig
 from app.models.feature_flag import FeatureFlag
@@ -116,6 +115,11 @@ from app.services.pricing import (
     VolumeDiscount,
     estimate_booking_price,
 )
+from app.services.pricing_rules import (
+    active_volume_discounts,
+    get_active_pricing_rule,
+    granularity_to_minutes,
+)
 from app.services.money import cents_to_money
 from app.services.loyalty import active_lock_by_public_id, attach_lock_to_booking_request, release_redemption_for_request
 from app.services.notifications import (
@@ -152,45 +156,6 @@ def _run_booking_request_side_effect(db: Session, label: str, callback) -> None:
 
 def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
-
-
-def _granularity_to_minutes(value) -> int:
-    raw = getattr(value, "value", value)
-    return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
-
-
-def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]:
-    """Load active volume-discount tiers for a space. Returns [] until Phase B model lands."""
-    try:
-        from app.models.space_volume_discount import SpaceVolumeDiscount
-    except ImportError:
-        return []
-    rows = (
-        db.query(SpaceVolumeDiscount)
-        .filter(
-            SpaceVolumeDiscount.space_id == space_id,
-            SpaceVolumeDiscount.is_active.is_(True),
-        )
-        .all()
-    )
-    return [
-        VolumeDiscount(min_hours=float(r.min_hours), discount_percent=int(r.discount_percent))
-        for r in rows
-    ]
-
-
-def _get_active_pricing_rule(db: Session, space_id: int) -> PricingRule | None:
-    now = datetime.now(timezone.utc)
-    return (
-        db.query(PricingRule)
-        .filter(
-            PricingRule.space_id == space_id,
-            (PricingRule.active_from.is_(None) | (PricingRule.active_from <= now)),
-            (PricingRule.active_to.is_(None) | (PricingRule.active_to >= now)),
-        )
-        .order_by(PricingRule.created_at.desc())
-        .first()
-    )
 
 
 def _require_public_booking_space(
@@ -366,7 +331,7 @@ def _to_out(
         granularity_minutes = 60
         volume_discounts: list[VolumeDiscount] = []
         if db:
-            rule = _get_active_pricing_rule(db, space.id)
+            rule = get_active_pricing_rule(db, space.id)
             if rule:
                 rate_type = rule.rate_type
                 rate_amount = rule.rate_amount
@@ -374,8 +339,8 @@ def _to_out(
             if tax:
                 tax_rate = tax.rate_percent
             if location and location.booking_granularity:
-                granularity_minutes = _granularity_to_minutes(location.booking_granularity)
-            volume_discounts = _active_volume_discounts(db, space.id)
+                granularity_minutes = granularity_to_minutes(location.booking_granularity)
+            volume_discounts = active_volume_discounts(db, space.id)
 
         # Map request_kind back to engine flags.
         full_day_flag = request_kind == BookingRequestKind.DAILY_BOOKING.value

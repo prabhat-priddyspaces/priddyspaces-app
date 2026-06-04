@@ -38,7 +38,8 @@ from app.services.notifications import (
 from app.services.access_passes import ensure_access_pass_for_booking, ensure_access_passes_for_booking_request
 from app.services.booking_inventory import booking_blocks_inventory
 from app.services.platform_auth import calculate_commission_snapshot, get_effective_commission_pct
-from app.services.pricing import EstimateResult, VolumeDiscount, estimate_booking_price
+from app.services.pricing import EstimateResult, estimate_booking_price
+from app.services.pricing_rules import active_volume_discounts, granularity_to_minutes
 from app.services.promo_codes import (
     apply_promo_to_snapshot,
     record_promo_redemption,
@@ -241,27 +242,6 @@ def estimate_request_amount(db: Session, req: BookingRequest, space: Space) -> i
     return _estimate_request_snapshot(db, req, space)["total_cents"]
 
 
-def _granularity_to_minutes(value) -> int:
-    raw = getattr(value, "value", value)
-    return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
-
-
-def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]:
-    try:
-        from app.models.space_volume_discount import SpaceVolumeDiscount
-    except ImportError:
-        return []
-    rows = (
-        db.query(SpaceVolumeDiscount)
-        .filter(
-            SpaceVolumeDiscount.space_id == space_id,
-            SpaceVolumeDiscount.is_active.is_(True),
-        )
-        .all()
-    )
-    return [VolumeDiscount(min_hours=float(r.min_hours), discount_percent=int(r.discount_percent)) for r in rows]
-
-
 def _snapshot_from_estimate(
     estimate: EstimateResult,
     *,
@@ -342,7 +322,7 @@ def build_direct_booking_pricing_snapshot(
     rule = get_active_pricing_rule(db, space.id)
     tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
     location = db.query(Location).filter(Location.id == space.location_id).first()
-    granularity_minutes = _granularity_to_minutes(location.booking_granularity) if location else 60
+    granularity_minutes = granularity_to_minutes(location.booking_granularity) if location else 60
     is_day_pass = bool(full_day) or booking_mode == "day_pass"
     engine_booking_mode = "day_pass" if is_day_pass else booking_mode
     estimate = estimate_booking_price(
@@ -355,7 +335,7 @@ def build_direct_booking_pricing_snapshot(
         rate_amount=rule.rate_amount if rule else None,
         booking_mode=engine_booking_mode,
         full_day=is_day_pass,
-        volume_discounts=_active_volume_discounts(db, space.id),
+        volume_discounts=active_volume_discounts(db, space.id),
         granularity_minutes=granularity_minutes,
         tax_rate_percent=tax.rate_percent if tax else None,
     )

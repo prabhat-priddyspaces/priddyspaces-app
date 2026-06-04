@@ -52,7 +52,8 @@ from app.services.money import cents_to_money
 from app.services.notifications import send_booking_confirmed_email, send_email
 from app.services.owner_payments import get_enabled_owner_payment_setting, resolve_payment_provider
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
-from app.services.pricing import VolumeDiscount, estimate_booking_price
+from app.services.pricing import estimate_booking_price
+from app.services.pricing_rules import active_volume_discounts, granularity_to_minutes
 
 PAYMENT_LINK_STATUS_SENT = "sent"
 PAYMENT_LINK_STATUS_PAID = "paid"
@@ -98,24 +99,6 @@ def _aware_utc(value: datetime) -> datetime:
 
 def _display_name(user: User) -> str | None:
     return user.full_name or " ".join(part for part in [user.first_name, user.last_name] if part).strip() or None
-
-
-def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]:
-    try:
-        from app.models.space_volume_discount import SpaceVolumeDiscount
-    except ImportError:
-        return []
-    rows = (
-        db.query(SpaceVolumeDiscount)
-        .filter(SpaceVolumeDiscount.space_id == space_id, SpaceVolumeDiscount.is_active.is_(True))
-        .all()
-    )
-    return [VolumeDiscount(min_hours=float(r.min_hours), discount_percent=int(r.discount_percent)) for r in rows]
-
-
-def _granularity_to_minutes(value) -> int:
-    raw = getattr(value, "value", value)
-    return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
 
 
 def _space_type_value(space: Space) -> str:
@@ -165,8 +148,8 @@ def estimate_owner_booking_snapshot(
         rate_amount=rule.rate_amount if rule else None,
         booking_mode="day_pass" if is_day_pass else "hourly",
         full_day=is_day_pass,
-        volume_discounts=_active_volume_discounts(db, space.id),
-        granularity_minutes=_granularity_to_minutes(location.booking_granularity) if location.booking_granularity else 60,
+        volume_discounts=active_volume_discounts(db, space.id),
+        granularity_minutes=granularity_to_minutes(location.booking_granularity) if location.booking_granularity else 60,
         tax_rate_percent=tax.rate_percent if tax else None,
     )
     if estimate is None:

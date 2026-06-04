@@ -25,14 +25,17 @@ from app.models.loyalty import (
 )
 from app.models.organization import Organization
 from app.models.payment import Payment
-from app.models.pricing_rule import PricingRule
 from app.models.space import Space
-from app.models.space_volume_discount import SpaceVolumeDiscount
 from app.models.tax_config import TaxConfig
 from app.models.user import User
 from app.services.org_member_stats import interacted_user_ids
 from app.services.platform_auth import get_or_create_platform_settings
-from app.services.pricing import VolumeDiscount, estimate_booking_price
+from app.services.pricing import estimate_booking_price
+from app.services.pricing_rules import (
+    active_volume_discounts,
+    get_active_pricing_rule,
+    granularity_to_minutes,
+)
 from app.services.setup_fees import setup_fee_amount_cents
 
 POINT_VALUE_CENTS_MIN = 1
@@ -576,20 +579,6 @@ def record_earned_for_payment(
     db.commit()
 
 
-def _active_volume_discounts(db: Session, space_id: int) -> list[VolumeDiscount]:
-    rows = (
-        db.query(SpaceVolumeDiscount)
-        .filter(SpaceVolumeDiscount.space_id == space_id, SpaceVolumeDiscount.is_active.is_(True))
-        .all()
-    )
-    return [VolumeDiscount(min_hours=float(row.min_hours), discount_percent=int(row.discount_percent)) for row in rows]
-
-
-def _granularity_to_minutes(value: Any) -> int:
-    raw = getattr(value, "value", value)
-    return {"30m": 30, "60m": 60, "120m": 120, "daily": 24 * 60}.get(raw, 60)
-
-
 def calculate_booking_subtotal_cents(
     db: Session,
     space: Space,
@@ -599,20 +588,10 @@ def calculate_booking_subtotal_cents(
     booking_mode: str | None = None,
     full_day: bool = False,
 ) -> int:
-    now = now_utc()
-    rule = (
-        db.query(PricingRule)
-        .filter(
-            PricingRule.space_id == space.id,
-            (PricingRule.active_from.is_(None) | (PricingRule.active_from <= now)),
-            (PricingRule.active_to.is_(None) | (PricingRule.active_to >= now)),
-        )
-        .order_by(PricingRule.created_at.desc())
-        .first()
-    )
+    rule = get_active_pricing_rule(db, space.id)
     tax = db.query(TaxConfig).filter(TaxConfig.tenant_id == space.tenant_id).first()
     location = db.query(Location).filter(Location.id == space.location_id).first()
-    granularity_minutes = _granularity_to_minutes(location.booking_granularity) if location and location.booking_granularity else 60
+    granularity_minutes = granularity_to_minutes(location.booking_granularity) if location and location.booking_granularity else 60
     result = estimate_booking_price(
         start_datetime,
         end_datetime,
@@ -623,7 +602,7 @@ def calculate_booking_subtotal_cents(
         rate_amount=rule.rate_amount if rule else None,
         booking_mode=booking_mode,
         full_day=full_day,
-        volume_discounts=_active_volume_discounts(db, space.id),
+        volume_discounts=active_volume_discounts(db, space.id),
         granularity_minutes=granularity_minutes,
         tax_rate_percent=tax.rate_percent if tax else None,
     )
