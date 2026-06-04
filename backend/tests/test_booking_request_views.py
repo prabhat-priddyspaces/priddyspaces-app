@@ -73,6 +73,7 @@ def _seed_space(db_session) -> tuple[User, Space]:
         role=UserAppRole.OWNER,
         email_verified=True,
         is_active=True,
+        full_name="Owner Person",
     )
     member = User(
         email="views-member@example.com",

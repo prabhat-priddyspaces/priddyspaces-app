@@ -52,9 +52,9 @@ def test_granularity_to_minutes_unwraps_enum_value():
 
 def test_all_consumers_share_one_pricing_rule_implementation():
     """Every former duplicate site must reference the single shared helper."""
-    import app.api.booking_requests as booking_requests
     import app.api.payments as payments
     import app.services.booking_payments as booking_payments
+    import app.services.booking_request_views as booking_request_views
     import app.services.loyalty as loyalty
     import app.services.owner_created_bookings as owner_created_bookings
 
@@ -62,16 +62,18 @@ def test_all_consumers_share_one_pricing_rule_implementation():
     volume = pricing_rules.active_volume_discounts
     granularity = pricing_rules.granularity_to_minutes
 
-    assert booking_requests.get_active_pricing_rule is get_rule
+    # The booking-requests serializer moved to booking_request_views (B1), so the
+    # pricing-rule lookups it uses now live there rather than in api/booking_requests.
+    assert booking_request_views.get_active_pricing_rule is get_rule
     assert payments.get_active_pricing_rule is get_rule
     assert loyalty.get_active_pricing_rule is get_rule
 
-    assert booking_requests.active_volume_discounts is volume
+    assert booking_request_views.active_volume_discounts is volume
     assert booking_payments.active_volume_discounts is volume
     assert owner_created_bookings.active_volume_discounts is volume
     assert loyalty.active_volume_discounts is volume
 
-    assert booking_requests.granularity_to_minutes is granularity
+    assert booking_request_views.granularity_to_minutes is granularity
     assert booking_payments.granularity_to_minutes is granularity
     assert owner_created_bookings.granularity_to_minutes is granularity
     assert loyalty.granularity_to_minutes is granularity
