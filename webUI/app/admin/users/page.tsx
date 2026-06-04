@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { sanitizePhone } from "@/lib/phone";
 import { formatAdminDateTime, formatAdminLabel } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
@@ -271,8 +272,9 @@ export default function AdminUsersPage() {
                   aria-label="Owner last name"
                 />
                 <Input
+                  inputMode="numeric"
                   value={inviteForm.phone}
-                  onChange={(event) => updateInviteField("phone", event.target.value)}
+                  onChange={(event) => updateInviteField("phone", sanitizePhone(event.target.value))}
                   placeholder="Phone"
                   aria-label="Owner phone"
                 />

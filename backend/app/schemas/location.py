@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas._phone import PhoneStr
 from app.schemas.amenity import AmenityOut
 from app.models.enums import BookingGranularity, LocationStatus
 from app.schemas.working_hours import PublicWorkingHour
@@ -16,7 +17,7 @@ class LocationCreate(BaseModel):
     timezone: str
     lat: float | None = None
     lng: float | None = None
-    public_phone: str | None = None
+    public_phone: PhoneStr | None = None
     public_email: str | None = None
     public_hours_weekdays: str | None = None
     public_hours_weekends: str | None = None
@@ -72,7 +73,7 @@ class LocationUpdate(BaseModel):
     timezone: str | None = None
     lat: float | None = None
     lng: float | None = None
-    public_phone: str | None = None
+    public_phone: PhoneStr | None = None
     public_email: str | None = None
     public_hours_weekdays: str | None = None
     public_hours_weekends: str | None = None

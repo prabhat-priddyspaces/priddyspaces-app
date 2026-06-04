@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
+import { sanitizePhone } from "@/lib/phone";
 import { getAccessToken } from "@/lib/auth";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 import type { MeResponse } from "@/lib/me";
@@ -188,9 +189,10 @@ export default function OwnerAccountPage() {
                 <Field label="Phone" htmlFor="owner-phone">
                   <Input
                     id="owner-phone"
+                    inputMode="numeric"
                     value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
-                    placeholder="+1 555 0100"
+                    onChange={(event) => setPhone(sanitizePhone(event.target.value))}
+                    placeholder="5551234567"
                     autoComplete="tel"
                   />
                 </Field>

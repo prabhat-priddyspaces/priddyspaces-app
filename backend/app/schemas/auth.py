@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, field_validator
 
 from app.models.enums import PlatformTeamRole, UserAppRole
+from app.schemas._phone import PhoneStr
 
 
 class RegisterIn(BaseModel):
@@ -68,7 +69,7 @@ class MeOut(BaseModel):
 class MeUpdateIn(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
-    phone: str | None = None
+    phone: PhoneStr | None = None
     company_name: str | None = None
     role: UserAppRole | None = None
     terms_accepted: bool | None = None

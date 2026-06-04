@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.enums import BookingRequestKind, BookingRequestStatus
+from app.schemas._phone import PhoneStr
 from app.schemas.money import MoneyAmount
 
 
@@ -32,7 +33,7 @@ class GuestBookingRequestCreate(BaseModel):
 
     guest_email: EmailStr
     guest_full_name: str = Field(min_length=1, max_length=255)
-    guest_phone: str | None = Field(default=None, max_length=64)
+    guest_phone: PhoneStr | None = Field(default=None)
     guest_company_name: str | None = Field(default=None, max_length=255)
     guest_notes: str | None = Field(default=None, max_length=1024)
     redemption_lock_public_id: str | None = None

@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { COUNTRIES } from "@/lib/countries";
+import { sanitizePhone } from "@/lib/phone";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -61,9 +62,10 @@ export function ProfileFields({ form, onChange, phoneRequired = false }: Profile
         <Input
           id="phone"
           type="tel"
+          inputMode="numeric"
           value={form.phone}
-          onChange={(e) => onChange({ ...form, phone: e.target.value })}
-          placeholder="+1 555 000 0000"
+          onChange={(e) => onChange({ ...form, phone: sanitizePhone(e.target.value) })}
+          placeholder="5551234567"
           autoComplete="tel"
           required={phoneRequired}
         />

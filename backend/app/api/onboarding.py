@@ -21,6 +21,7 @@ from app.models.enums import OrganizationReviewStatus, UserAppRole, UserRole
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
+from app.schemas._phone import PhoneStr, normalize_phone
 from app.schemas.auth import MeOut
 from app.services.amenities import seed_default_amenities
 from app.services.loyalty import grant_priddy_signup_points
@@ -60,10 +61,7 @@ class ProfileIn(BaseModel):
     @field_validator("phone")
     @classmethod
     def optional_phone(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        cleaned = v.strip()
-        return cleaned or None
+        return normalize_phone(v)
 
     @field_validator("country")
     @classmethod
@@ -84,7 +82,7 @@ class OrgIn(BaseModel):
     display_name: str | None = None
     industry: str | None = None
     business_email: str | None = None
-    business_phone: str | None = None
+    business_phone: PhoneStr | None = None
     description: str | None = None
     size: str | None = None
     website: str | None = None
@@ -103,7 +101,7 @@ class OrgIn(BaseModel):
             raise ValueError(f"size must be one of {_ORG_SIZES}")
         return v
 
-    @field_validator("display_name", "industry", "business_email", "business_phone", "description")
+    @field_validator("display_name", "industry", "business_email", "description")
     @classmethod
     def optional_text(cls, v: str | None) -> str | None:
         if v is None:

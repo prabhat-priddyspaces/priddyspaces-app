@@ -11,6 +11,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 
 import { apiFetch } from "../../lib/api";
+import { sanitizePhone } from "../../lib/phone";
 import { useAuth } from "../../context/AuthContext";
 
 type PaymentMode = "cash_collected" | "payment_link";
@@ -362,7 +363,12 @@ export function OwnerCreateBookingScreen() {
           <>
             <Field label="Full name" value={fullName} onChange={setFullName} />
             <Field label="Email" value={email} onChange={setEmail} keyboardType="email-address" autoCapitalize="none" />
-            <Field label="Phone" value={phone} onChange={setPhone} keyboardType="phone-pad" />
+            <Field
+              label="Phone"
+              value={phone}
+              onChange={(v) => setPhone(sanitizePhone(v))}
+              keyboardType="phone-pad"
+            />
             <Field label="Company" value={company} onChange={setCompany} />
           </>
         )}
