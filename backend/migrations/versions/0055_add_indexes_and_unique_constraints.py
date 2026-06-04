@@ -110,11 +110,8 @@ def upgrade() -> None:
 
     # ── cancellation_policies ────────────────────────────────────────────────
     op.create_index("ix_cancellation_policies_tenant_id", "cancellation_policies", ["tenant_id"], if_not_exists=True)
-    _add_unique_constraint_if_not_exists(
-        "uq_cancellation_policies_tenant_space_type",
-        "cancellation_policies",
-        ["tenant_id", "space_type"],
-    )
+    # NOTE: unique constraint on (tenant_id, space_type) was removed — production data has
+    # legitimate duplicates (multiple policies per space type per tenant, e.g. different tiers).
 
     # ── location_admins ──────────────────────────────────────────────────────
     op.create_index("ix_location_admins_location_id", "location_admins", ["location_id"], if_not_exists=True)
@@ -202,7 +199,6 @@ def downgrade() -> None:
     op.drop_index("ix_location_admins_tenant_id", table_name="location_admins", if_exists=True)
     op.drop_index("ix_location_admins_user_id", table_name="location_admins", if_exists=True)
     op.drop_index("ix_location_admins_location_id", table_name="location_admins", if_exists=True)
-    op.execute(sa.text("ALTER TABLE cancellation_policies DROP CONSTRAINT IF EXISTS uq_cancellation_policies_tenant_space_type"))
     op.drop_index("ix_cancellation_policies_tenant_id", table_name="cancellation_policies", if_exists=True)
     op.execute(sa.text("ALTER TABLE feature_flags DROP CONSTRAINT IF EXISTS uq_feature_flags_tenant_key_scope"))
     op.drop_index("ix_feature_flags_scope", table_name="feature_flags", if_exists=True)
