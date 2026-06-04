@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
 
+    # Logging. LOG_JSON emits single-line JSON with request_id/user_id/tenant_id
+    # for correlation (recommended in staging/production); off locally for
+    # readable logs.
+    LOG_JSON: bool = False
+    LOG_LEVEL: str = "INFO"
+
     # Internal JWT (legacy email/password flow + admin impersonation tokens).
     # Clerk handles primary auth, but issue_token() in app/core/jwt.py still
     # mints these for the impersonation stop endpoint.

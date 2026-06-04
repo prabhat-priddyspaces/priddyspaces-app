@@ -7,11 +7,13 @@ from fastapi.responses import JSONResponse
 
 from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, booking_waitlist, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_bookings, owner_calendar, owner_payment_health, owner_payments, payments, pricing, space_booking_modes, space_setup_fees, space_volume_discounts, spaces, stripe_connect, subscriptions, webhooks, webhooks_clerk
 from app.core.config import settings
+from app.core.logging_config import RequestContextMiddleware, configure_logging
 from app.core.observability import capture_exception, init_sentry
 from app.core.rate_limit import RateLimitMiddleware
 
-# Initialize error tracking before the app is built so startup errors are
-# captured. No-op unless SENTRY_DSN is configured.
+# Configure structured logging + error tracking before the app is built so
+# startup logs/errors are captured. Both stay plain/no-op unless configured.
+configure_logging(json_logs=settings.LOG_JSON, level=settings.LOG_LEVEL)
 init_sentry()
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -33,6 +35,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
+# Added last so it is the outermost layer: the request id is set before any
+# other middleware or handler runs (and therefore before they log).
+app.add_middleware(RequestContextMiddleware)
 
 
 def _cors_headers(origin: str | None) -> dict[str, str]:
