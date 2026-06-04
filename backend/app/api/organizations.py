@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.pagination import Pagination, pagination_params
 from app.db.deps import get_db
 from app.models.enums import OrganizationReviewStatus, UserRole
 from app.models.organization import Organization
@@ -82,8 +83,9 @@ def get_org(
 
 @router.get("/orgs", response_model=list[OrganizationOut])
 def list_my_orgs(
+    pagination: Pagination = Depends(pagination_params),
     db: Session = Depends(get_db),
-    token: dict = Depends(get_current_user)
+    token: dict = Depends(get_current_user),
 ):
     user = get_or_create_user(db, token)
     orgs = (
@@ -93,6 +95,9 @@ def list_my_orgs(
             OrganizationMember.user_id == user.id,
             OrganizationMember.is_active.is_(True)
         )
+        .order_by(Organization.id)
+        .offset(pagination.offset)
+        .limit(pagination.limit)
         .all()
     )
     return orgs
