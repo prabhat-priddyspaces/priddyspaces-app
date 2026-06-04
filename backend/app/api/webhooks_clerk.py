@@ -34,7 +34,7 @@ def _verify_svix(request: Request, body: bytes) -> dict[str, Any]:
     if not settings.CLERK_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="CLERK_WEBHOOK_SECRET not configured")
     try:
-        from svix.webhooks import Webhook, WebhookVerificationError  # type: ignore[import]
+        from svix.webhooks import Webhook  # type: ignore[import]
     except ImportError as exc:
         raise HTTPException(status_code=500, detail="svix package not installed") from exc
 

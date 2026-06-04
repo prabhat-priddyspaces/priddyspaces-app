@@ -7,7 +7,12 @@ from fastapi.responses import JSONResponse
 
 from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, booking_waitlist, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_bookings, owner_calendar, owner_payment_health, owner_payments, payments, pricing, space_booking_modes, space_setup_fees, space_volume_discounts, spaces, stripe_connect, subscription_plans, subscriptions, webhooks, webhooks_clerk
 from app.core.config import settings
+from app.core.observability import capture_exception, init_sentry
 from app.core.rate_limit import RateLimitMiddleware
+
+# Initialize error tracking before the app is built so startup errors are
+# captured. No-op unless SENTRY_DSN is configured.
+init_sentry()
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -43,6 +48,9 @@ def _cors_headers(origin: str | None) -> dict[str, str]:
 @app.exception_handler(Exception)
 async def detailed_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """In DEBUG mode return full error detail and traceback for 500s."""
+    # Custom Exception handlers mark the error "handled", so report it to
+    # Sentry explicitly (no-op unless configured).
+    capture_exception(exc)
     origin = request.headers.get("origin")
     headers = dict(_cors_headers(origin))
     if settings.DEBUG:

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Route, test } from "@playwright/test";
 
 import { json, meResponse, mockSession } from "./helpers/mock-api";
 
@@ -47,7 +47,7 @@ function eventFor(overrides: Record<string, unknown>) {
 }
 
 async function routeCalendarApis(page: any) {
-  await page.route("**/api/**", async (route) => {
+  await page.route("**/api/**", async (route: Route) => {
     const url = new URL(route.request().url());
     const key = `${route.request().method()} ${url.pathname}`;
 

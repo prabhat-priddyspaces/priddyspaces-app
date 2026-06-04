@@ -4,7 +4,6 @@ import calendar
 import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session

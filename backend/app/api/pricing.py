@@ -12,8 +12,6 @@ from app.models.pricing_rule import PricingRule
 from app.models.promo_code import PromoCode
 from app.models.tax_config import TaxConfig
 from app.models.space import Space
-from app.models.organization_member import OrganizationMember
-from app.models.enums import UserRole
 from app.schemas.pricing import (
     PricingRuleCreate,
     PricingRuleOut,

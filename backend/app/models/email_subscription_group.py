@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Column, Integer, String, UniqueConstraint
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin

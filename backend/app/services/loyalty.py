@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
-from app.models.enums import BookingMode, PaymentStatus, SpaceType, UserAppRole
+from app.models.enums import BookingMode, PaymentStatus, UserAppRole
 from app.models.location import Location
 from app.models.loyalty import (
     LoyaltyCampaign,

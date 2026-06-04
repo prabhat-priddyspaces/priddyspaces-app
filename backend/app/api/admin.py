@@ -15,7 +15,6 @@ from app.models.audit_log import AuditLog
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
 from app.models.enums import (
-    BookingRequestStatus,
     OrganizationReviewStatus,
     PaymentStatus,
     PlatformTeamRole,

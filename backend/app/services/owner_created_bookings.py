@@ -9,7 +9,6 @@ from urllib.parse import urlencode
 
 import stripe
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -17,8 +16,7 @@ from app.core.crypto import decrypt_secret
 from app.models.booking import Booking
 from app.models.booking_payment_link import BookingPaymentLink
 from app.models.booking_request import BookingRequest
-from app.models.enums import BookingRequestKind, BookingRequestStatus, BookingStatus, PaymentStatus, SpaceType, UserAppRole, UserRole
-from app.models.invoice import Invoice
+from app.models.enums import BookingRequestKind, BookingRequestStatus, BookingStatus, PaymentStatus, SpaceType, UserAppRole
 from app.models.location import Location
 from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.org_member_profile import OrgMemberProfile
@@ -29,9 +27,8 @@ from app.models.space import Space
 from app.models.tax_config import TaxConfig
 from app.models.user import User
 from app.schemas.owner_booking import OwnerBookingCreate, OwnerBookingPreviewCreate
-from app.services.access_passes import ensure_access_passes_for_booking_request
 from app.services.audit import write_audit_log
-from app.services.authz import get_org_member, require_pricing_override
+from app.services.authz import require_pricing_override
 from app.services.booking_inventory import (
     as_utc,
     booking_blocks_inventory,
@@ -48,7 +45,6 @@ from app.services.booking_payments import (
 from app.services.booking_products import validate_direct_booking_product
 from app.services.cancellation_refunds import policy_for_space, policy_snapshot
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
-from app.services.money import cents_to_money
 from app.services.notifications import send_booking_confirmed_email, send_email
 from app.services.owner_payments import get_enabled_owner_payment_setting, resolve_payment_provider
 from app.services.payment_providers import PaymentProviderError, PaymentProviderFactory
@@ -394,7 +390,6 @@ def create_owner_booking(
         actor_member=actor_member,
         payload=payload,
     )
-    is_day_pass = payload.full_day or payload.booking_mode == "day_pass"
     req = BookingRequest(
         tenant_id=space.tenant_id,
         user_id=member.id,

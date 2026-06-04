@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, get_optional_user
 from app.core.config import settings
+from app.core.observability import capture_exception
 from app.db.deps import get_db
 from app.models.booking_request import BookingRequest
 from app.models.booking import Booking
@@ -80,7 +81,6 @@ from app.services.booking_inventory import (
     create_pending_booking_hold,
     expand_occurrences,
     is_shared_desk_day_pass,
-    instant_booking_allowed,
     validate_no_exact_duplicate_user_slot,
     validate_occurrences_available,
 )
@@ -145,9 +145,10 @@ logger = logging.getLogger(__name__)
 def _run_booking_request_side_effect(db: Session, label: str, callback) -> None:
     try:
         callback()
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("booking request side effect failed: %s", label)
+        capture_exception(exc)
 
 
 def _as_utc(dt: datetime) -> datetime:

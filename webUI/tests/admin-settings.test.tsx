@@ -89,7 +89,7 @@ describe("AdminSettingsPage", () => {
       const saveCall = apiFetchMock.mock.calls.find(
         ([path, init]) => path === "/api/admin/settings" && init?.method === "PATCH"
       );
-      expect(saveCall).toBeTruthy();
+      if (!saveCall) throw new Error("expected an admin settings PATCH call");
       expect(JSON.parse(saveCall[1].body as string)).toMatchObject({
         booking_calendar_daily_prices_enabled: true,
       });

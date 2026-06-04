@@ -1,0 +1,2 @@
+# Developer/CI tooling (not installed in the runtime image).
+ruff==0.15.15

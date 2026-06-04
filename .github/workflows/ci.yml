@@ -84,6 +84,12 @@ jobs:
       - name: Install backend dependencies
         run: pip install -r requirements.txt
 
+      - name: Install backend dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint backend (ruff)
+        run: ruff check app
+
       - name: Run database migrations
         run: python -m alembic upgrade head
 
@@ -110,6 +116,12 @@ jobs:
 
       - name: Install webUI dependencies
         run: npm ci
+
+      - name: Lint webUI
+        run: npm run lint
+
+      - name: Typecheck webUI
+        run: npm run typecheck
 
       - name: Run webUI tests
         env:

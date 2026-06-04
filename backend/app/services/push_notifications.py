@@ -22,7 +22,6 @@ from app.models.organization_member import OrganizationMember
 from app.models.payment import Payment
 from app.models.push_subscription import PushSubscription
 from app.models.space import Space
-from app.models.user import User
 from app.models.user_notification import UserNotification, UserNotificationPreference
 from app.services.authz import user_can_access_location
 
