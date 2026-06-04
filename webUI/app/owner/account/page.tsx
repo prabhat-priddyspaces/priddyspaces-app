@@ -16,6 +16,7 @@ import { getAccessToken } from "@/lib/auth";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
 import type { MeResponse } from "@/lib/me";
 import { updateMeCache, useMe } from "@/hooks/useMe";
+import { useForm } from "@/hooks/useForm";
 import { cn } from "@/lib/utils";
 
 type MessageTone = "success" | "danger";
@@ -48,61 +49,65 @@ const useSecurityAction: SecurityActionHook = IS_E2E_BYPASS
 export default function OwnerAccountPage() {
   const { me, loading, error, refresh } = useMe();
   const [loadedPublicId, setLoadedPublicId] = useState<string | null>(null);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
+
+  const form = useForm({
+    initialValues: { first_name: "", last_name: "", phone: "", company_name: "" },
+    validate: (values) => {
+      const errors: { phone?: string } = {};
+      const digits = values.phone.replace(/\D/g, "");
+      if (digits && digits.length < 7) errors.phone = "Enter a valid phone number.";
+      return errors;
+    },
+    onSubmit: async (values) => {
+      const token = getAccessToken() ?? undefined;
+      setMessage("");
+      try {
+        const updated = await apiFetch<MeResponse>(
+          "/api/me",
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              first_name: values.first_name,
+              last_name: values.last_name,
+              phone: values.phone,
+              company_name: values.company_name,
+            }),
+          },
+          token
+        );
+        updateMeCache(updated, token ?? null);
+        setLoadedPublicId(updated.public_id);
+        setMessage("Owner profile saved.");
+        setMessageTone("success");
+        refresh();
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Unable to save profile.");
+        setMessageTone("danger");
+      }
+    },
+  });
 
   const openSecuritySettings = useSecurityAction(() => {
     setMessage("Email and password settings open in Clerk account management.");
     setMessageTone("success");
   });
 
+  const setFormValues = form.setValues;
   useEffect(() => {
     if (!me || loadedPublicId === me.public_id) return;
-    setFirstName(me.first_name ?? "");
-    setLastName(me.last_name ?? "");
-    setPhone(me.phone ?? "");
-    setCompanyName(me.company_name ?? "");
+    setFormValues({
+      first_name: me.first_name ?? "",
+      last_name: me.last_name ?? "",
+      phone: me.phone ?? "",
+      company_name: me.company_name ?? "",
+    });
     setLoadedPublicId(me.public_id);
-  }, [loadedPublicId, me]);
-
-  async function saveProfile() {
-    const token = getAccessToken() ?? undefined;
-    setSaving(true);
-    setMessage("");
-    try {
-      const updated = await apiFetch<MeResponse>(
-        "/api/me",
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            first_name: firstName,
-            last_name: lastName,
-            phone,
-            company_name: companyName,
-          }),
-        },
-        token
-      );
-      updateMeCache(updated, token ?? null);
-      setLoadedPublicId(updated.public_id);
-      setMessage("Owner profile saved.");
-      setMessageTone("success");
-      refresh();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Unable to save profile.");
-      setMessageTone("danger");
-    } finally {
-      setSaving(false);
-    }
-  }
+  }, [loadedPublicId, me, setFormValues]);
 
   const displayName =
-    [firstName, lastName].filter(Boolean).join(" ") ||
+    [form.values.first_name, form.values.last_name].filter(Boolean).join(" ") ||
     me?.email ||
     "Owner";
 
@@ -171,8 +176,8 @@ export default function OwnerAccountPage() {
                 <Field label="First name" htmlFor="owner-first-name">
                   <Input
                     id="owner-first-name"
-                    value={firstName}
-                    onChange={(event) => setFirstName(event.target.value)}
+                    value={form.values.first_name}
+                    onChange={form.handleChange("first_name")}
                     placeholder="First name"
                     autoComplete="given-name"
                   />
@@ -180,18 +185,18 @@ export default function OwnerAccountPage() {
                 <Field label="Last name" htmlFor="owner-last-name">
                   <Input
                     id="owner-last-name"
-                    value={lastName}
-                    onChange={(event) => setLastName(event.target.value)}
+                    value={form.values.last_name}
+                    onChange={form.handleChange("last_name")}
                     placeholder="Last name"
                     autoComplete="family-name"
                   />
                 </Field>
-                <Field label="Phone" htmlFor="owner-phone">
+                <Field label="Phone" htmlFor="owner-phone" error={form.errors.phone}>
                   <Input
                     id="owner-phone"
                     inputMode="numeric"
-                    value={phone}
-                    onChange={(event) => setPhone(sanitizePhone(event.target.value))}
+                    value={form.values.phone}
+                    onChange={(event) => form.setValue("phone", sanitizePhone(event.target.value))}
                     placeholder="5551234567"
                     autoComplete="tel"
                   />
@@ -199,8 +204,8 @@ export default function OwnerAccountPage() {
                 <Field label="Company name" htmlFor="owner-company-name">
                   <Input
                     id="owner-company-name"
-                    value={companyName}
-                    onChange={(event) => setCompanyName(event.target.value)}
+                    value={form.values.company_name}
+                    onChange={form.handleChange("company_name")}
                     placeholder="Company name"
                     autoComplete="organization"
                   />
@@ -211,11 +216,11 @@ export default function OwnerAccountPage() {
                 <Button
                   type="button"
                   variant="primary"
-                  onClick={() => void saveProfile()}
-                  disabled={saving}
+                  onClick={() => void form.handleSubmit()}
+                  disabled={form.submitting}
                 >
                   <Save size={15} />
-                  {saving ? "Saving owner profile..." : "Save owner profile"}
+                  {form.submitting ? "Saving owner profile..." : "Save owner profile"}
                 </Button>
               </div>
             </Card>
