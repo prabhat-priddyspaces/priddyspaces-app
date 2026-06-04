@@ -824,6 +824,10 @@ test("public marketplace search excludes leased private offices", async ({ page 
 });
 
 test("day-pass detail refreshes remaining seats after a guest request", async ({ page }) => {
+  // Pin the date so the availability calendar treats 2026-06-03 as today (and
+  // therefore bookable) regardless of the CI runner's real clock. setFixedTime
+  // only freezes Date, leaving real timers running.
+  await page.clock.setFixedTime(new Date("2026-06-03T12:00:00Z"));
   let availabilityCalls = 0;
 
   await page.route("**/api/**", async (route) => {
