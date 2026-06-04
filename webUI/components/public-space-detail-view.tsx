@@ -58,6 +58,7 @@ import { LocationSection } from "@/components/space-detail/LocationSection";
 import { TransportationSection } from "@/components/space-detail/TransportationSection";
 import { IncludedItems } from "@/components/space-detail/IncludedItems";
 import { SupportContacts } from "@/components/space-detail/SupportContacts";
+import { computeReservationBreakdown } from "@/components/space-detail/pricing";
 
 const AVAILABILITY_RANGE_DAYS = 60;
 const AVAILABILITY_STALE_MS = 3 * 60 * 1000;
@@ -389,57 +390,19 @@ export function PublicSpaceDetailView({
       )
     : 1;
 
-  const breakdown = useMemo(() => {
-    if (allDay) {
-      // Full-day: flat day rate, no volume discount.
-      if (dailyAmount != null) {
-        return {
-          base: dailyAmount * bookingQuantity,
-          discountPercent: 0,
-          discountAmount: 0,
-          total: dailyAmount * bookingQuantity,
-          basis: "daily" as const,
-          units: bookingQuantity,
-        };
-      }
-      if (hourlyAmount != null && dayOpenSpan != null) {
-        const base = hourlyAmount * dayOpenSpan;
-        return { base, discountPercent: 0, discountAmount: 0, total: base, basis: "hourly_day_span" as const, units: dayOpenSpan };
-      }
-      return null;
-    }
-    if (hourlyAmount == null || hours <= 0) return null;
-    const baseHourly = hourlyAmount * hours;
-    // Auto-cap to daily.
-    if (dailyAmount != null && baseHourly > dailyAmount) {
-      return {
-        base: dailyAmount,
-        discountPercent: 0,
-        discountAmount: 0,
-        total: dailyAmount,
-        basis: "capped_to_daily" as const,
-        units: 1,
-      };
-    }
-    // Pick best applicable volume tier.
-    const eligible = volumeDiscounts.filter(
-      (t) => hours >= t.min_hours && t.discount_percent > 0 && t.discount_percent < 100
-    );
-    const best = eligible.reduce<{ percent: number } | null>((acc, t) => {
-      if (!acc || t.discount_percent > acc.percent) return { percent: t.discount_percent };
-      return acc;
-    }, null);
-    const discountPercent = best?.percent ?? 0;
-    const discountAmount = Math.round(baseHourly * (discountPercent / 100));
-    return {
-      base: baseHourly,
-      discountPercent,
-      discountAmount,
-      total: baseHourly - discountAmount,
-      basis: "hourly" as const,
-      units: hours,
-    };
-  }, [allDay, bookingQuantity, dailyAmount, hourlyAmount, dayOpenSpan, hours, volumeDiscounts]);
+  const breakdown = useMemo(
+    () =>
+      computeReservationBreakdown({
+        allDay,
+        dailyAmount,
+        hourlyAmount,
+        dayOpenSpan,
+        bookingQuantity,
+        hours,
+        volumeDiscounts,
+      }),
+    [allDay, bookingQuantity, dailyAmount, hourlyAmount, dayOpenSpan, hours, volumeDiscounts]
+  );
 
   const bufferBefore = availability?.buffer_before_minutes ?? detail?.space.buffer_before_minutes ?? 0;
   const bufferAfter = availability?.buffer_after_minutes ?? detail?.space.buffer_after_minutes ?? 0;
