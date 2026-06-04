@@ -72,6 +72,10 @@ def owner_notification_recipients_for_space(db: Session, space: Space) -> list[t
     return sorted(recipients, key=lambda item: item[0])
 
 
+def owner_notification_emails_for_space(db: Session, space: Space) -> list[str]:
+    return [email for email, _role, _user_id in owner_notification_recipients_for_space(db, space)]
+
+
 def notify_owner_team_of_request(
     db: Session,
     req: BookingRequest,
