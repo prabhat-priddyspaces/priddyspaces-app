@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Building2, CalendarDays, Download, ReceiptText, UserRound } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { downloadInvoicePdf } from "@/lib/invoice-download";
+import { useResourceList } from "@/hooks/useResource";
 
 interface Invoice {
   public_id: string;
@@ -112,18 +112,9 @@ function memberLabel(invoice: Invoice): string {
 }
 
 export default function OwnerInvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const { items: invoices, error: loadError, loading } = useResourceList<Invoice>("/api/invoices");
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
-
-  useEffect(() => {
-    const token = getAccessToken() ?? undefined;
-    apiFetch<Invoice[]>("/api/invoices", { method: "GET" }, token)
-      .then(setInvoices)
-      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load invoices"))
-      .finally(() => setLoading(false));
-  }, []);
 
   const stats = useMemo(() => {
     const successful = invoices.filter((invoice) => invoice.status === "paid" || invoice.status === "issued");
@@ -159,7 +150,9 @@ export default function OwnerInvoicesPage() {
             Booking receipts and membership invoices with member, space, payment, and PDF details.
           </p>
         </div>
-        {message ? <div className="text-sm text-textMuted">{message}</div> : null}
+        {loadError || message ? (
+          <div className="text-sm text-textMuted">{loadError || message}</div>
+        ) : null}
 
         <div className="grid gap-4 md:grid-cols-5">
           {stats.map((stat) => (
