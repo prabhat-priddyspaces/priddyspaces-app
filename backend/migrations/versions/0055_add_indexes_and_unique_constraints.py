@@ -25,6 +25,16 @@ def _add_unique_constraint_if_not_exists(name: str, table: str, columns: list[st
     ))
 
 
+def _deduplicate(table: str, columns: list[str]) -> None:
+    """Delete all but the lowest-id row for each duplicate group."""
+    col_list = ", ".join(columns)
+    op.execute(sa.text(
+        f"DELETE FROM {table} WHERE id NOT IN ("
+        f"  SELECT MIN(id) FROM {table} GROUP BY {col_list}"
+        f")"
+    ))
+
+
 def upgrade() -> None:
     # ── bookings ────────────────────────────────────────────────────────────
     op.create_index("ix_bookings_user_id", "bookings", ["user_id"], if_not_exists=True)
@@ -83,6 +93,7 @@ def upgrade() -> None:
     op.create_index("ix_owner_payment_settings_org_id", "owner_payment_settings", ["organization_id"], if_not_exists=True)
     op.create_index("ix_owner_payment_settings_tenant_id", "owner_payment_settings", ["tenant_id"], if_not_exists=True)
     # Unique: one payment setting per org per provider
+    _deduplicate("owner_payment_settings", ["organization_id", "provider"])
     _add_unique_constraint_if_not_exists(
         "uq_owner_payment_settings_org_provider",
         "owner_payment_settings",
@@ -93,6 +104,7 @@ def upgrade() -> None:
     op.create_index("ix_organization_members_organization_id", "organization_members", ["organization_id"], if_not_exists=True)
     op.create_index("ix_organization_members_tenant_id", "organization_members", ["tenant_id"], if_not_exists=True)
     op.create_index("ix_organization_members_user_id", "organization_members", ["user_id"], if_not_exists=True)
+    _deduplicate("organization_members", ["organization_id", "user_id"])
     _add_unique_constraint_if_not_exists(
         "uq_organization_members_org_user",
         "organization_members",
@@ -102,6 +114,7 @@ def upgrade() -> None:
     # ── feature_flags ────────────────────────────────────────────────────────
     op.create_index("ix_feature_flags_tenant_id", "feature_flags", ["tenant_id"], if_not_exists=True)
     op.create_index("ix_feature_flags_scope", "feature_flags", ["scope_type", "scope_id"], if_not_exists=True)
+    _deduplicate("feature_flags", ["tenant_id", "flag_key", "scope_type", "scope_id"])
     _add_unique_constraint_if_not_exists(
         "uq_feature_flags_tenant_key_scope",
         "feature_flags",
@@ -110,6 +123,15 @@ def upgrade() -> None:
 
     # ── cancellation_policies ────────────────────────────────────────────────
     op.create_index("ix_cancellation_policies_tenant_id", "cancellation_policies", ["tenant_id"], if_not_exists=True)
+    # Delete child tiers for duplicate policies before deduplicating the parent table
+    op.execute(sa.text(
+        "DELETE FROM cancellation_policy_tiers WHERE cancellation_policy_id IN ("
+        "  SELECT id FROM cancellation_policies WHERE id NOT IN ("
+        "    SELECT MIN(id) FROM cancellation_policies GROUP BY tenant_id, space_type"
+        "  )"
+        ")"
+    ))
+    _deduplicate("cancellation_policies", ["tenant_id", "space_type"])
     _add_unique_constraint_if_not_exists(
         "uq_cancellation_policies_tenant_space_type",
         "cancellation_policies",
@@ -120,6 +142,7 @@ def upgrade() -> None:
     op.create_index("ix_location_admins_location_id", "location_admins", ["location_id"], if_not_exists=True)
     op.create_index("ix_location_admins_user_id", "location_admins", ["user_id"], if_not_exists=True)
     op.create_index("ix_location_admins_tenant_id", "location_admins", ["tenant_id"], if_not_exists=True)
+    _deduplicate("location_admins", ["location_id", "user_id"])
     _add_unique_constraint_if_not_exists(
         "uq_location_admins_location_user",
         "location_admins",
