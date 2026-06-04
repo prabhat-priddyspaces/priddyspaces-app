@@ -125,6 +125,11 @@ function mockSharedDeskDetail(
 
 describe("public marketplace flows", () => {
   beforeEach(() => {
+    // Freeze the clock so the availability calendar's "today" cutoff is
+    // deterministic regardless of the CI runner's date (these specs assert on
+    // fixed 2026-06 dates). Only Date is faked, so testing-library's real
+    // timers keep findBy/waitFor working.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-06-03T12:00:00Z") });
     routePath.value = "/spaces";
     searchQuery.value = "q=Miami";
     pushMock.mockReset();
@@ -134,6 +139,10 @@ describe("public marketplace flows", () => {
       configurable: true,
       value: vi.fn(),
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("requests browser geolocation on first load when no location filter is present", async () => {
