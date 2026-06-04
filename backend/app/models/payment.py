@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, Integer, JSON, String
+from sqlalchemy import Column, Enum, ForeignKey, Integer, JSON, String
 
 from app.models.base import Base
 from app.models.enums import PaymentStatus, enum_values
@@ -9,23 +9,23 @@ class Payment(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
-    subscription_id = Column(Integer, nullable=True)
-    booking_id = Column(Integer, nullable=True)
-    booking_request_id = Column(Integer, nullable=True)
-    tenant_id = Column(Integer, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
+    booking_request_id = Column(Integer, ForeignKey("booking_requests.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
     amount = Column(Integer, nullable=False)
     amount_cents = Column(Integer, nullable=True)
     subtotal_cents = Column(Integer, nullable=True)
     discount_cents = Column(Integer, nullable=True)
     tax_cents = Column(Integer, nullable=True)
     refunded_amount_cents = Column(Integer, nullable=False, default=0, server_default="0")
-    booking_series_id = Column(Integer, nullable=True, index=True)
+    booking_series_id = Column(Integer, ForeignKey("booking_series.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
     pricing_snapshot = Column(JSON, nullable=True)
     refund_policy_snapshot = Column(JSON, nullable=True)
     currency = Column(String(3), nullable=False, default="usd", server_default="usd")
-    provider = Column(String(32), default="stripe")
-    payment_method_id = Column(Integer, nullable=True)
+    provider = Column(String(32), default="stripe", server_default="stripe")
+    payment_method_id = Column(Integer, ForeignKey("member_owner_payment_methods.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     status = Column(
         Enum(PaymentStatus, values_callable=enum_values),
         default=PaymentStatus.REQUIRES_PAYMENT,

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -17,12 +17,12 @@ class OrgMemberProfile(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    organization_id = Column(Integer, nullable=False, index=True)
-    tenant_id = Column(Integer, nullable=False)
-    user_id = Column(Integer, nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     status = Column(String(32), nullable=False, default="active", server_default="active")
     notes = Column(Text, nullable=True)
     tags = Column(String(1024), nullable=True)
     phone = Column(String(64), nullable=True)
     company_name = Column(String(255), nullable=True)
-    created_by_user_id = Column(Integer, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)

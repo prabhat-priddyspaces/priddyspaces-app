@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
 
 from app.models.base import Base
 from app.models.enums import OrganizationReviewStatus, enum_values
@@ -11,7 +11,7 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
     id = Column(Integer, primary_key=True)
     clerk_org_id = Column(String(255), nullable=True, unique=True, index=True)
     name = Column(String(255), nullable=False)
-    owner_id = Column(Integer, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     onboarding_completed = Column(Boolean, default=False, nullable=False)
     branding = Column(String(1024), nullable=True)
     industry = Column(String(128), nullable=True)
@@ -29,7 +29,7 @@ class Organization(PublicIdMixin, TimestampMixin, Base):
         default=OrganizationReviewStatus.PENDING,
     )
     review_notes = Column(String(2048), nullable=True)
-    reviewed_by_user_id = Column(Integer, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     commission_override_pct = Column(Integer, nullable=True)
     booking_approval_mode = Column(String(16), nullable=False, default="manual", server_default="manual")

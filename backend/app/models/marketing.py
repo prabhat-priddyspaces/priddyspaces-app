@@ -148,7 +148,7 @@ class Workflow(PublicIdMixin, TimestampMixin, Base):
     name = Column(String(255), nullable=False)
     status = Column(String(32), nullable=False, default="draft", server_default="draft")
     graph = Column(JSON, nullable=False, default=dict)
-    current_version_id = Column(Integer, ForeignKey("workflow_versions.id"), nullable=True)
+    current_version_id = Column(Integer, ForeignKey("workflow_versions.id", deferrable=True, initially="DEFERRED"), nullable=True)
     created_by_user_id = Column(Integer, nullable=True)
 
 

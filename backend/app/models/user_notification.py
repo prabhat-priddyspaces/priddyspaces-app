@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -17,7 +17,7 @@ class UserNotification(PublicIdMixin, TimestampMixin, Base):
     )
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     tenant_id = Column(Integer, nullable=True, index=True)
     organization_id = Column(Integer, nullable=True, index=True)
     booking_id = Column(Integer, nullable=True, index=True)

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -8,9 +8,9 @@ class MembershipPlan(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "membership_plans"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, nullable=False)
-    organization_id = Column(Integer, nullable=False)
-    space_id = Column(Integer, nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    space_id = Column(Integer, ForeignKey("spaces.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     booking_mode = Column(String(32), nullable=False)
 
     name = Column(String(120), nullable=False)

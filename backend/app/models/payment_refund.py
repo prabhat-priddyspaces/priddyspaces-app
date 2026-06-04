@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, JSON, String
+from sqlalchemy import Column, ForeignKey, Integer, JSON, String
 
 from app.models.base import Base
 from app.models.mixins import PublicIdMixin, TimestampMixin
@@ -8,10 +8,10 @@ class PaymentRefund(PublicIdMixin, TimestampMixin, Base):
     __tablename__ = "payment_refunds"
 
     id = Column(Integer, primary_key=True)
-    tenant_id = Column(Integer, nullable=False, index=True)
-    payment_id = Column(Integer, nullable=False, index=True)
-    booking_id = Column(Integer, nullable=True, index=True)
-    booking_request_id = Column(Integer, nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
+    booking_request_id = Column(Integer, ForeignKey("booking_requests.id", ondelete="SET NULL", deferrable=True, initially="DEFERRED"), nullable=True, index=True)
     amount_cents = Column(Integer, nullable=False)
     refund_percent = Column(Integer, nullable=False)
     provider = Column(String(32), nullable=False)
