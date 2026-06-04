@@ -77,7 +77,6 @@ describe("booking approval and recovery mobile flows", () => {
       if (path.startsWith("/api/promo-codes")) return Promise.resolve([]);
       if (path.startsWith("/api/tax-config")) return Promise.resolve(null);
       if (path.startsWith("/api/cancellation-policies")) return Promise.resolve([]);
-      if (path.startsWith("/api/subscription-plans")) return Promise.resolve([]);
       if (path.startsWith("/api/stripe/connect/status")) return Promise.resolve({ connected: false });
       return Promise.resolve([]);
     });
@@ -86,6 +85,7 @@ describe("booking approval and recovery mobile flows", () => {
     fireEvent.changeText(screen.getByPlaceholderText("Organization public id"), "org_1");
 
     expect(await screen.findByText(/Current: hourly\/day-pass manual approval/)).toBeTruthy();
+    expect(screen.queryByText(/Membership plans/)).toBeNull();
     const autoApproveButtons = screen.getAllByText("Auto approve");
     fireEvent.press(autoApproveButtons[0]);
     fireEvent.press(autoApproveButtons[1]);

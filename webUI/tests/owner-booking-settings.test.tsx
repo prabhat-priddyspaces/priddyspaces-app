@@ -81,7 +81,6 @@ describe("OwnerSettingsPage booking approval settings", () => {
       if (url.startsWith("/api/promo-codes")) return Promise.resolve([]);
       if (url.startsWith("/api/tax-config")) return Promise.reject(new Error("not set"));
       if (url.startsWith("/api/cancellation-policies")) return Promise.resolve([]);
-      if (url.startsWith("/api/subscription-plans")) return Promise.resolve([]);
       return Promise.resolve([]);
     });
   });
@@ -95,6 +94,7 @@ describe("OwnerSettingsPage booking approval settings", () => {
     expect(screen.queryByRole("link", { name: "Open loyalty settings" })).not.toBeInTheDocument();
     expect(screen.queryByText("Pricing rules")).not.toBeInTheDocument();
     expect(screen.queryByText("Stripe Connect")).not.toBeInTheDocument();
+    expect(screen.queryByText("Membership plans")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Space")).not.toBeInTheDocument();
     expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/pricing-rules"))).toBe(false);
     expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/stripe/connect"))).toBe(false);

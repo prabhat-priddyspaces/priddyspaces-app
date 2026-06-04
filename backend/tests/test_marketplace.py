@@ -6,7 +6,7 @@ from app.db.deps import get_db
 from app.main import app
 from app.models.enums import (
     AvailabilityStatus,
-    BillingCycle,
+    BookingMode,
     BookingGranularity,
     BookingRequestStatus,
     LocationStatus,
@@ -35,7 +35,7 @@ from app.models.pricing_rule import PricingRule
 from app.models.space import Space
 from app.models.space_image import SpaceImage
 from app.models.subscription import Subscription
-from app.models.subscription_plan import SubscriptionPlan
+from app.models.membership_plan import MembershipPlan
 
 
 def _add_ready_payment_setting(db, org: Organization, *, connection_status: str = "not_tested"):
@@ -414,13 +414,14 @@ def _seed_public_location_marketplace(db):
         )
     )
     db.add(
-        SubscriptionPlan(
+        MembershipPlan(
             organization_id=org.id,
             tenant_id=org.id,
+            space_id=shared_desk_primary.id,
+            booking_mode=BookingMode.MONTHLY_MEMBERSHIP.value,
             name="Open Desk Membership",
-            space_type=SpaceType.SHARED_DESK,
-            billing_cycle=BillingCycle.MONTHLY,
-            price=299,
+            billing_cycle="monthly",
+            price_cents=29900,
             is_active=True,
         )
     )

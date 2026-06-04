@@ -31,7 +31,6 @@ from app.models.space import Space
 from app.models.space_image import SpaceImage
 from app.models.space_setup_fee_item import SpaceSetupFeeItem
 from app.models.subscription import Subscription
-from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
 from app.schemas.working_hours import effective_public_working_hours
 from app.services.amenities import get_location_amenities_map
@@ -256,11 +255,10 @@ def _space_hourly_prices(
 
 
 def _space_membership_prices(
-    tenant_id: int,
-    space_type: SpaceType,
-    subscription_price_map: dict[tuple[int, str], list[int]],
+    space_id: int,
+    membership_price_map: dict[int, list[int]],
 ) -> list[int]:
-    return subscription_price_map.get((tenant_id, space_type.value), [])
+    return membership_price_map.get(space_id, [])
 
 
 def _space_matches_time_window(
@@ -471,45 +469,34 @@ def _active_hourly_pricing_map(db: Session, space_ids: list[int]) -> dict[int, l
     return dict(prices)
 
 
-def _subscription_price_map(
+def _membership_price_map(
     db: Session,
-    tenant_ids: list[int],
+    space_ids: list[int],
     *,
     space_type: SpaceType,
-) -> dict[tuple[int, str], list[int]]:
-    if not tenant_ids:
+) -> dict[int, list[int]]:
+    if not space_ids:
         return {}
-    rows = (
-        db.query(SubscriptionPlan)
-        .filter(
-            SubscriptionPlan.tenant_id.in_(tenant_ids),
-            SubscriptionPlan.space_type == space_type,
-            SubscriptionPlan.is_active.is_(True),
-        )
-        .all()
-    )
-    prices: dict[tuple[int, str], list[int]] = defaultdict(list)
-    for row in rows:
-        prices[(row.tenant_id, row.space_type.value)].append(row.price)
-
     plan_modes = {
         SpaceType.SHARED_DESK: {"monthly_membership"},
         SpaceType.VIRTUAL_OFFICE: {"virtual_membership"},
         SpaceType.PRIVATE_OFFICE: {"private_office_lease"},
         SpaceType.SUITE: {"suite_lease"},
     }.get(space_type, set())
-    if plan_modes:
-        plan_rows = (
-            db.query(MembershipPlan)
-            .filter(
-                MembershipPlan.tenant_id.in_(tenant_ids),
-                MembershipPlan.booking_mode.in_(plan_modes),
-                MembershipPlan.is_active.is_(True),
-            )
-            .all()
+    if not plan_modes:
+        return {}
+    plan_rows = (
+        db.query(MembershipPlan)
+        .filter(
+            MembershipPlan.space_id.in_(space_ids),
+            MembershipPlan.booking_mode.in_(plan_modes),
+            MembershipPlan.is_active.is_(True),
         )
-        for plan in plan_rows:
-            prices[(plan.tenant_id, space_type.value)].append(int(plan.price_cents / 100))
+        .all()
+    )
+    prices: dict[int, list[int]] = defaultdict(list)
+    for plan in plan_rows:
+        prices[plan.space_id].append(int(plan.price_cents / 100))
     return dict(prices)
 
 
@@ -716,9 +703,9 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
     location_amenity_map = get_location_amenities_map(db, location_ids)
     hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
     setup_fee_amounts = _setup_fee_amount_map(db, space_ids)
-    subscription_prices = _subscription_price_map(
+    membership_price_map = _membership_price_map(
         db,
-        tenant_ids,
+        space_ids,
         space_type=CATEGORY_SPACE_TYPES[filters.category],
     )
     requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
@@ -767,7 +754,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
                 continue
 
         hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
-        membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+        membership_prices = _space_membership_prices(space.id, membership_price_map)
         product_prices = [
             int((product.get("price_cents") or 0) / 100)
             for product in booking_products_for_space(db, space)
@@ -906,15 +893,14 @@ def get_public_location_detail(
         raise HTTPException(status_code=404, detail="Marketplace location not found")
 
     space_ids = [space.id for space, _, _ in filtered_rows]
-    tenant_ids = list({space.tenant_id for space, _, _ in filtered_rows})
     location = filtered_rows[0][1]
     location_amenity_map = get_location_amenities_map(db, [location.id])
     location_amenities = _location_amenity_names(location, location_amenity_map)
     hourly_pricing_map = _active_hourly_pricing_map(db, space_ids)
     setup_fee_amounts = _setup_fee_amount_map(db, space_ids)
-    subscription_prices = _subscription_price_map(
+    membership_price_map = _membership_price_map(
         db,
-        tenant_ids,
+        space_ids,
         space_type=CATEGORY_SPACE_TYPES[filters.category],
     )
     requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
@@ -952,7 +938,7 @@ def get_public_location_detail(
         ):
             continue
         hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
-        membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+        membership_prices = _space_membership_prices(space.id, membership_price_map)
         product_prices = [
             int((product.get("price_cents") or 0) / 100)
             for product in booking_products_for_space(db, space)
@@ -1087,13 +1073,13 @@ def get_public_space_detail(
         .all()
     )
     hourly_pricing_map = _active_hourly_pricing_map(db, [space.id])
-    subscription_prices = _subscription_price_map(
+    membership_price_map = _membership_price_map(
         db,
-        [space.tenant_id],
+        [space.id],
         space_type=space.space_type,
     )
     hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
-    membership_prices = _space_membership_prices(space.tenant_id, space.space_type, subscription_prices)
+    membership_prices = _space_membership_prices(space.id, membership_price_map)
     booking_products = booking_products_for_space(db, space)
     product_monthly_prices = [
         int((product.get("price_cents") or 0) / 100)

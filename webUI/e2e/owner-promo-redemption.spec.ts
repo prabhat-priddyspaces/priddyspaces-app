@@ -130,7 +130,7 @@ test("owner-created promo code applies only to that owner's member bookings", as
       });
       return;
     }
-    if (key === "GET /api/cancellation-policies" || key === "GET /api/subscription-plans" || key === "GET /api/orgs/org_owner_a/amenities") {
+    if (key === "GET /api/cancellation-policies" || key === "GET /api/orgs/org_owner_a/amenities") {
       await json(route, []);
       return;
     }

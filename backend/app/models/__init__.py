@@ -47,7 +47,6 @@ from app.models.tax_config import TaxConfig
 from app.models.feature_flag import FeatureFlag
 from app.models.cancellation_policy import CancellationPolicy
 from app.models.subscription import Subscription
-from app.models.subscription_plan import SubscriptionPlan
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.membership_plan import MembershipPlan
 from app.models.loyalty import (
@@ -126,7 +125,6 @@ __all__ = [
     "FeatureFlag",
     "CancellationPolicy",
     "Subscription",
-    "SubscriptionPlan",
     "SpaceBookingMode",
     "MembershipPlan",
     "LoyaltyCampaign",

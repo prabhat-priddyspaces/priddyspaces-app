@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 
 from app.core.auth import get_current_user
@@ -15,13 +15,10 @@ from app.models.member_owner_payment_method import MemberOwnerPaymentMethod
 from app.models.subscription import Subscription
 from app.models.space import Space
 from app.models.user import User
-from app.models.enums import AvailabilityStatus, LocationStatus, SpaceVisibility
 from app.models.organization import Organization
 from app.schemas.payment import (
     PaymentIntentCreate,
     PaymentIntentOut,
-    SubscriptionPurchase,
-    SubscriptionPurchaseOut,
     MemberPortalOut,
     PaymentOut,
     OwnerPayoutSummaryOut,
@@ -36,7 +33,6 @@ from app.models.enums import (
 from app.models.tax_config import TaxConfig
 from app.services.auth_user import get_or_create_user, require_verified_email_for_payments
 from app.services.authz import accessible_location_ids, get_org_member, list_org_members, require_owner_or_admin
-from app.services.platform_auth import organization_is_publicly_visible
 from app.services.pricing import estimate_booking_amount
 from app.services.pricing_rules import get_active_pricing_rule
 from app.services.payment_metadata import normalize_payment_failure_reason
@@ -45,9 +41,7 @@ from app.services.stripe_payments import (
     create_billing_portal_session,
     create_customer,
     create_payment_intent,
-    create_subscription,
 )
-from app.models.subscription_plan import SubscriptionPlan
 
 router = APIRouter()
 
@@ -213,47 +207,6 @@ def _booking_charge_amount(db: Session, booking: Booking) -> int:
     return amount
 
 
-def _require_public_subscription_space(db: Session, space: Space) -> tuple[Location, Organization]:
-    location = db.query(Location).filter(Location.id == space.location_id).first()
-    organization = db.query(Organization).filter(Organization.id == space.tenant_id).first()
-    if (
-        not location
-        or location.status != LocationStatus.ACTIVE
-        or not organization_is_publicly_visible(organization)
-        or space.visibility == SpaceVisibility.PRIVATE
-    ):
-        raise HTTPException(status_code=404, detail="Space not found")
-    if space.availability_status != AvailabilityStatus.AVAILABLE:
-        raise HTTPException(status_code=400, detail="Space not available")
-    return location, organization
-
-
-def _subscription_plan_for_purchase(
-    db: Session, space: Space, payload: SubscriptionPurchase
-) -> SubscriptionPlan:
-    base_query = db.query(SubscriptionPlan).filter(
-        SubscriptionPlan.tenant_id == space.tenant_id,
-        SubscriptionPlan.space_type == space.space_type,
-        SubscriptionPlan.is_active.is_(True),
-    )
-    if payload.subscription_plan_public_id:
-        plan = base_query.filter(
-            SubscriptionPlan.public_id == payload.subscription_plan_public_id
-        ).first()
-    elif payload.stripe_price_id:
-        plan = base_query.filter(
-            SubscriptionPlan.stripe_price_id == payload.stripe_price_id
-        ).first()
-    else:
-        raise HTTPException(status_code=400, detail="Subscription plan required")
-
-    if not plan:
-        raise HTTPException(status_code=404, detail="Subscription plan not found")
-    if not plan.stripe_price_id:
-        raise HTTPException(status_code=400, detail="Stripe price id required")
-    return plan
-
-
 def _payment_visible_to_member(db: Session, user_id: int, payment: Payment) -> bool:
     members = list_org_members(db, user_id, {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF})
     if not members:
@@ -327,59 +280,6 @@ def create_intent(
     db.commit()
 
     return PaymentIntentOut(client_secret=intent.client_secret, payment_intent_id=intent.id)
-
-
-@router.post("/payments/subscription", response_model=SubscriptionPurchaseOut)
-def create_subscription_purchase(
-    payload: SubscriptionPurchase,
-    db: Session = Depends(get_db),
-    token: dict = Depends(get_current_user)
-):
-    user = get_or_create_user(db, token)
-    require_verified_email_for_payments(user)
-
-    space = db.query(Space).filter(Space.public_id == payload.space_public_id).first()
-    if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
-    _require_public_subscription_space(db, space)
-
-    plan = _subscription_plan_for_purchase(db, space, payload)
-    stripe_price_id = plan.stripe_price_id
-
-    if not user.stripe_customer_id:
-        customer = create_customer(email=user.email)
-        user.stripe_customer_id = customer.id
-        db.add(user)
-        db.commit()
-
-    subscription = create_subscription(
-        user.stripe_customer_id,
-        stripe_price_id,
-        metadata={"space_public_id": payload.space_public_id, "user_public_id": user.public_id}
-    )
-
-    start_dt = datetime.fromtimestamp(subscription.current_period_start, tz=timezone.utc)
-    internal = Subscription(
-        user_id=user.id,
-        space_id=space.id,
-        tenant_id=space.tenant_id,
-        status="pending",
-        start_date=start_dt.date(),
-        end_date=None,
-        stripe_subscription_id=subscription.id
-    )
-    db.add(internal)
-    db.commit()
-
-    client_secret = None
-    latest_invoice = subscription.get("latest_invoice")
-    if latest_invoice and latest_invoice.get("payment_intent"):
-        client_secret = latest_invoice["payment_intent"].get("client_secret")
-
-    return SubscriptionPurchaseOut(
-        stripe_subscription_id=subscription.id,
-        client_secret=client_secret
-    )
 
 
 @router.post("/payments/member-portal", response_model=MemberPortalOut)

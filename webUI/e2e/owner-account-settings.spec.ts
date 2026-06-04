@@ -68,7 +68,6 @@ async function routeOwnerSettingsApi(page: Page) {
     if (
       key === "GET /api/promo-codes" ||
       key === "GET /api/cancellation-policies" ||
-      key === "GET /api/subscription-plans" ||
       key === "GET /api/orgs/org_1/amenities"
     ) {
       await json(route, []);
@@ -131,6 +130,7 @@ test("owner settings scroll main content while sidebar stays fixed", async ({ pa
   await expect(page.getByRole("link", { name: "Open loyalty settings" })).toHaveCount(0);
   await expect(page.getByText("Pricing rules", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Stripe Connect", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Membership plans", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Status: Not connected", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Space")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Account" })).toBeVisible();
