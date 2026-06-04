@@ -127,6 +127,8 @@ test("owner settings scroll main content while sidebar stays fixed", async ({ pa
 
   await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible();
   await expect(page.getByText("Feature flags")).toHaveCount(0);
+  await expect(page.getByText("Rewards configuration", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open loyalty settings" })).toHaveCount(0);
   await expect(page.getByText("Pricing rules", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Stripe Connect", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Status: Not connected", { exact: true })).toHaveCount(0);

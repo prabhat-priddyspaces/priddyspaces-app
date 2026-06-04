@@ -89,9 +89,10 @@ describe("OwnerSettingsPage booking approval settings", () => {
   it("loads and saves organization booking approval settings", async () => {
     render(<OwnerSettingsPage />);
 
-    expect(await screen.findByRole("link", { name: "Open loyalty settings" })).toHaveAttribute("href", "/owner/loyalty");
     expect(await screen.findByText("Booking approval")).toBeInTheDocument();
     expect(screen.queryByText("Feature flags")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rewards configuration")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open loyalty settings" })).not.toBeInTheDocument();
     expect(screen.queryByText("Pricing rules")).not.toBeInTheDocument();
     expect(screen.queryByText("Stripe Connect")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Space")).not.toBeInTheDocument();

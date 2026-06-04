@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -567,22 +566,6 @@ export default function OwnerSettingsPage() {
         </Card>
 
         <OrganizationAmenitiesManager orgId={orgId} />
-
-        <Card className="grid gap-3 p-4">
-          <div>
-            <div className="text-sm font-semibold">Rewards configuration</div>
-            <div className="text-xs text-textMuted">
-              Configure Priddy Points acceptance and workspace reward eligibility from the loyalty page.
-            </div>
-          </div>
-          <div>
-            <Link href="/owner/loyalty">
-              <Button type="button" variant="secondary">
-                Open loyalty settings
-              </Button>
-            </Link>
-          </div>
-        </Card>
 
         <Card className="grid gap-4 p-4">
           <div className="text-sm font-semibold">Promo codes</div>
