@@ -22,7 +22,6 @@ type PromoCode = {
 };
 type FeatureFlag = { public_id: string };
 type CancellationPolicy = { public_id: string };
-type SubscriptionPlan = { public_id: string };
 type BookingSettings = {
   booking_approval_mode: "manual" | "auto";
   membership_lease_approval_mode: "manual" | "auto";
@@ -72,7 +71,6 @@ export function OwnerSettingsScreen() {
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
   const [connectStatus, setConnectStatus] = useState("Unknown");
 
@@ -109,14 +107,6 @@ export function OwnerSettingsScreen() {
     cancel_window_hours: "24",
     refund_percent: "0"
   });
-  const [planForm, setPlanForm] = useState({
-    name: "",
-    space_type: "shared_desk",
-    billing_cycle: "monthly",
-    price: "",
-    stripe_price_id: "",
-    is_active: "true"
-  });
 
   useEffect(() => {
     if (!token || !orgId) return;
@@ -125,19 +115,17 @@ export function OwnerSettingsScreen() {
       apiFetch<PromoCode[]>(`/api/promo-codes?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => []),
       apiFetch(`/api/tax-config?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => null),
       apiFetch<CancellationPolicy[]>(`/api/cancellation-policies?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => []),
-      apiFetch<SubscriptionPlan[]>(`/api/subscription-plans?organization_public_id=${orgId}`, { method: "GET" }, token).catch(() => []),
       apiFetch<BookingSettings>(`/api/orgs/${orgId}/booking-settings`, { method: "GET" }, token).catch(() => null),
       apiFetch<{ connected: boolean }>(`/api/stripe/connect/status?organization_public_id=${orgId}`, { method: "GET" }, token).catch(
         () => ({ connected: false })
       )
     ])
-      .then(([promo, tax, policy, plan, booking, connect]) => {
+      .then(([promo, tax, policy, booking, connect]) => {
         setPromoCodes(promo);
         if (tax && (tax as any).rate_percent != null) {
           setTaxRate(String((tax as any).rate_percent));
         }
         setPolicies(policy);
-        setPlans(plan);
         if (booking) {
           setBookingSettings(booking);
           setBookingSettingsForm({
@@ -320,29 +308,6 @@ export function OwnerSettingsScreen() {
       token
     );
     setMessage("Cancellation policy saved");
-  }
-
-  async function addPlan() {
-    if (!token || !orgId) {
-      setMessage("Enter organization id");
-      return;
-    }
-    await apiFetch(
-      `/api/subscription-plans?organization_public_id=${orgId}`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          name: planForm.name,
-          space_type: planForm.space_type,
-          billing_cycle: planForm.billing_cycle,
-          price: Number(planForm.price),
-          stripe_price_id: planForm.stripe_price_id || null,
-          is_active: planForm.is_active === "true"
-        })
-      },
-      token
-    );
-    setMessage("Membership plan saved");
   }
 
   async function startConnect() {
@@ -619,62 +584,6 @@ export function OwnerSettingsScreen() {
       />
       <TouchableOpacity style={styles.primaryButton} onPress={addPolicy}>
         <Text style={styles.primaryButtonText}>Add policy</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.sectionTitle}>Membership plans ({plans.length})</Text>
-      <View style={styles.optionRow}>
-        {["shared_desk", "conference_room", "private_office", "virtual_office"].map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            style={[styles.optionButton, planForm.space_type === opt && styles.optionActive]}
-            onPress={() => setPlanForm({ ...planForm, space_type: opt })}
-          >
-            <Text style={styles.optionText}>{opt.replace("_", " ")}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.optionRow}>
-        {["monthly", "quarterly", "six_month", "yearly"].map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            style={[styles.optionButton, planForm.billing_cycle === opt && styles.optionActive]}
-            onPress={() => setPlanForm({ ...planForm, billing_cycle: opt })}
-          >
-            <Text style={styles.optionText}>{opt.replace("_", " ")}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.optionRow}>
-        {["true", "false"].map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            style={[styles.optionButton, planForm.is_active === opt && styles.optionActive]}
-            onPress={() => setPlanForm({ ...planForm, is_active: opt })}
-          >
-            <Text style={styles.optionText}>{opt === "true" ? "active" : "inactive"}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <TextInput
-        style={styles.input}
-        placeholder="Plan name"
-        value={planForm.name}
-        onChangeText={(value) => setPlanForm({ ...planForm, name: value })}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Price"
-        value={planForm.price}
-        onChangeText={(value) => setPlanForm({ ...planForm, price: value })}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Stripe price id"
-        value={planForm.stripe_price_id}
-        onChangeText={(value) => setPlanForm({ ...planForm, stripe_price_id: value })}
-      />
-      <TouchableOpacity style={styles.primaryButton} onPress={addPlan}>
-        <Text style={styles.primaryButtonText}>Add plan</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Stripe Connect</Text>

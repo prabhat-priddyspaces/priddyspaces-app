@@ -14,17 +14,6 @@ class PaymentIntentOut(BaseModel):
     payment_intent_id: str
 
 
-class SubscriptionPurchase(BaseModel):
-    space_public_id: str
-    stripe_price_id: str | None = None
-    subscription_plan_public_id: str | None = None
-
-
-class SubscriptionPurchaseOut(BaseModel):
-    stripe_subscription_id: str
-    client_secret: str | None
-
-
 class MemberPortalOut(BaseModel):
     url: str
 

@@ -76,16 +76,6 @@ interface CancellationPolicy {
   }>;
 }
 
-interface SubscriptionPlan {
-  public_id: string;
-  name: string;
-  space_type: string;
-  billing_cycle: string;
-  price: number;
-  stripe_price_id: string | null;
-  is_active: boolean;
-}
-
 type WaitlistTypeKey =
   | "waitlist_conference_room_enabled"
   | "waitlist_private_office_enabled"
@@ -127,7 +117,6 @@ export default function OwnerSettingsPage() {
   const [taxConfig, setTaxConfig] = useState<TaxConfig | null>(null);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
   const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [orgProfileForm, setOrgProfileForm] = useState({ name: "", branding: "" });
 
   const [promoForm, setPromoForm] = useState({
@@ -158,14 +147,6 @@ export default function OwnerSettingsPage() {
       { min_hours_before_start: "24", refund_percent: "50" },
       { min_hours_before_start: "0", refund_percent: "0" },
     ],
-  });
-  const [planForm, setPlanForm] = useState({
-    name: "",
-    space_type: "shared_desk",
-    billing_cycle: "monthly",
-    price: "",
-    stripe_price_id: "",
-    is_active: true,
   });
 
   useEffect(() => {
@@ -269,20 +250,6 @@ export default function OwnerSettingsPage() {
     setPolicies(list);
   }
 
-  async function loadPlans() {
-    if (!orgId) {
-      setPlans([]);
-      return;
-    }
-    const token = getAccessToken() ?? undefined;
-    const list = await apiFetch<SubscriptionPlan[]>(
-      `/api/subscription-plans?organization_public_id=${encodeURIComponent(orgId)}`,
-      { method: "GET" },
-      token
-    );
-    setPlans(list);
-  }
-
   async function saveOrganizationProfile() {
     if (!orgId) return;
     const token = getAccessToken() ?? undefined;
@@ -327,7 +294,6 @@ export default function OwnerSettingsPage() {
     loadTaxConfig().catch(() => null);
     loadBookingSettings().catch(() => null);
     loadPolicies().catch(() => null);
-    loadPlans().catch(() => null);
   }, [orgId]);
 
   async function createPromoCode() {
@@ -455,28 +421,6 @@ export default function OwnerSettingsPage() {
     await loadPolicies();
   }
 
-  async function createPlan() {
-    if (!orgId) return;
-    const token = getAccessToken() ?? undefined;
-    await apiFetch(
-      `/api/subscription-plans?organization_public_id=${encodeURIComponent(orgId)}`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          name: planForm.name,
-          space_type: planForm.space_type,
-          billing_cycle: planForm.billing_cycle,
-          price: Number(planForm.price),
-          stripe_price_id: planForm.stripe_price_id || null,
-          is_active: planForm.is_active,
-        }),
-      },
-      token
-    );
-    setMessage("Subscription plan saved");
-    await loadPlans();
-  }
-
   const selectedOrg = useMemo(() => orgs.find((org) => org.public_id === orgId) || null, [orgId, orgs]);
 
   useEffect(() => {
@@ -494,7 +438,7 @@ export default function OwnerSettingsPage() {
     <AppShell title="Organization settings" breadcrumb={["Owner", "Organization"]}>
       <div className="grid gap-6">
         <p className="text-[13px] text-text-3 max-w-xl">
-          Promotions, tax, cancellation rules, and plans.
+          Promotions, tax, cancellation rules, and booking approval settings.
         </p>
 
         {message ? <div className="text-[13px] text-text-3">{message}</div> : null}
@@ -527,7 +471,7 @@ export default function OwnerSettingsPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 text-xs text-textMuted">
             <div>Promo codes: {promoCodes.length}</div>
-            <div>Plans: {plans.length}</div>
+            <div>Cancellation policies: {policies.length}</div>
           </div>
         </Card>
 
@@ -807,68 +751,6 @@ export default function OwnerSettingsPage() {
               </div>
             ))}
             {policies.length === 0 ? <div>No cancellation policies configured.</div> : null}
-          </div>
-        </Card>
-
-        <Card className="grid gap-4 p-4">
-          <div className="text-sm font-semibold">Membership plans</div>
-          <div className="grid gap-2 md:grid-cols-6">
-            <Input
-              value={planForm.name}
-              onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
-              placeholder="Plan name"
-            />
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              value={planForm.space_type}
-              onChange={(e) => setPlanForm({ ...planForm, space_type: e.target.value })}
-            >
-              <option value="conference_room">Conference Room</option>
-              <option value="private_office">Private Office</option>
-              <option value="shared_desk">Shared Desk</option>
-              <option value="virtual_office">Virtual Office</option>
-            </select>
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              value={planForm.billing_cycle}
-              onChange={(e) => setPlanForm({ ...planForm, billing_cycle: e.target.value })}
-            >
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="six_month">6 Months</option>
-              <option value="yearly">Yearly</option>
-            </select>
-            <Input
-              value={planForm.price}
-              onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })}
-              placeholder="Price"
-            />
-            <Input
-              value={planForm.stripe_price_id}
-              onChange={(e) => setPlanForm({ ...planForm, stripe_price_id: e.target.value })}
-              placeholder="Stripe price id"
-            />
-            <div className="flex gap-2">
-              <select
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-                value={planForm.is_active ? "true" : "false"}
-                onChange={(e) => setPlanForm({ ...planForm, is_active: e.target.value === "true" })}
-              >
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
-              <Button type="button" onClick={createPlan} disabled={!orgId}>
-                Add
-              </Button>
-            </div>
-          </div>
-          <div className="grid gap-2 text-xs text-textMuted">
-            {plans.map((plan) => (
-              <div key={plan.public_id}>
-                {plan.name} • {plan.space_type} • {plan.billing_cycle} • {plan.price}
-              </div>
-            ))}
-            {plans.length === 0 ? <div>No membership plans configured.</div> : null}
           </div>
         </Card>
 
