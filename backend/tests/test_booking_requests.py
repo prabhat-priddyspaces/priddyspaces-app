@@ -1249,11 +1249,11 @@ def test_guest_booking_request_survives_notification_failure(db_session, client_
         raise RuntimeError("email service unavailable")
 
     monkeypatch.setattr(
-        "app.api.booking_requests.send_booking_request_submitted_email",
+        "app.services.booking_request_notifications.send_booking_request_submitted_email",
         fail_notification,
     )
     monkeypatch.setattr(
-        "app.api.booking_requests._notify_owner_team_of_request",
+        "app.services.booking_request_notifications.notify_owner_team_of_request",
         fail_notification,
     )
 
