@@ -205,7 +205,7 @@ def test_membership_purchase_request_create_and_approve(
         )
 
     monkeypatch.setattr(
-        "app.api.booking_requests.create_stripe_subscription", fake_create
+        "app.services.membership_requests.create_stripe_subscription", fake_create
     )
 
     member_client = client_factory(
@@ -309,7 +309,7 @@ def test_auto_lease_purchase_request_creates_subscription_without_pending_review
             raw={"id": "sub_auto123"},
         )
 
-    monkeypatch.setattr("app.api.booking_requests.create_stripe_subscription", fake_create)
+    monkeypatch.setattr("app.services.membership_requests.create_stripe_subscription", fake_create)
     member_client = client_factory(
         {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
@@ -411,7 +411,7 @@ def test_lease_approval_rejects_overlap_before_subscription_charge(
     def fail_create(**_kwargs):
         raise AssertionError("Stripe subscription should not be created for a conflicted lease")
 
-    monkeypatch.setattr("app.api.booking_requests.create_stripe_subscription", fail_create)
+    monkeypatch.setattr("app.services.membership_requests.create_stripe_subscription", fail_create)
     owner_client = client_factory(
         {"sub": "mp-owner", "email": owner.email, "email_verified": True}
     )
@@ -449,7 +449,7 @@ def test_auto_lease_request_rejects_overlap_before_subscription_charge(
     def fail_create(**_kwargs):
         raise AssertionError("Stripe subscription should not be created for a conflicted lease")
 
-    monkeypatch.setattr("app.api.booking_requests.create_stripe_subscription", fail_create)
+    monkeypatch.setattr("app.services.membership_requests.create_stripe_subscription", fail_create)
     member_client = client_factory(
         {"sub": "mp-member", "email": member.email, "email_verified": True}
     )
