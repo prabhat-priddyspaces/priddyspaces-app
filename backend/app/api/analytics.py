@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Sequence
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -12,7 +12,6 @@ from app.db.deps import get_db
 from app.models.booking import Booking
 from app.models.enums import (
     BookingStatus,
-    OrganizationReviewStatus,
     PaymentStatus,
     PlatformTeamRole,
     UserAppRole,
@@ -20,7 +19,6 @@ from app.models.enums import (
 )
 from app.models.location import Location
 from app.models.organization import Organization
-from app.models.organization_member import OrganizationMember
 from app.models.payment import Payment
 from app.models.space import Space
 from app.models.subscription import Subscription
@@ -274,7 +272,7 @@ def owner_revenue(
             for s in db.query(Space).filter(Space.id.in_(space_ids)).all() if space_ids else []:
                 group_key_for_space[s.id] = s.space_type.value
         else:  # location
-            loc_by_id = {l.id: l for l in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
+            loc_by_id = {loc.id: loc for loc in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
             spaces = db.query(Space).filter(Space.id.in_(space_ids)).all() if space_ids else []
             for s in spaces:
                 loc = loc_by_id.get(s.location_id)
@@ -470,7 +468,7 @@ def owner_revenue_per_space(
     start_dt, end_dt = _default_range(start_date, end_date, days=30)
 
     spaces = db.query(Space).filter(Space.id.in_(space_ids)).all() if space_ids else []
-    location_name = {l.id: l.name for l in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
+    location_name = {loc.id: loc.name for loc in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
 
     bookings = (
         db.query(Booking)
@@ -861,7 +859,7 @@ def admin_cities(
     space_ids = list({b.space_id for b in bookings})
     spaces = {s.id: s for s in db.query(Space).filter(Space.id.in_(space_ids)).all()} if space_ids else {}
     location_ids = list({s.location_id for s in spaces.values()})
-    locations = {l.id: l for l in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
+    locations = {loc.id: loc for loc in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
 
     per_city: dict[str, dict[str, Any]] = {}
     for b in bookings:

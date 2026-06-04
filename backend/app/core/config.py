@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     AWS_SECRET_NAME: str = ""
     AWS_REGION: str = "us-east-1"
 
+    # Error tracking (Sentry). All Sentry calls are no-ops until SENTRY_DSN is
+    # set, so leaving this blank in local dev/CI is safe.
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+
     # Internal JWT (legacy email/password flow + admin impersonation tokens).
     # Clerk handles primary auth, but issue_token() in app/core/jwt.py still
     # mints these for the impersonation stop endpoint.

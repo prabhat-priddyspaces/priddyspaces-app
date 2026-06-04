@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClerkSignUpCard } from "../components/clerk-sign-up-card";
 import { consumeOauthNext } from "../lib/auth-redirect";
 
-const signUpMock = vi.hoisted(() => vi.fn(() => null));
+const signUpMock = vi.hoisted(() => vi.fn((_props: Record<string, unknown>) => null));
 const searchParamsMock = vi.hoisted(() => ({
   value: new URLSearchParams(),
 }));

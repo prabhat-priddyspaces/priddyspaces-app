@@ -9,7 +9,6 @@ from app.db.deps import get_db
 from app.models.user import User
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut
 from app.services.email_identity import get_user_by_normalized_email, normalize_email
-from app.services.auth_user import get_or_create_user
 from app.services.loyalty import grant_priddy_signup_points
 from app.services.platform_auth import issue_standard_token, touch_platform_last_login
 from app.services.access_passes import claim_guest_bookings_for_user

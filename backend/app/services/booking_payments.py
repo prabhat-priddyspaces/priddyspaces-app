@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.observability import capture_exception
 from app.models.booking import Booking
 from app.models.booking_payment_link import BookingPaymentLink
 from app.models.booking_series import BookingSeries
@@ -68,9 +69,10 @@ def _payment_booking_conflict_detail(space: Space, req: BookingRequest) -> str:
 def _run_post_payment_side_effect(db: Session, label: str, callback) -> None:
     try:
         callback()
-    except Exception:
+    except Exception as exc:
         db.rollback()
         logger.exception("booking payment post-success side effect failed: %s", label)
+        capture_exception(exc)
 
 
 def _payment_failure_hold_minutes(db: Session, req: BookingRequest) -> int:

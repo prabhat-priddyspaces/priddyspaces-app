@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Route, test } from "@playwright/test";
 
 import { json, meResponse, mockSession } from "./helpers/mock-api";
 
@@ -43,7 +43,7 @@ function calendarPayload(events: unknown[], start: string, end: string) {
 }
 
 async function routeOwnerBookingApis(page: any, state: { cashCreated?: boolean; linkCreated?: boolean; paid?: boolean }) {
-  await page.route("**/api/**", async (route) => {
+  await page.route("**/api/**", async (route: Route) => {
     const url = new URL(route.request().url());
     const key = `${route.request().method()} ${url.pathname}`;
 

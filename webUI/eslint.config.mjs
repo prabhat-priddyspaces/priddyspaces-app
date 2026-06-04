@@ -10,8 +10,10 @@ const config = [
       "@typescript-eslint/no-empty-object-type": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-require-imports": "off",
-      "react-hooks/purity": "off",
-      "react-hooks/set-state-in-effect": "off",
+      // Correctness rules re-enabled as warnings so existing violations
+      // surface in CI without blocking; ratchet to "error" once cleared.
+      "react-hooks/purity": "warn",
+      "react-hooks/set-state-in-effect": "warn",
       "react/no-unescaped-entities": "off",
     },
   },

@@ -45,10 +45,6 @@ from app.services.authz import list_org_members
 from app.services.notifications import send_email
 from app.services.org_member_stats import MemberStats, compute_member_stats, interacted_user_ids
 from app.services.template_rendering import (
-    ALLOWED_MARKETING_HTML_ATTRIBUTES,
-    ALLOWED_MARKETING_HTML_TAGS,
-    ALLOWED_TEMPLATE_FIELDS,
-    ensure_template_allowed,
     render_template_sources,
 )
 from app.utils.uuid import new_public_id

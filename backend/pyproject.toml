@@ -1,0 +1,10 @@
+[tool.ruff]
+# Lint-only configuration. Keep it conservative so the CI gate stays green and
+# focused on real bugs (unused imports/vars, undefined names) rather than style.
+target-version = "py311"
+line-length = 120
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+# E4/E7/E9 (import/statement/syntax errors) + F (pyflakes). No E501/style noise.
+select = ["E4", "E7", "E9", "F"]

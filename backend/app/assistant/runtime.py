@@ -24,9 +24,8 @@ from app.models.assistant import (
     SpaceAlert,
     SupportTicket,
 )
-from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
-from app.models.enums import BookingRequestStatus, BookingStatus, LocationStatus, OrganizationReviewStatus, PaymentStatus, SpaceVisibility
+from app.models.enums import BookingRequestStatus, PaymentStatus
 from app.models.floor_plan import FloorPlan
 from app.models.invoice import Invoice
 from app.models.location import Location
