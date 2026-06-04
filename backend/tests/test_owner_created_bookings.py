@@ -162,7 +162,7 @@ def test_owner_can_create_cash_booking_for_new_member_shell(db_session, client_f
             member={
                 "email": "new.member@example.com",
                 "full_name": "New Member",
-                "phone": "+15550102026",
+                "phone": "5550102026",
                 "company_name": "Acme",
             },
         ),
@@ -177,8 +177,8 @@ def test_owner_can_create_cash_booking_for_new_member_shell(db_session, client_f
     )
     assert user.email_verified is False
     assert user.role == UserAppRole.MEMBER
-    assert user.phone == "+15550102026"
-    assert profile.phone == "+15550102026"
+    assert user.phone == "5550102026"
+    assert profile.phone == "5550102026"
     assert response.json()["registration_url"] is not None
 
 

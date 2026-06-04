@@ -428,7 +428,7 @@ class TestOnboardingProfile:
                 json={
                     "role": "owner",
                     "full_name": "Bob Builder",
-                    "phone": "+1 555 000 0100",
+                    "phone": "5550000100",
                     "terms_accepted": True,
                 },
             )
@@ -524,7 +524,7 @@ class TestOnboardingOrganization:
         _, token = self._owner(db_session, "sz")
         resp = client_factory(token).post(
             "/api/onboarding/organization",
-            json={"name": "Org", "business_phone": "+1 555 000 0100", "size": "5000"},
+            json={"name": "Org", "business_phone": "5550000100", "size": "5000"},
         )
         assert resp.status_code == 422
 
@@ -574,7 +574,8 @@ class TestOnboardingOrganization:
         assert org.industry == "Coworking"
         assert org.website == "https://acme.example"
         assert org.business_email == "hello@acme.example"
-        assert org.business_phone == "+1 555 0100"
+        # Business phone is normalized to digits only.
+        assert org.business_phone == "15550100"
         assert org.description == "Flexible workspace for local teams."
         assert org.size == "1-10"
         assert org.review_status == OrganizationReviewStatus.PENDING
@@ -605,7 +606,7 @@ class TestOnboardingOrganization:
         assert org.name == "Updated"
         assert org.display_name == "Updated Public"
         assert org.business_email == "updates@example.com"
-        assert org.business_phone == "+1 555 0101"
+        assert org.business_phone == "15550101"
         assert org.description == "Updated review detail"
 
     def test_response_has_organization_true_after_creation(self, client_factory, db_session):
