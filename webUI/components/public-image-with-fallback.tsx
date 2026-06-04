@@ -10,6 +10,7 @@ interface PublicImageWithFallbackProps extends Omit<ImgHTMLAttributes<HTMLImageE
 
 export function PublicImageWithFallback({
   src,
+  alt = "",
   fallbackLabel = "Priddyspaces",
   fallbackClassName,
   onError,
@@ -26,9 +27,12 @@ export function PublicImageWithFallback({
   }
 
   return (
+    // alt is always set (defaults to "" for decorative images) so this never
+    // ships an unlabelled image; callers pass a meaningful alt where relevant.
     <img
       {...props}
       src={src}
+      alt={alt}
       onError={(event) => {
         setFailed(true);
         onError?.(event);
