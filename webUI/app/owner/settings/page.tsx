@@ -29,23 +29,6 @@ interface Organization {
   waitlist_virtual_office_enabled: boolean;
 }
 
-interface LocationOption {
-  public_id: string;
-  name: string;
-}
-
-interface SpaceOption {
-  public_id: string;
-  space_type: string;
-  location_name: string;
-}
-
-interface PricingRule {
-  public_id: string;
-  rate_type: string;
-  rate_amount: number;
-}
-
 interface PromoCode {
   public_id: string;
   code: string;
@@ -104,11 +87,6 @@ interface SubscriptionPlan {
   is_active: boolean;
 }
 
-interface SpaceResponse {
-  public_id: string;
-  space_type: string;
-}
-
 type WaitlistTypeKey =
   | "waitlist_conference_room_enabled"
   | "waitlist_private_office_enabled"
@@ -142,23 +120,17 @@ function formatCents(cents: number | null | undefined) {
 
 export default function OwnerSettingsPage() {
   const [orgs, setOrgs] = useState<Organization[]>([]);
-  const [locations, setLocations] = useState<LocationOption[]>([]);
-  const [spaces, setSpaces] = useState<SpaceOption[]>([]);
   const [orgId, setOrgId] = useState("");
-  const [spaceId, setSpaceId] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [taxConfig, setTaxConfig] = useState<TaxConfig | null>(null);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
   const [policies, setPolicies] = useState<CancellationPolicy[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [connectStatus, setConnectStatus] = useState("");
   const [orgProfileForm, setOrgProfileForm] = useState({ name: "", branding: "" });
 
-  const [pricingForm, setPricingForm] = useState({ rate_type: "daily", rate_amount: "" });
   const [promoForm, setPromoForm] = useState({
     code: "",
     discount_type: "percent",
@@ -215,63 +187,6 @@ export default function OwnerSettingsPage() {
 
     loadOrgs().catch(() => null);
   }, []);
-
-  useEffect(() => {
-    async function loadOrgContext() {
-      if (!orgId) {
-        setLocations([]);
-        setSpaces([]);
-        return;
-      }
-      const token = getAccessToken() ?? undefined;
-      const locationList = await apiFetch<LocationOption[]>(
-        `/api/locations?organization_public_id=${encodeURIComponent(orgId)}`,
-        { method: "GET" },
-        token
-      );
-      setLocations(locationList);
-
-      const spacesByLocation = await Promise.all(
-        locationList.map(async (location) => {
-          const list = await apiFetch<SpaceResponse[]>(
-            `/api/locations/${location.public_id}/spaces`,
-            { method: "GET" },
-            token
-          ).catch(() => []);
-          return list.map((space) => ({
-            public_id: space.public_id,
-            space_type: space.space_type,
-            location_name: location.name,
-          }));
-        })
-      );
-      const flattened = spacesByLocation.flat();
-      setSpaces(flattened);
-      if (flattened.length > 0) {
-        setSpaceId((current) => current || flattened[0].public_id);
-      } else {
-        setSpaceId("");
-      }
-    }
-
-    loadOrgContext().catch((err) =>
-      setMessage(err instanceof Error ? err.message : "Failed to load organization settings context")
-    );
-  }, [orgId]);
-
-  async function loadPricingRules() {
-    if (!spaceId) {
-      setPricingRules([]);
-      return;
-    }
-    const token = getAccessToken() ?? undefined;
-    const list = await apiFetch<PricingRule[]>(
-      `/api/pricing-rules?space_public_id=${encodeURIComponent(spaceId)}`,
-      { method: "GET" },
-      token
-    );
-    setPricingRules(list);
-  }
 
   async function loadPromoCodes() {
     if (!orgId) {
@@ -369,20 +284,6 @@ export default function OwnerSettingsPage() {
     setPlans(list);
   }
 
-  async function loadConnectStatus() {
-    if (!orgId) {
-      setConnectStatus("");
-      return;
-    }
-    const token = getAccessToken() ?? undefined;
-    const status = await apiFetch<{ connected: boolean }>(
-      `/api/stripe/connect/status?organization_public_id=${encodeURIComponent(orgId)}`,
-      { method: "GET" },
-      token
-    );
-    setConnectStatus(status.connected ? "Connected" : "Not connected");
-  }
-
   async function saveOrganizationProfile() {
     if (!orgId) return;
     const token = getAccessToken() ?? undefined;
@@ -423,36 +324,12 @@ export default function OwnerSettingsPage() {
   }
 
   useEffect(() => {
-    loadPricingRules().catch(() => null);
-  }, [spaceId]);
-
-  useEffect(() => {
     loadPromoCodes().catch(() => null);
     loadTaxConfig().catch(() => null);
     loadBookingSettings().catch(() => null);
     loadPolicies().catch(() => null);
     loadPlans().catch(() => null);
-    loadConnectStatus().catch(() => null);
   }, [orgId]);
-
-  async function createPricingRule() {
-    if (!spaceId) return;
-    const token = getAccessToken() ?? undefined;
-    await apiFetch(
-      "/api/pricing-rules",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          space_public_id: spaceId,
-          rate_type: pricingForm.rate_type,
-          rate_amount: Number(pricingForm.rate_amount),
-        }),
-      },
-      token
-    );
-    setMessage("Pricing rule created");
-    await loadPricingRules();
-  }
 
   async function createPromoCode() {
     if (!orgId) return;
@@ -601,21 +478,6 @@ export default function OwnerSettingsPage() {
     await loadPlans();
   }
 
-  async function startConnect() {
-    if (!orgId) return;
-    const token = getAccessToken() ?? undefined;
-    const res = await apiFetch<{ url: string }>(
-      `/api/stripe/connect/onboard?organization_public_id=${encodeURIComponent(orgId)}`,
-      { method: "POST" },
-      token
-    );
-    window.location.href = res.url;
-  }
-
-  const selectedSpace = useMemo(
-    () => spaces.find((space) => space.public_id === spaceId) || null,
-    [spaceId, spaces]
-  );
   const selectedOrg = useMemo(() => orgs.find((org) => org.public_id === orgId) || null, [orgId, orgs]);
 
   useEffect(() => {
@@ -633,13 +495,13 @@ export default function OwnerSettingsPage() {
     <AppShell title="Organization settings" breadcrumb={["Owner", "Organization"]}>
       <div className="grid gap-6">
         <p className="text-[13px] text-text-3 max-w-xl">
-          Pricing, promotions, tax, cancellation rules, plans, and payouts.
+          Promotions, tax, cancellation rules, and plans.
         </p>
 
         {message ? <div className="text-[13px] text-text-3">{message}</div> : null}
 
         <Card className="grid gap-4 p-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="org">Organization</Label>
               <select
@@ -658,31 +520,13 @@ export default function OwnerSettingsPage() {
               </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="space">Space</Label>
-              <select
-                id="space"
-                value={spaceId}
-                onChange={(e) => setSpaceId(e.target.value)}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              >
-                <option value="">Select a space</option>
-                {spaces.map((space) => (
-                  <option key={space.public_id} value={space.public_id}>
-                    {space.location_name} • {space.space_type}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-2">
               <Label>Current scope</Label>
               <div className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-textSecondary">
-                {selectedSpace ? `${selectedSpace.location_name} • ${selectedSpace.space_type}` : "Organization-wide settings"}
+                Organization-wide settings
               </div>
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-4 text-xs text-textMuted">
-            <div>Locations: {locations.length}</div>
-            <div>Spaces: {spaces.length}</div>
+          <div className="grid gap-4 md:grid-cols-2 text-xs text-textMuted">
             <div>Promo codes: {promoCodes.length}</div>
             <div>Plans: {plans.length}</div>
           </div>
@@ -737,36 +581,6 @@ export default function OwnerSettingsPage() {
                 Open loyalty settings
               </Button>
             </Link>
-          </div>
-        </Card>
-
-        <Card className="grid gap-4 p-4">
-          <div className="text-sm font-semibold">Pricing rules</div>
-          <div className="grid gap-2 md:grid-cols-3">
-            <select
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
-              value={pricingForm.rate_type}
-              onChange={(e) => setPricingForm({ ...pricingForm, rate_type: e.target.value })}
-            >
-              <option value="hourly">Hourly</option>
-              <option value="daily">Daily</option>
-            </select>
-            <Input
-              value={pricingForm.rate_amount}
-              onChange={(e) => setPricingForm({ ...pricingForm, rate_amount: e.target.value })}
-              placeholder="Amount"
-            />
-            <Button type="button" onClick={createPricingRule} disabled={!spaceId}>
-              Add rule
-            </Button>
-          </div>
-          <div className="grid gap-2 text-xs text-textMuted">
-            {pricingRules.map((rule) => (
-              <div key={rule.public_id}>
-                {rule.rate_type} • {rule.rate_amount}
-              </div>
-            ))}
-            {pricingRules.length === 0 ? <div>No rules configured for this space.</div> : null}
           </div>
         </Card>
 
@@ -1075,13 +889,6 @@ export default function OwnerSettingsPage() {
           </div>
         </Card>
 
-        <Card className="grid gap-4 p-4">
-          <div className="text-sm font-semibold">Stripe Connect</div>
-          <div className="text-xs text-textMuted">Status: {connectStatus || "Unknown"}</div>
-          <Button type="button" onClick={startConnect} disabled={!orgId}>
-            Start onboarding
-          </Button>
-        </Card>
       </div>
     </AppShell>
   );

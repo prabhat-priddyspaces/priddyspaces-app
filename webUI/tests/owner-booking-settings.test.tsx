@@ -48,7 +48,6 @@ describe("OwnerSettingsPage booking approval settings", () => {
           },
         ]);
       }
-      if (url === "/api/locations?organization_public_id=org_1") return Promise.resolve([]);
       if (url === "/api/orgs/org_1/booking-settings" && init?.method === "GET") {
         return Promise.resolve({
           public_id: "org_1",
@@ -83,7 +82,6 @@ describe("OwnerSettingsPage booking approval settings", () => {
       if (url.startsWith("/api/tax-config")) return Promise.reject(new Error("not set"));
       if (url.startsWith("/api/cancellation-policies")) return Promise.resolve([]);
       if (url.startsWith("/api/subscription-plans")) return Promise.resolve([]);
-      if (url.startsWith("/api/stripe/connect/status")) return Promise.resolve({ connected: false });
       return Promise.resolve([]);
     });
   });
@@ -94,6 +92,11 @@ describe("OwnerSettingsPage booking approval settings", () => {
     expect(await screen.findByRole("link", { name: "Open loyalty settings" })).toHaveAttribute("href", "/owner/loyalty");
     expect(await screen.findByText("Booking approval")).toBeInTheDocument();
     expect(screen.queryByText("Feature flags")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pricing rules")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stripe Connect")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Space")).not.toBeInTheDocument();
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/pricing-rules"))).toBe(false);
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/stripe/connect"))).toBe(false);
     fireEvent.change(screen.getByLabelText("Hourly/day-pass approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Membership & lease approval"), { target: { value: "auto" } });
     fireEvent.change(screen.getByLabelText("Payment failure recovery"), { target: { value: "15" } });

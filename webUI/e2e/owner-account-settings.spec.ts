@@ -65,16 +65,7 @@ async function routeOwnerSettingsApi(page: Page) {
       ]);
       return;
     }
-    if (key === "GET /api/locations") {
-      await json(route, [{ public_id: "loc_1", name: "Nomad Hub" }]);
-      return;
-    }
-    if (key === "GET /api/locations/loc_1/spaces") {
-      await json(route, [{ public_id: "space_1", space_type: "shared_desk" }]);
-      return;
-    }
     if (
-      key === "GET /api/pricing-rules" ||
       key === "GET /api/promo-codes" ||
       key === "GET /api/cancellation-policies" ||
       key === "GET /api/subscription-plans" ||
@@ -87,11 +78,6 @@ async function routeOwnerSettingsApi(page: Page) {
       await json(route, { detail: "Not configured" }, 404);
       return;
     }
-    if (key === "GET /api/stripe/connect/status") {
-      await json(route, { connected: false });
-      return;
-    }
-
     await json(route, { detail: `Unhandled route: ${key}` }, 404);
   });
 }
@@ -141,6 +127,10 @@ test("owner settings scroll main content while sidebar stays fixed", async ({ pa
 
   await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible();
   await expect(page.getByText("Feature flags")).toHaveCount(0);
+  await expect(page.getByText("Pricing rules", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Stripe Connect", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Status: Not connected", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Space")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Account" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Organization" })).toBeVisible();
 

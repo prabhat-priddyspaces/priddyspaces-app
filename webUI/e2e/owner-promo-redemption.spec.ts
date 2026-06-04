@@ -78,18 +78,6 @@ test("owner-created promo code applies only to that owner's member bookings", as
       await json(route, [ownerOrg]);
       return;
     }
-    if (key === "GET /api/locations") {
-      await json(route, [{ public_id: "loc_owner_a", name: "Owner A Hub" }]);
-      return;
-    }
-    if (key === "GET /api/locations/loc_owner_a/spaces") {
-      await json(route, [{ public_id: "space_owner_a", space_type: "conference_room" }]);
-      return;
-    }
-    if (key === "GET /api/pricing-rules") {
-      await json(route, []);
-      return;
-    }
     if (key === "GET /api/promo-codes") {
       await json(route, promoCodes);
       return;
@@ -146,11 +134,6 @@ test("owner-created promo code applies only to that owner's member bookings", as
       await json(route, []);
       return;
     }
-    if (key === "GET /api/stripe/connect/status") {
-      await json(route, { connected: false });
-      return;
-    }
-
     if (key === "GET /api/marketplace/spaces/space_owner_a/availability" || key === "GET /api/marketplace/spaces/space_owner_b/availability") {
       await json(route, {
         space_public_id: url.pathname.includes("space_owner_a") ? "space_owner_a" : "space_owner_b",
