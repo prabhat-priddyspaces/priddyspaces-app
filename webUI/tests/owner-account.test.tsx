@@ -99,7 +99,7 @@ describe("OwnerAccountPage", () => {
     expect(payload).toEqual({
       first_name: "Riley",
       last_name: "User",
-      phone: "555-0199",
+      phone: "5550199",
       company_name: "Downtown Cowork",
     });
     expect(updateMeCacheMock).toHaveBeenCalledWith(

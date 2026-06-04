@@ -2,11 +2,13 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.schemas._phone import PhoneStr
+
 
 class OwnerBookingMemberCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=255)
-    phone: str | None = Field(default=None, max_length=64)
+    phone: PhoneStr | None = Field(default=None)
     company_name: str | None = Field(default=None, max_length=255)
 
 

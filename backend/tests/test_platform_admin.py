@@ -297,7 +297,7 @@ def test_superadmin_can_invite_owner_account(db_session, client_factory, monkeyp
             "email": "  NewOwner@Example.COM ",
             "first_name": "Nina",
             "last_name": "Owner",
-            "phone": "+1 555 000 1111",
+            "phone": "5550001111",
             "company_name": "Nina Works",
         },
     )
@@ -309,7 +309,7 @@ def test_superadmin_can_invite_owner_account(db_session, client_factory, monkeyp
     owner = db_session.query(User).filter(User.email == "newowner@example.com").one()
     assert owner.role == UserAppRole.OWNER
     assert owner.full_name == "Nina Owner"
-    assert owner.phone == "+1 555 000 1111"
+    assert owner.phone == "5550001111"
     assert owner.company_name == "Nina Works"
     assert owner.password_hash is None
     assert sent[0]["to_email"] == "newowner@example.com"

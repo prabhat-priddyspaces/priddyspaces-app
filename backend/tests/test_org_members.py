@@ -180,7 +180,8 @@ def test_member_detail_lazy_materializes_and_aggregates(db_session, client_facto
     assert body["materialized"] is True
     assert body["notes"] == "Met at event"
     assert body["tags"] == ["vip", "design"]
-    assert body["phone"] == "+1-555"
+    # Phone is normalized to digits only.
+    assert body["phone"] == "1555"
 
     # Re-fetch returns persisted fields.
     resp3 = client.get(f"/api/owner/members/{member.public_id}")

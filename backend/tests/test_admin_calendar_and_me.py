@@ -353,10 +353,11 @@ def test_me_patch_updates_phone_and_company(db_session, client_factory):
     resp = client.patch("/api/me", json={"phone": "+1-555-0100", "company_name": "Acme Corp"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["phone"] == "+1-555-0100"
+    # Phone is normalized to digits only, capped at 10.
+    assert body["phone"] == "15550100"
     assert body["company_name"] == "Acme Corp"
 
     resp_get = client.get("/api/me")
     assert resp_get.status_code == 200
-    assert resp_get.json()["phone"] == "+1-555-0100"
+    assert resp_get.json()["phone"] == "15550100"
     assert resp_get.json()["company_name"] == "Acme Corp"

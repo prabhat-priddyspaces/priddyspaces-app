@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { sanitizePhone } from "@/lib/phone";
 import { Toggle } from "@/components/ui/toggle";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
@@ -125,7 +126,12 @@ export default function MemberProfilePage() {
           </label>
           <label className="grid gap-1 text-xs text-textMuted">
             Phone
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1-555-…" />
+            <Input
+              inputMode="numeric"
+              value={phone}
+              onChange={(e) => setPhone(sanitizePhone(e.target.value))}
+              placeholder="5551234567"
+            />
           </label>
           <label className="grid gap-1 text-xs text-textMuted">
             First name

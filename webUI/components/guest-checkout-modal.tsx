@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, CheckCircle2, User, Mail, Phone, Building2, MessageSquare } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatUsd, type MoneyValue } from "@/lib/money";
+import { sanitizePhone } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -220,9 +221,10 @@ export function GuestCheckoutModal({ payload, onClose, onSignIn, onBookingSubmit
                   <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-4" />
                   <Input
                     type="tel"
-                    placeholder="+1 555 000 0000"
+                    inputMode="numeric"
+                    placeholder="5551234567"
                     value={form.guest_phone}
-                    onChange={handleField("guest_phone")}
+                    onChange={(e) => setForm((prev) => ({ ...prev, guest_phone: sanitizePhone(e.target.value) }))}
                     className="pl-9"
                   />
                 </div>

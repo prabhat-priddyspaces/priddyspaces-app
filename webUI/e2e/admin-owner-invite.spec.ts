@@ -52,7 +52,7 @@ test("superadmin can send an owner invite from basic account info", async ({ pag
     email: "invited-owner@example.com",
     first_name: "Invited",
     last_name: "Owner",
-    phone: "+1 555 222 3333",
+    phone: "1555222333",
     company_name: "Invited Works",
   });
 });

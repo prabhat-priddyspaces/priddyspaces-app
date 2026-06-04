@@ -1,6 +1,7 @@
 from pydantic import BaseModel, field_validator
 
 from app.models.enums import OrganizationReviewStatus, PlatformTeamRole
+from app.schemas._phone import PhoneStr
 
 
 class OrganizationAdminUpdate(BaseModel):
@@ -35,7 +36,7 @@ class OwnerInviteIn(BaseModel):
     email: str
     first_name: str | None = None
     last_name: str | None = None
-    phone: str | None = None
+    phone: PhoneStr | None = None
     company_name: str | None = None
 
     @field_validator("email")
@@ -46,7 +47,7 @@ class OwnerInviteIn(BaseModel):
             raise ValueError("Invalid email address")
         return cleaned
 
-    @field_validator("first_name", "last_name", "phone", "company_name")
+    @field_validator("first_name", "last_name", "company_name")
     @classmethod
     def optional_text(cls, value: str | None) -> str | None:
         if value is None:

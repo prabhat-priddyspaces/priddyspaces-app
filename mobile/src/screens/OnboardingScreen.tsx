@@ -12,6 +12,7 @@ import {
 
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../constants";
+import { sanitizePhone } from "../lib/phone";
 
 export function OnboardingScreen() {
   const { getToken } = useAuth();
@@ -79,9 +80,9 @@ export function OnboardingScreen() {
       <Text style={styles.label}>Phone (optional)</Text>
       <TextInput
         style={styles.input}
-        placeholder="+1 555 000 0000"
+        placeholder="5551234567"
         value={phone}
-        onChangeText={setPhone}
+        onChangeText={(value) => setPhone(sanitizePhone(value))}
         keyboardType="phone-pad"
       />
 

@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { sanitizePhone } from "@/lib/phone";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import {
@@ -790,8 +791,9 @@ export default function NewOwnerBookingPage() {
                   <label className="grid gap-1.5 text-[12px] font-medium text-text-2">
                     Phone
                     <Input
+                      inputMode="numeric"
                       value={memberPhone}
-                      onChange={(event) => setMemberPhone(event.target.value)}
+                      onChange={(event) => setMemberPhone(sanitizePhone(event.target.value))}
                       placeholder="Optional"
                       data-testid="owner-booking-new-phone"
                     />

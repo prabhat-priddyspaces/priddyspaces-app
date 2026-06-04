@@ -10,6 +10,7 @@ import { PlaceAutocomplete, type PlaceDetails } from "@/components/place-autocom
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { sanitizePhone } from "@/lib/phone";
 import { Label } from "@/components/ui/label";
 import { WorkingHoursEditor } from "@/components/working-hours-editor";
 import { apiFetch } from "@/lib/api";
@@ -421,9 +422,10 @@ export default function NewLocation() {
                 <Label htmlFor="public_phone">Public phone</Label>
                 <Input
                   id="public_phone"
+                  inputMode="numeric"
                   value={form.public_phone}
-                  onChange={(e) => setForm({ ...form, public_phone: e.target.value })}
-                  placeholder="(954) 906-7565"
+                  onChange={(e) => setForm({ ...form, public_phone: sanitizePhone(e.target.value) })}
+                  placeholder="9549067565"
                 />
               </div>
               <div className="space-y-2">

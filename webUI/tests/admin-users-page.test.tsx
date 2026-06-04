@@ -122,6 +122,7 @@ describe("AdminUsersPage", () => {
     fireEvent.change(screen.getByLabelText("Owner phone"), {
       target: { value: "+1 555 111 2222" },
     });
+    // Input strips formatting and caps at 10 digits before submit.
     fireEvent.change(screen.getByLabelText("Owner business name"), {
       target: { value: "Invited Works" },
     });
@@ -136,7 +137,7 @@ describe("AdminUsersPage", () => {
             email: "invited@example.com",
             first_name: "Invited",
             last_name: "Owner",
-            phone: "+1 555 111 2222",
+            phone: "1555111222",
             company_name: "Invited Works",
           }),
         }),

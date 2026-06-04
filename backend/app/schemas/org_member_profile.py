@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas._phone import PhoneStr
+
 
 class OrgMemberProfileStats(BaseModel):
     total_bookings: int
@@ -50,7 +52,7 @@ class OrgMemberProfileDetail(BaseModel):
 
 class OrgMemberProfileUpdate(BaseModel):
     status: Optional[str] = None
-    phone: Optional[str] = None
+    phone: Optional[PhoneStr] = None
     company_name: Optional[str] = None
     tags: Optional[list[str]] = None
     notes: Optional[str] = None

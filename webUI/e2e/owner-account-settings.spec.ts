@@ -112,7 +112,7 @@ test("owner can update account profile and access email/password management", as
   expect(api.getPatchPayload()).toEqual({
     first_name: "Riley",
     last_name: "NYC",
-    phone: "555-0199",
+    phone: "5550199",
     company_name: "Skyline Works NYC",
   });
 
