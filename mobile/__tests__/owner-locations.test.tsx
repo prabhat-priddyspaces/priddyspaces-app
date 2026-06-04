@@ -201,7 +201,7 @@ describe("owner location mobile screens", () => {
     fireEvent.changeText(getByLabelText("Space name"), "Board Room");
     fireEvent.changeText(getByLabelText("Capacity"), "8");
     fireEvent.changeText(getByLabelText("Hourly price"), "75");
-    fireEvent.changeText(getByLabelText("Daily price"), "300");
+    fireEvent.changeText(getByLabelText("Day rate price"), "300");
     fireEvent.press(getByText("Create space"));
 
     await waitFor(() => expect(getByText("Space created")).toBeTruthy());
@@ -217,6 +217,59 @@ describe("owner location mobile screens", () => {
       price_daily: "300",
       visibility: "public",
     });
+  });
+
+  it("requires conference room hourly and day rate before creating", async () => {
+    mockRouteParams = { locationId: "loc_1", locationName: "Rochester Hub" };
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/spaces" && options?.method === "POST") return Promise.resolve({ public_id: "space_new" });
+      return Promise.resolve([]);
+    });
+
+    const { getByLabelText, getByText, queryByText } = render(<OwnerAddSpaceScreen />);
+    const postCount = () =>
+      (apiFetch as jest.Mock).mock.calls.filter(
+        ([path, options]) => path === "/api/spaces" && options?.method === "POST",
+      ).length;
+    const createDisabled = () =>
+      getByLabelText("Create space").props.accessibilityState?.disabled;
+
+    // No prices yet: Create is disabled and a press does nothing.
+    expect(createDisabled()).toBe(true);
+    fireEvent.press(getByLabelText("Create space"));
+    expect(postCount()).toBe(0);
+    expect(queryByText("Space created")).toBeNull();
+
+    // Hourly only: still disabled because the day rate is required.
+    fireEvent.changeText(getByLabelText("Hourly price"), "50");
+    expect(createDisabled()).toBe(true);
+    fireEvent.press(getByLabelText("Create space"));
+    expect(postCount()).toBe(0);
+
+    // Both present: enabled and creates the space.
+    fireEvent.changeText(getByLabelText("Day rate price"), "200");
+    expect(createDisabled()).toBe(false);
+    fireEvent.press(getByLabelText("Create space"));
+    await waitFor(() => expect(getByText("Space created")).toBeTruthy());
+    expect(postCount()).toBe(1);
+  });
+
+  it("clears price fields when switching space type", () => {
+    mockRouteParams = { locationId: "loc_1", locationName: "Rochester Hub" };
+    (apiFetch as jest.Mock).mockResolvedValue([]);
+
+    const { getByLabelText, queryByLabelText, getByText } = render(<OwnerAddSpaceScreen />);
+
+    fireEvent.changeText(getByLabelText("Hourly price"), "50");
+    expect(getByLabelText("Hourly price").props.value).toBe("50");
+
+    // Suite has no hourly field.
+    fireEvent.press(getByText("Suite"));
+    expect(queryByLabelText("Hourly price")).toBeNull();
+
+    // Back to conference room: the prior hourly value was cleared.
+    fireEvent.press(getByText("Conference room"));
+    expect(getByLabelText("Hourly price").props.value).toBe("");
   });
 
   it("creates a new owner location", async () => {

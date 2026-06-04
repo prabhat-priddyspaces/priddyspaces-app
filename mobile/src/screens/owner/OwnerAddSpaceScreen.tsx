@@ -52,6 +52,17 @@ export function OwnerAddSpaceScreen() {
 
   const config = useMemo(() => typeConfig(form.space_type), [form.space_type]);
 
+  const isValid = useMemo(() => {
+    if (!locationId) return false;
+    if (form.space_type !== "virtual_office") {
+      const capacity = Number.parseInt(form.capacity, 10);
+      if (!Number.isFinite(capacity) || capacity < 1) return false;
+    }
+    if (config.requireHourly && !(Number(form.price_hourly) > 0)) return false;
+    if (config.requireDaily && !(Number(form.price_daily) > 0)) return false;
+    return true;
+  }, [locationId, form.space_type, form.capacity, form.price_hourly, form.price_daily, config]);
+
   async function handleSave() {
     if (!token || !locationId) {
       setMessage("Choose a location before creating a space.");
@@ -60,6 +71,14 @@ export function OwnerAddSpaceScreen() {
     const capacity = form.space_type === "virtual_office" ? 1 : Number.parseInt(form.capacity, 10);
     if (!Number.isFinite(capacity) || capacity < 1) {
       setMessage("Capacity must be at least 1.");
+      return;
+    }
+    if (config.requireHourly && !(Number(form.price_hourly) > 0)) {
+      setMessage("Enter an hourly price greater than 0.");
+      return;
+    }
+    if (config.requireDaily && !(Number(form.price_daily) > 0)) {
+      setMessage(`Enter a ${config.dailyLabel.toLowerCase()} greater than 0.`);
       return;
     }
 
@@ -123,13 +142,21 @@ export function OwnerAddSpaceScreen() {
               key={option.value}
               label={option.label}
               active={form.space_type === option.value}
-              onPress={() =>
+              onPress={() => {
+                setMessage("");
                 setForm((current) => ({
                   ...current,
                   space_type: option.value,
                   capacity: option.value === "virtual_office" ? "1" : current.capacity || "1",
-                }))
-              }
+                  // Reset type-specific fields so the form swaps cleanly.
+                  price_hourly: "",
+                  price_daily: "",
+                  availability_start_time: "",
+                  availability_end_time: "",
+                  buffer_before_minutes: "0",
+                  buffer_after_minutes: "0",
+                }));
+              }}
               accessibilityLabel={`Set space type ${option.label}`}
             />
           ))}
@@ -150,6 +177,7 @@ export function OwnerAddSpaceScreen() {
         {config.showHourly ? (
           <Field
             label="Hourly price"
+            required={config.requireHourly}
             value={form.price_hourly}
             onChange={(price_hourly) => setForm({ ...form, price_hourly })}
             keyboardType="decimal-pad"
@@ -157,7 +185,8 @@ export function OwnerAddSpaceScreen() {
         ) : null}
         {config.showDaily ? (
           <Field
-            label="Daily price"
+            label={config.dailyLabel}
+            required={config.requireDaily}
             value={form.price_daily}
             onChange={(price_daily) => setForm({ ...form, price_daily })}
             keyboardType="decimal-pad"
@@ -210,7 +239,14 @@ export function OwnerAddSpaceScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={saving}>
+      <TouchableOpacity
+        style={[styles.primaryButton, (!isValid || saving) && styles.primaryButtonDisabled]}
+        onPress={handleSave}
+        disabled={!isValid || saving}
+        accessibilityRole="button"
+        accessibilityLabel="Create space"
+        accessibilityState={{ disabled: !isValid || saving }}
+      >
         {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Create space</Text>}
       </TouchableOpacity>
     </ScrollView>
@@ -219,12 +255,36 @@ export function OwnerAddSpaceScreen() {
 
 function typeConfig(spaceType: SpaceType) {
   if (spaceType === "conference_room") {
-    return { showHourly: true, showDaily: true, showAvailability: true, showBuffers: true };
+    return {
+      showHourly: true,
+      requireHourly: true,
+      showDaily: true,
+      requireDaily: true,
+      dailyLabel: "Day rate price",
+      showAvailability: true,
+      showBuffers: true,
+    };
   }
   if (spaceType === "shared_desk") {
-    return { showHourly: false, showDaily: true, showAvailability: true, showBuffers: false };
+    return {
+      showHourly: false,
+      requireHourly: false,
+      showDaily: true,
+      requireDaily: true,
+      dailyLabel: "Day pass price",
+      showAvailability: true,
+      showBuffers: false,
+    };
   }
-  return { showHourly: false, showDaily: false, showAvailability: false, showBuffers: false };
+  return {
+    showHourly: false,
+    requireHourly: false,
+    showDaily: false,
+    requireDaily: false,
+    dailyLabel: "Daily price",
+    showAvailability: false,
+    showBuffers: false,
+  };
 }
 
 function moneyPayload(value: string) {
@@ -237,15 +297,20 @@ function Field({
   value,
   onChange,
   keyboardType,
+  required,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   keyboardType?: "default" | "number-pad" | "decimal-pad";
+  required?: boolean;
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required ? " *" : ""}
+      </Text>
       <TextInput
         accessibilityLabel={label}
         value={value}
@@ -373,6 +438,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 13,
     backgroundColor: "#4F46E5"
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5
   },
   primaryButtonText: {
     color: "#FFFFFF",
