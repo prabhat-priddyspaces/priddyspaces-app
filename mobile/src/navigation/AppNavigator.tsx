@@ -28,6 +28,7 @@ import { OwnerMembersScreen } from "../screens/owner/OwnerMembersScreen";
 import { OwnerMemberDetailScreen } from "../screens/owner/OwnerMemberDetailScreen";
 import { OwnerPaymentHealthScreen } from "../screens/owner/OwnerPaymentHealthScreen";
 import { OwnerAssistantPoliciesScreen } from "../screens/owner/OwnerAssistantPoliciesScreen";
+import { OwnerAnalyticsScreen } from "../screens/owner/OwnerAnalyticsScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -243,6 +244,7 @@ function MainApp() {
       <Stack.Screen name="OwnerMembers" component={OwnerMembersScreen} options={{ title: "Members" }} />
       <Stack.Screen name="OwnerMemberDetail" component={OwnerMemberDetailScreen} options={{ title: "Member" }} />
       <Stack.Screen name="OwnerPaymentHealth" component={OwnerPaymentHealthScreen} options={{ title: "Payment health" }} />
+      <Stack.Screen name="OwnerAnalytics" component={OwnerAnalyticsScreen} options={{ title: "Analytics" }} />
       <Stack.Screen
         name="OwnerAssistantPolicies"
         component={OwnerAssistantPoliciesScreen}

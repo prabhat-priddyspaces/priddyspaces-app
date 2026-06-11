@@ -93,7 +93,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner` (dashboard) | `owner/OwnerDashboardScreen` | parity *(Run 3, 2026-06-11)* | KPI parity: MTD revenue, occupancy, approved bookings, active memberships, today's bookings + original counts; error + empty states added. ↔ intentionally simplified: 30-day revenue chart and today timeline render as KPI counts, pending-request actions live on the Bookings tab |
 | `/owner/access-scanner` | `access/AccessScannerScreen` | parity | camera scan + manual token + check-in/out |
 | `/owner/account` | `ProfileScreen` | parity *(Run 17, 2026-06-11)* | same `GET/PATCH /api/me` editor as web incl. web's ≥7-digit phone validation; Clerk-hosted email/password modal has no `@clerk/expo` equivalent — ↔ intentional (managed on web) |
-| `/owner/analytics` | — | missing-on-mobile | desktop-heavy; Open Q3 |
+| `/owner/analytics` | `owner/OwnerAnalyticsScreen` | parity *(Run 23, 2026-06-11; reduced)* | all 8 overview KPIs with deltas, occupancy bars, revenue-per-space, top members, busiest hours from the same 5 analytics endpoints; date-range control. ↔ charts/heatmap visualizations + CSV/PDF exports web-only |
 | `/owner/attendance` | `access/AttendanceScreen` | parity | filters: location/date/type/status/in-office |
 | `/owner/bookings/new` | `owner/OwnerCreateBookingScreen` | parity | member search, preview, cash/link payment |
 | `/owner/calendar` | `owner/OwnerCalendarScreen` | parity *(Run 9, 2026-06-11)* | same `/api/owner/calendar` query + org-location filter + member names + create-booking shortcut; booking/request events open `BookingDetail`. ↔ intentional: day view (like mobile member calendar) instead of web's timeline/week board |
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 23: owner analytics (reduced).** New `OwnerAnalyticsScreen` (owner menu "Analytics") on the same endpoints as `webUI/app/owner/analytics/page.tsx`: overview KPIs incl. revenue/booking deltas and the locations•spaces sub-line, occupancy-by-day bar rows, revenue-per-space list, top members, and top-5 busiest hours derived from the peak-hours matrix; start/end date range with web's defaults. ↔ chart/heatmap visualizations and CSV/PDF exports stay web-only per the visualization policy. 3 new tests (32 suites / 127 tests green). Checklist: all ✅.
 
 - **2026-06-11 — Run 22: deep links + impersonation banner.** Added the `priddyspaces://` URL scheme to `app.json` and a navigation `linking` config (`booking/:bookingId`, notifications, invoices, memberships, owner payments/calendar). Added `me.impersonation` to `AuthContext` and an amber `ImpersonationBanner` above the main stack mirroring web's banner copy, with Stop → `POST /api/admin/impersonation/stop` + `refreshMe()` (web's access-token swap is web-only — ↔). 3 new tests (31 suites / 124 tests green). Both Step 0 cross-cutting gaps closed.
 
