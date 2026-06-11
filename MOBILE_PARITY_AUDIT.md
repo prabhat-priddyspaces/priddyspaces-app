@@ -178,6 +178,23 @@ Per the workflow (propose → confirm → build, one screen per run). Confirm an
 - Gating: owner.
 - **Open question (blocking): requires a new dependency `expo-image-picker` for photo selection. OK to add?**
 
+**Spec 10 — `MemberRewardsScreen`** *(plan item 10 — AWAITING GO)*
+- Mirrors: `webUI/app/member/rewards/page.tsx` (201 lines).
+- Data: `GET /api/loyalty/priddy-wallet`, `GET /api/loyalty/priddy-wallet/transactions`, `GET /api/loyalty/wallets`, `GET /api/loyalty/wallets/{org}/transactions`.
+- Nav: stack screen + member menu entry "Rewards".
+- Open questions: none anticipated; read-only surface.
+
+**Spec 11 — `MemberInsightsScreen`** *(plan item 11 — AWAITING GO)*
+- Mirrors: `webUI/app/member/insights/page.tsx` (117 lines).
+- Data: `GET /api/analytics/me/summary` (single endpoint).
+- Nav: stack screen + member menu entry "Insights".
+- Open questions: if web renders charts, mobile shows stat cards (same divergence policy as owner dashboard).
+
+**Spec 12 — `MemberLocationsScreen`** *(plan item 12 — AWAITING GO)*
+- Mirrors: `webUI/app/member/locations/page.tsx` (322 lines) — "my locations" derived from `GET /api/booking-requests` + `GET /api/locations/{id}` + `GET /api/locations/{id}/spaces`, with quick re-book (payment method resolve).
+- Nav: stack screen + member menu entry "My locations"; space taps reuse `SpaceDetail`.
+- Open questions: quick-rebook flow scope to be inventoried in-run (may stage like Run 7's managers).
+
 **Spec 9 — `OwnerCalendarScreen`** *(plan item 9)*
 - Mirrors: `webUI/app/owner/calendar/page.tsx` (134 lines).
 - Data: `GET /api/orgs`, `GET /api/locations?organization_public_id=`, `GET /api/owner/calendar?start&end&include=bookings,requests,subscriptions`.
