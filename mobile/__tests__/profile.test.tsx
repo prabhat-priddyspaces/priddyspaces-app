@@ -93,6 +93,24 @@ describe("ProfileScreen", () => {
     expect(getByLabelText("Phone").props.value).toBe("5855550199");
   });
 
+  it("rejects phone numbers shorter than 7 digits like web", async () => {
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/me" && options?.method === "GET") return Promise.resolve(profile);
+      return Promise.resolve({});
+    });
+
+    const { getByLabelText, getByText } = render(<ProfileScreen />);
+
+    await waitFor(() => expect(getByLabelText("Phone").props.value).toBe("5551234567"));
+    fireEvent.changeText(getByLabelText("Phone"), "555");
+    fireEvent.press(getByLabelText("Save profile"));
+
+    await waitFor(() => expect(getByText("Enter a valid phone number.")).toBeTruthy());
+    expect(
+      (apiFetch as jest.Mock).mock.calls.filter(([, options]) => options?.method === "PATCH").length,
+    ).toBe(0);
+  });
+
   it("shows an error when the profile fails to load", async () => {
     (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
       if (path === "/api/me" && options?.method === "GET") {

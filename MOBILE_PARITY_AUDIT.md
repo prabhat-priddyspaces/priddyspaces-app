@@ -92,7 +92,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 |---|---|---|---|
 | `/owner` (dashboard) | `owner/OwnerDashboardScreen` | parity *(Run 3, 2026-06-11)* | KPI parity: MTD revenue, occupancy, approved bookings, active memberships, today's bookings + original counts; error + empty states added. ↔ intentionally simplified: 30-day revenue chart and today timeline render as KPI counts, pending-request actions live on the Bookings tab |
 | `/owner/access-scanner` | `access/AccessScannerScreen` | parity | camera scan + manual token + check-in/out |
-| `/owner/account` | — | missing-on-mobile | |
+| `/owner/account` | `ProfileScreen` | parity *(Run 17, 2026-06-11)* | same `GET/PATCH /api/me` editor as web incl. web's ≥7-digit phone validation; Clerk-hosted email/password modal has no `@clerk/expo` equivalent — ↔ intentional (managed on web) |
 | `/owner/analytics` | — | missing-on-mobile | desktop-heavy; Open Q3 |
 | `/owner/attendance` | `access/AttendanceScreen` | parity | filters: location/date/type/status/in-office |
 | `/owner/bookings/new` | `owner/OwnerCreateBookingScreen` | parity | member search, preview, cash/link payment |
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 17: owner account.** Web `/owner/account` is a profile editor over the same `GET/PATCH /api/me` that `ProfileScreen` (Run 1) already implements for all roles. Closed the one real delta: web's phone validation (≥7 digits) now enforced before save. Web's security section opens Clerk's hosted user-profile modal, which `@clerk/expo` does not provide — recorded as ↔ intentional divergence. 1 new test (28 suites / 110 tests green). Checklist: all ✅.
 
 - **2026-06-11 — Run 16: owner members CRM.** New `OwnerMembersScreen` (org chips, search, status chips with counts, member cards with bookings/revenue/tags) and `OwnerMemberDetailScreen` (stats grid; editable status/phone/company/tags/notes via the same `PATCH /api/owner/members/{id}?organization_public_id=` payload as web; upcoming/past activity from member-filtered `/api/owner/calendar`, rows opening `BookingDetail`). Owner menu gains "Members" (distinct from "Team" = staff). Matrix corrected: the earlier overlap guess with `OwnerTeamScreen` was wrong — web members CRM uses `/api/owner/members`, not org-member endpoints. 5 new tests (28 suites / 109 tests green). Checklist: all ✅.
 

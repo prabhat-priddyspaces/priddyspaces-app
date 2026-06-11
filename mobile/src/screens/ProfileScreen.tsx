@@ -54,6 +54,11 @@ export function ProfileScreen() {
 
   async function handleSave() {
     if (!token) return;
+    const digits = form.phone.replace(/\D/g, "");
+    if (digits && digits.length < 7) {
+      setMessage("Enter a valid phone number.");
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
