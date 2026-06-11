@@ -75,7 +75,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/member/directory` | `access/MemberDirectoryScreen` | parity | `/api/member/directory` with search/location/in-office filters |
 | `/member/insights` | `member/MemberInsightsScreen` | parity *(Run 11, 2026-06-11)* | same `/api/analytics/me/summary`: KPI totals, favourite space, usual day/time, 12-week visit bars, upcoming list; member menu "Insights" |
 | `/member/invoices` | `InvoicesScreen` | parity | list + open PDF |
-| `/member/locations` | — | missing-on-mobile | `HomeScreen` search overlaps but isn't "my locations" |
+| `/member/locations` | `member/LocationSpacesScreen` → `SpaceDetailScreen` | parity *(Run 12, 2026-06-11)* | *(corrected: this web page is a location-scoped quick-book page, not "my locations")* — mobile now shows the location header (`GET /api/locations/{id}`), per-space prices + hours; booking happens via `SpaceDetail`'s full checkout (↔ richer than web's inline quick-book form) |
 | `/member/my-space-qr` | `access/MySpaceQrScreen` | parity | |
 | `/member/payments` | `PaymentsScreen` | parity | `/api/payments` history |
 | `/member/payments/success` | `PaymentSuccessScreen` | parity | |
@@ -218,7 +218,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 9. ~~**Owner calendar**~~ — **DONE (Run 9, 2026-06-11)**, see §6a.
 10. ~~**Member rewards**~~ — **DONE (Run 10, 2026-06-11)**, see changelog.
 11. ~~**Member insights**~~ — **DONE (Run 11, 2026-06-11)**, see changelog.
-12. **Member locations** — propose build spec. *(missing)*
+12. ~~**Member locations**~~ — **DONE (Run 12, 2026-06-11)**, see changelog (reclassified: covered by enhanced `LocationSpacesScreen` + existing `SpaceDetail` flow).
 13. **Owner signup + onboarding on mobile** — propose build spec. *(Q1: confirmed wanted)*
 14. **Owner analytics / marketing / loyalty / floor-plan** — propose build specs one at a time. *(Q3: confirmed wanted)*
 15. **Admin console screens** — propose build specs one at a time. *(Q4: confirmed wanted)*
@@ -332,6 +332,7 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 
 ## 7. Changelog
 
+- **2026-06-11 — Run 12: member locations.** Discovery correction: web `/member/locations` (`webUI/app/member/locations/page.tsx`) is a location-scoped quick-book page (`?locationId=`), not a "my locations" list. Mobile already covered the booking capability via `LocationSpacesScreen` → `SpaceDetailScreen` (full checkout incl. payment resolve + consent — richer than web's inline form, ↔ intentional). Closed the remaining info gaps in `LocationSpacesScreen`: location header with address/city (`GET /api/locations/{id}`, graceful fallback to route-param name), per-space prices (day/month) and availability hours, capacity+status line matching web. 4 new tests in `mobile/__tests__/memberLocationSpaces.test.tsx` (25 suites / 94 tests green). Checklist: all ✅.
 - **2026-06-11 — Run 11: member insights.** New `MemberInsightsScreen` (member menu "Insights") mirroring `webUI/app/member/insights/page.tsx` on the same `/api/analytics/me/summary` endpoint: KPI cards (visits, hours, spent, upcoming/past), favourite space, usual day/time, 12-week visit series as native bar rows, upcoming bookings list. Loading/error/empty states; 3 new tests (24 suites / 90 tests green). Checklist: all ✅; web's chart component rendered as lightweight bar rows (↔ visualization simplification).
 - **2026-06-11 — Run 10: member rewards.** New `MemberRewardsScreen` (member menu "Rewards") mirroring `webUI/app/member/rewards/page.tsx`: Priddy Points wallet with recent platform transactions, per-org wallet selector chips, metrics (available/cash value/tier/expiring), balance grid, tier-progress note, and the full rewards ledger with +/- point styling — same four loyalty endpoints and formatters as web. Loading/error/empty states; 4 new tests in `mobile/__tests__/memberRewards.test.tsx` (23 suites / 87 tests green). Checklist: routing ✅ auth ✅ data ✅ actions ✅ (read-only like web) flags ✅ works ✅; tier-progress bar rendered as text note (↔ visualization simplification).
 - **2026-06-11 — Run 9: owner calendar.** New `OwnerCalendarScreen` (owner menu "Calendar"): day view of `/api/owner/calendar` with org-location filter, member names, event → BookingDetail, create-booking shortcut. 5 new tests.
