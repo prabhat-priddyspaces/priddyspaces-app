@@ -39,6 +39,7 @@ import { OwnerMarketingWorkflowsScreen } from "../screens/owner/OwnerMarketingWo
 import { OwnerMarketingSuppressionsScreen } from "../screens/owner/OwnerMarketingSuppressionsScreen";
 import { OwnerMarketingSettingsScreen } from "../screens/owner/OwnerMarketingSettingsScreen";
 import { OwnerFloorPlanScreen } from "../screens/owner/OwnerFloorPlanScreen";
+import { AdminDashboardScreen } from "../screens/admin/AdminDashboardScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -190,6 +191,7 @@ function AdminTabs() {
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
     >
+      <Tabs.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ title: "Dashboard" }} />
       <Tabs.Screen name="Scanner" component={AccessScannerScreen} />
       <Tabs.Screen name="Attendance" component={AttendanceScreen} />
       <Tabs.Screen name="Profile" component={ProfileScreen} />

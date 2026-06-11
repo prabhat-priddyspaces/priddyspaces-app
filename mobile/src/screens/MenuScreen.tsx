@@ -47,6 +47,7 @@ const memberItems: MenuItem[] = [
 ];
 
 const adminItems: MenuItem[] = [
+  { label: "Dashboard", screen: "AdminDashboard", target: "tab" },
   { label: "Scanner", screen: "Scanner", target: "tab" },
   { label: "Attendance", screen: "Attendance", target: "tab" },
   { label: "Notifications", screen: "Notifications", target: "stack" },

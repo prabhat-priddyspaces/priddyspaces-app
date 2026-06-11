@@ -123,7 +123,8 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 |---|---|---|---|
 | `/admin/access-scanner` | `access/AccessScannerScreen` (AdminTabs) | parity | |
 | `/admin/attendance` | `access/AttendanceScreen` (AdminTabs) | parity | |
-| `/admin` + 15 other `/admin/*` routes (analytics, audit-logs, bookings, calendar, listings, members, owner-companies, owner-users, payments, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | full platform console; Open Q4 (likely intentional desktop-only) |
+| `/admin` (dashboard) | `admin/AdminDashboardScreen` | parity *(Run 33, 2026-06-11)* | all 8 platform metrics + recent-activity feed from `/api/admin/dashboard`; new Dashboard tab in AdminTabs + admin menu entry |
+| 13 other `/admin/*` routes (analytics, audit-logs, bookings, calendar, listings, members, owner-companies, owner-users, payments, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | bucket C in progress, one run per screen |
 
 ### Mobile-only / cross-platform widgets
 
@@ -338,6 +339,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 33: admin dashboard.** New `admin/AdminDashboardScreen` mirroring `webUI/app/admin/page.tsx`: the 8 platform metrics (users/members/owner companies/live listings/bookings/pending requests/GMV/platform earnings with web's currency formatting) and the recent-activity feed (action label, entity, actor, timestamp). Added as the first AdminTabs tab + admin menu "Dashboard". 2 new tests (42 suites / 159 tests green).
 
 - **2026-06-11 — Run 32: floor plans.** Discovery correction recorded: web's floor-plan 'editor' is a placeholder canvas — its real capabilities are presign upload (`/api/floor-plans/presign` → PUT → `POST /api/floor-plans`), versioned plan selection, and a numeric marker form (`POST /api/floor-plan-markers`) + marker list. New `OwnerFloorPlanScreen` matches all of it (image-picker upload with the 10 MB cap, plan version chips, marker create/list with web's exact payload) and renders the selected plan image (web doesn't). 'Floor plan' entry on `OwnerLocationsScreen` cards. 3 new tests (41 suites / 157 tests green). **Bucket B (owner desktop suites) complete.**
 
