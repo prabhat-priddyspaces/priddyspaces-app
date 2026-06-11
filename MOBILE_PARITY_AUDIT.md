@@ -124,7 +124,8 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/admin/access-scanner` | `access/AccessScannerScreen` (AdminTabs) | parity | |
 | `/admin/attendance` | `access/AttendanceScreen` (AdminTabs) | parity | |
 | `/admin` (dashboard) | `admin/AdminDashboardScreen` | parity *(Run 33, 2026-06-11)* | all 8 platform metrics + recent-activity feed from `/api/admin/dashboard`; new Dashboard tab in AdminTabs + admin menu entry |
-| 13 other `/admin/*` routes (analytics, audit-logs, bookings, calendar, listings, members, owner-companies, owner-users, payments, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | bucket C in progress, one run per screen |
+| `/admin/audit-logs`, `/admin/bookings`, `/admin/listings` | `admin/Admin{AuditLogs,Bookings,Listings}Screen` | parity *(Run 34, 2026-06-11)* | read-only oversight lists with web's grouping (requests + bookings sections), search on listings; admin menu entries. ↔ audit-log before/after JSON dumps web-only |
+| 10 other `/admin/*` routes (analytics, calendar, members, owner-companies, owner-users, payments, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | bucket C in progress |
 
 ### Mobile-only / cross-platform widgets
 
@@ -339,6 +340,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 34: admin oversight lists.** Three sibling read-only screens (`AdminAuditLogsScreen`, `AdminBookingsScreen`, `AdminListingsScreen`) mirroring their web pages: audit entries with actor + impersonation context (↔ before/after JSON dumps stay web-only), platform bookings + requests sections with web's person/inventory/time-window labels and operator notes, and listings with q-search, visibility/review status, and booking counts. Admin menu entries added. Shared `adminStyles` module introduced. 4 new tests (43 suites / 163 tests green).
 
 - **2026-06-11 — Run 33: admin dashboard.** New `admin/AdminDashboardScreen` mirroring `webUI/app/admin/page.tsx`: the 8 platform metrics (users/members/owner companies/live listings/bookings/pending requests/GMV/platform earnings with web's currency formatting) and the recent-activity feed (action label, entity, actor, timestamp). Added as the first AdminTabs tab + admin menu "Dashboard". 2 new tests (42 suites / 159 tests green).
 
