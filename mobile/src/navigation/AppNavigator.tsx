@@ -52,11 +52,14 @@ import { AccessScannerScreen } from "../screens/access/AccessScannerScreen";
 import { AttendanceScreen } from "../screens/access/AttendanceScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { addNotificationTapListener, registerExpoPushToken } from "../lib/notifications";
+import { ImpersonationBanner } from "../components/ImpersonationBanner";
+import { linking } from "./linking";
 
 const Stack = createNativeStackNavigator();
 const MemberStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 const navigationRef = createNavigationContainerRef<any>();
+
 
 function openAssistant(navigation: any) {
   let current = navigation;
@@ -203,7 +206,9 @@ function MainApp() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: true }}>
+    <>
+      <ImpersonationBanner />
+      <Stack.Navigator screenOptions={{ headerShown: true }}>
       <Stack.Screen
         name="App"
         component={me.platform_role ? AdminTabs : me.role === "owner" ? OwnerTabs : MemberTabs}
@@ -252,7 +257,8 @@ function MainApp() {
       />
       <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
       <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} />
-    </Stack.Navigator>
+      </Stack.Navigator>
+    </>
   );
 }
 
@@ -289,7 +295,7 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isSignedIn ? (
           <Stack.Screen name="Main" component={MainApp} />

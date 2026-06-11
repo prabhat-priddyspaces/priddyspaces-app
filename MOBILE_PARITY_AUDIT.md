@@ -138,8 +138,8 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 1. ~~**Confirmed real gap — owner request approval**~~ — **FIXED in Run 2** (see §6a); waitlist invite + email resend remain web-only.
 2. ~~**Confirmed real gap — member profile editing**~~ — **FIXED in Run 1** (see §6a).
 3. **No code sharing:** API clients, types, and availability math are duplicated (§2). Any parity work should consider extracting shared types or accept duplication knowingly.
-4. **No deep-link scheme** in `mobile/app.json`; only push-tap → BookingDetail routing exists.
-5. **No impersonation on mobile** (web layouts support admin impersonation).
+4. ~~**No deep-link scheme**~~ — fixed Run 22: `priddyspaces://` scheme + linking config (`mobile/src/navigation/linking.ts`) for booking/notifications/invoices/memberships/owner payments/owner calendar.
+5. ~~**No impersonation on mobile**~~ — fixed Run 22: `me.impersonation` context + amber banner with stop action (`mobile/src/components/ImpersonationBanner.tsx`); web's token-swap on stop is web-only (mobile re-fetches `/api/me`).
 6. **Mobile gaps in state handling:** ~~`OwnerDashboardScreen` lacks error states~~ (fixed Run 3); `BookingDetailScreen` lacks empty state; auth screens surface errors via `Alert` only.
 
 ## 5. Open questions — DECIDED 2026-06-11
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 22: deep links + impersonation banner.** Added the `priddyspaces://` URL scheme to `app.json` and a navigation `linking` config (`booking/:bookingId`, notifications, invoices, memberships, owner payments/calendar). Added `me.impersonation` to `AuthContext` and an amber `ImpersonationBanner` above the main stack mirroring web's banner copy, with Stop → `POST /api/admin/impersonation/stop` + `refreshMe()` (web's access-token swap is web-only — ↔). 3 new tests (31 suites / 124 tests green). Both Step 0 cross-cutting gaps closed.
 
 - **2026-06-11 — Run 21: lease terms manager.** `OwnerSpaceEditScreen` gained web's `LeaseTermsManager` capabilities for non-conference types: membership-plan list filtered by the space-type→booking-mode mapping, create/edit form (term months, monthly price, default plan names, seats, max subscriptions) with web's validations and payloads, first-plan `PUT /api/spaces/{id}/booking-modes` enable, and deactivate/reactivate via DELETE/PATCH. 1 new test (30 suites / 121 tests green). `/owner/spaces/.../edit` now fully at parity — the Run 7 staged set is complete.
 

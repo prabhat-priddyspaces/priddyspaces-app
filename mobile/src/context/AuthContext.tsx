@@ -3,6 +3,13 @@ import { useAuth as useClerkAuth, useSignIn, useSignUp } from "@clerk/expo";
 
 import { API_BASE_URL } from "../constants";
 
+type ImpersonationContext = {
+  is_impersonating: boolean;
+  target_email: string | null;
+  actor_email: string | null;
+  reason: string | null;
+};
+
 type MeData = {
   email: string;
   role: string | null;
@@ -10,6 +17,7 @@ type MeData = {
   platform_role: string | null;
   has_organization: boolean;
   default_route: string;
+  impersonation: ImpersonationContext | null;
 };
 
 type AuthState = {
@@ -93,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         platform_role: data.platform_role,
         has_organization: data.has_organization ?? false,
         default_route: data.default_route ?? "/onboarding/member",
+        impersonation: data.impersonation ?? null,
       };
     } catch {
       return null;
