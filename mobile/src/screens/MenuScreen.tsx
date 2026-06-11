@@ -15,6 +15,7 @@ const ownerItems: MenuItem[] = [
   { label: "Attendance", screen: "Attendance", target: "tab" },
   { label: "Locations", screen: "Locations", target: "tab" },
   { label: "Bookings", screen: "Bookings", target: "tab" },
+  { label: "Calendar", screen: "OwnerCalendar", target: "stack" },
   { label: "Team", screen: "OwnerTeam", target: "stack" },
   { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Settings", screen: "OwnerSettings", target: "stack" },

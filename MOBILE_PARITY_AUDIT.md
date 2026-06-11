@@ -96,7 +96,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/analytics` | — | missing-on-mobile | desktop-heavy; Open Q3 |
 | `/owner/attendance` | `access/AttendanceScreen` | parity | filters: location/date/type/status/in-office |
 | `/owner/bookings/new` | `owner/OwnerCreateBookingScreen` | parity | member search, preview, cash/link payment |
-| `/owner/calendar` | — | missing-on-mobile | `MemberCalendarScreen` is member-scoped; owners have no calendar on mobile |
+| `/owner/calendar` | `owner/OwnerCalendarScreen` | parity *(Run 9, 2026-06-11)* | same `/api/owner/calendar` query + org-location filter + member names + create-booking shortcut; booking/request events open `BookingDetail`. ↔ intentional: day view (like mobile member calendar) instead of web's timeline/week board |
 | `/owner/invoices` | `InvoicesScreen` (shared) | partial | owner-side invoice creation parity unverified |
 | `/owner/locations` | `owner/OwnerLocationsScreen` | parity | |
 | `/owner/locations/new` | `owner/OwnerNewLocationScreen` | parity | |
@@ -198,7 +198,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 6. ~~**Member subscriptions**~~ — **DONE (Run 6, 2026-06-11)**, see §6a.
 7. ~~**Owner space edit**~~ — **core form DONE (Run 7, 2026-06-11)**, see §6a; advanced managers (lease terms / volume discounts / setup fees) staged as follow-up.
 8. ~~**Owner space media**~~ — **DONE (Run 8, 2026-06-11)**, see §6a.
-9. **Owner calendar** — propose build spec. *(missing)*
+9. ~~**Owner calendar**~~ — **DONE (Run 9, 2026-06-11)**, see §6a.
 10. **Member rewards** — propose build spec. *(missing)*
 11. **Member insights** — propose build spec. *(missing)*
 12. **Member locations** — propose build spec. *(missing)*
@@ -302,8 +302,20 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerSpaceMediaScreen.ts
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerSpaceMedia.test.tsx` (gallery render, full presign upload flow with payload checks, permission denial, 10 MB rejection, rooms entry point). Full suite green (21 suites / 78 tests).
 - Dependency added: `expo-image-picker@~17.0.11` (user-approved); lockfile regenerated with npm 10 for CI compatibility.
 
+### Run 9 — `OwnerCalendarScreen` vs `/owner/calendar` (2026-06-11)
+
+Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`, mirrors `webUI/app/owner/calendar/page.tsx`; nav placement per user decision: owner menu entry, not a 7th tab):
+
+- **Routing:** ✅ — stack route `OwnerCalendar`; owner menu entry "Calendar"; booking/request events open `BookingDetail`; "Create booking" → `OwnerCreateBooking` (mirrors web's header CTA).
+- **Auth + tenancy:** ✅ — same `/api/owner/calendar?start&end&location_public_id` query; locations preloaded from `/api/orgs` → `/api/locations?organization_public_id=` with web's sole-location auto-select.
+- **Data:** ✅ — events with member names, plan badges, payment status, timezone-correct times; loading/error/empty states present.
+- **Actions:** ✅ — day prev/today/next, location filter chips, event open, create booking. Web's space-type/space/status/member-search filters: ↔ simplified to location filter, matching the existing mobile member-calendar pattern; web's timeline/week board → day list (intentional mobile pattern).
+- **Feature flags/permissions:** ✅ — server-side owner scoping.
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 9: owner calendar.** New `OwnerCalendarScreen` (owner menu "Calendar"): day view of `/api/owner/calendar` with org-location filter, member names, event → BookingDetail, create-booking shortcut. 5 new tests.
 - **2026-06-11 — Run 8: owner space media.** New `OwnerSpaceMediaScreen` with photo-library picking and web's presign upload flow; "Photos" entry on room cards; photo permissions added to app.json; `expo-image-picker` dependency added. 5 new tests.
 - **2026-06-11 — Run 7: owner space edit (core form).** New `OwnerSpaceEditScreen` + "Edit space" entry on `OwnerLocationRoomsScreen`. Web-parity PATCH payload and type-dependent form rules. Advanced managers staged. 5 new tests.
 - **2026-06-11 — Run 6: member subscriptions.** New `MemberSubscriptionsScreen` (stack route + member menu "Memberships"): list, status stats, past-due banner → Payments, cancel-at-period-end with inline confirm, links to membership space. 5 new tests.
