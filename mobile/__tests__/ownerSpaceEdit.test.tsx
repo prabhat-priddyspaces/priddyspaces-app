@@ -140,12 +140,61 @@ describe("OwnerSpaceEditScreen", () => {
     });
   });
 
+
+  it("saves volume discount tiers and setup fees with web payloads", async () => {
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      const method = options?.method || "GET";
+      if (path === "/api/spaces/space_1" && method === "GET") return Promise.resolve(conferenceSpace);
+      if (path === "/api/spaces/space_1/volume-discounts" && method === "GET") {
+        return Promise.resolve([{ min_hours: 4, discount_percent: 10, is_active: true }]);
+      }
+      if (path === "/api/spaces/space_1/setup-fees" && method === "GET") {
+        return Promise.resolve([
+          { label: "Room setup", amount_cents: 7500, is_active: true, sort_order: 0 },
+          { label: "Old fee", amount_cents: 100, is_active: false, sort_order: 1 },
+        ]);
+      }
+      if (method === "PUT") return Promise.resolve({});
+      return Promise.resolve([]);
+    });
+
+    const { getByLabelText, getByText } = render(<OwnerSpaceEditScreen />);
+
+    await waitFor(() => expect(getByLabelText("Min hours 1").props.value).toBe("4"));
+    fireEvent.changeText(getByLabelText("Discount % 1"), "15");
+    fireEvent.press(getByLabelText("Save tiers"));
+    await waitFor(() => expect(getByText("Tiers saved")).toBeTruthy());
+    const tiersCall = (apiFetch as jest.Mock).mock.calls.find(
+      ([path, options]) => path === "/api/spaces/space_1/volume-discounts" && options?.method === "PUT",
+    );
+    expect(JSON.parse(tiersCall[1].body)).toEqual({
+      tiers: [{ min_hours: 4, discount_percent: 15, is_active: true }],
+    });
+
+    // Inactive fees are filtered out on load, like web.
+    expect(getByLabelText("Line item 1").props.value).toBe("Room setup");
+    fireEvent.press(getByLabelText("Add fee"));
+    fireEvent.changeText(getByLabelText("Line item 2"), "Cleaning");
+    fireEvent.changeText(getByLabelText("Amount $ 2"), "25.50");
+    fireEvent.press(getByLabelText("Save setup fees"));
+    await waitFor(() => expect(getByText("Setup fees saved")).toBeTruthy());
+    const feesCall = (apiFetch as jest.Mock).mock.calls.find(
+      ([path, options]) => path === "/api/spaces/space_1/setup-fees" && options?.method === "PUT",
+    );
+    expect(JSON.parse(feesCall[1].body)).toEqual({
+      items: [
+        { label: "Room setup", amount_cents: 7500, is_active: true, sort_order: 0 },
+        { label: "Cleaning", amount_cents: 2550, is_active: true, sort_order: 1 },
+      ],
+    });
+  });
+
   it("surfaces load errors", async () => {
     (apiFetch as jest.Mock).mockImplementation(() => Promise.reject(new Error("Failed to load space")));
 
-    const { getByText } = render(<OwnerSpaceEditScreen />);
+    const { getAllByText } = render(<OwnerSpaceEditScreen />);
 
-    await waitFor(() => expect(getByText("Failed to load space")).toBeTruthy());
+    await waitFor(() => expect(getAllByText("Failed to load space").length).toBeGreaterThanOrEqual(1));
   });
 });
 

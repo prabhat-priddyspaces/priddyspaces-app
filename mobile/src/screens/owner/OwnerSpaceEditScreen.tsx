@@ -296,7 +296,237 @@ export function OwnerSpaceEditScreen() {
       >
         {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save Changes</Text>}
       </TouchableOpacity>
+
+      {form.space_type === "conference_room" || form.space_type === "shared_desk" ? (
+        <VolumeDiscountsSection spaceId={spaceId} token={token} />
+      ) : null}
+      <SetupFeesSection spaceId={spaceId} token={token} />
     </ScrollView>
+  );
+}
+
+type VolumeTier = { min_hours: number; discount_percent: number; is_active: boolean };
+type VolumeDraft = { min_hours: string; discount_percent: string };
+
+function VolumeDiscountsSection({ spaceId, token }: { spaceId?: string; token: string | null }) {
+  const [rows, setRows] = useState<VolumeDraft[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!token || !spaceId) return;
+    apiFetch<VolumeTier[]>(`/api/spaces/${spaceId}/volume-discounts`, { method: "GET" }, token)
+      .then((tiers) =>
+        setRows(
+          tiers.map((tier) => ({
+            min_hours: String(tier.min_hours),
+            discount_percent: String(tier.discount_percent),
+          })),
+        ),
+      )
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load tiers"));
+  }, [token, spaceId]);
+
+  async function save() {
+    if (!token || !spaceId) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const tiers = rows
+        .map((row) => ({
+          min_hours: Number(row.min_hours),
+          discount_percent: Number(row.discount_percent),
+          is_active: true,
+        }))
+        .filter((tier) => tier.min_hours > 0 && tier.discount_percent > 0 && tier.discount_percent < 100);
+      await apiFetch(
+        `/api/spaces/${spaceId}/volume-discounts`,
+        { method: "PUT", body: JSON.stringify({ tiers }) },
+        token,
+      );
+      setMessage("Tiers saved");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Volume discounts</Text>
+      <Text style={styles.helperText}>
+        Reward longer hourly bookings. Members booking at least the minimum hours get the discount
+        automatically. Hourly bookings only.
+      </Text>
+      {rows.length === 0 ? <Text style={styles.helperText}>No discount tiers yet.</Text> : null}
+      {rows.map((row, index) => (
+        <View key={index} style={styles.row}>
+          <Field
+            label={`Min hours ${index + 1}`}
+            value={row.min_hours}
+            onChange={(value) =>
+              setRows((current) => current.map((r, i) => (i === index ? { ...r, min_hours: value } : r)))
+            }
+            keyboardType="number-pad"
+          />
+          <Field
+            label={`Discount % ${index + 1}`}
+            value={row.discount_percent}
+            onChange={(value) =>
+              setRows((current) =>
+                current.map((r, i) => (i === index ? { ...r, discount_percent: value } : r)),
+              )
+            }
+            keyboardType="number-pad"
+          />
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setRows((current) => current.filter((_, i) => i !== index))}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove tier ${index + 1}`}
+          >
+            <Text style={styles.secondaryButtonText}>Remove</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      <View style={styles.row}>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => setRows((current) => [...current, { min_hours: "", discount_percent: "" }])}
+          accessibilityRole="button"
+          accessibilityLabel="Add tier"
+        >
+          <Text style={styles.secondaryButtonText}>Add tier</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={save}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Save tiers"
+        >
+          <Text style={styles.secondaryButtonText}>{saving ? "Saving…" : "Save tiers"}</Text>
+        </TouchableOpacity>
+      </View>
+      {message ? (
+        <Text style={message === "Tiers saved" ? styles.successMessage : styles.message}>{message}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+type SetupFeeItem = { label: string; amount_cents: number; is_active: boolean; sort_order: number };
+type SetupFeeDraft = { label: string; amount: string };
+
+function formatFeeAmount(cents: number) {
+  return (cents / 100).toFixed(2).replace(/\.00$/, "");
+}
+
+function SetupFeesSection({ spaceId, token }: { spaceId?: string; token: string | null }) {
+  const [rows, setRows] = useState<SetupFeeDraft[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!token || !spaceId) return;
+    apiFetch<SetupFeeItem[]>(`/api/spaces/${spaceId}/setup-fees`, { method: "GET" }, token)
+      .then((items) =>
+        setRows(
+          items
+            .filter((item) => item.is_active)
+            .map((item) => ({ label: item.label, amount: formatFeeAmount(item.amount_cents) })),
+        ),
+      )
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load setup fees"));
+  }, [token, spaceId]);
+
+  async function save() {
+    if (!token || !spaceId) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const items = rows
+        .map((row, index) => ({
+          label: row.label.trim(),
+          amount_cents: Math.round(Number(row.amount) * 100),
+          is_active: true,
+          sort_order: index,
+        }))
+        .filter((item) => item.label && item.amount_cents > 0);
+      await apiFetch(
+        `/api/spaces/${spaceId}/setup-fees`,
+        { method: "PUT", body: JSON.stringify({ items }) },
+        token,
+      );
+      setRows(items.map((item) => ({ label: item.label, amount: formatFeeAmount(item.amount_cents) })));
+      setMessage("Setup fees saved");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>One-time setup fees</Text>
+      <Text style={styles.helperText}>
+        Mandatory setup costs shown before checkout and charged once per booking request.
+      </Text>
+      {rows.length === 0 ? <Text style={styles.helperText}>No setup fees yet.</Text> : null}
+      {rows.map((row, index) => (
+        <View key={index} style={styles.row}>
+          <Field
+            label={`Line item ${index + 1}`}
+            value={row.label}
+            onChange={(value) =>
+              setRows((current) => current.map((r, i) => (i === index ? { ...r, label: value } : r)))
+            }
+          />
+          <Field
+            label={`Amount $ ${index + 1}`}
+            value={row.amount}
+            onChange={(value) =>
+              setRows((current) => current.map((r, i) => (i === index ? { ...r, amount: value } : r)))
+            }
+            keyboardType="decimal-pad"
+          />
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => setRows((current) => current.filter((_, i) => i !== index))}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove fee ${index + 1}`}
+          >
+            <Text style={styles.secondaryButtonText}>Remove</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      <View style={styles.row}>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => setRows((current) => [...current, { label: "", amount: "" }])}
+          accessibilityRole="button"
+          accessibilityLabel="Add fee"
+        >
+          <Text style={styles.secondaryButtonText}>Add fee</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={save}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Save setup fees"
+        >
+          <Text style={styles.secondaryButtonText}>{saving ? "Saving..." : "Save setup fees"}</Text>
+        </TouchableOpacity>
+      </View>
+      {message ? (
+        <Text style={message === "Setup fees saved" ? styles.successMessage : styles.message}>
+          {message}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
