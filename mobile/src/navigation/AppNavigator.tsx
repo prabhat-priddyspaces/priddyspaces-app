@@ -32,6 +32,7 @@ import { OwnerTeamScreen } from "../screens/owner/OwnerTeamScreen";
 import { LocationSpacesScreen } from "../screens/member/LocationSpacesScreen";
 import { MemberSubscriptionsScreen } from "../screens/member/MemberSubscriptionsScreen";
 import { MemberRewardsScreen } from "../screens/member/MemberRewardsScreen";
+import { MemberInsightsScreen } from "../screens/member/MemberInsightsScreen";
 import { SpaceDetailScreen } from "../screens/member/SpaceDetailScreen";
 import { BookingDetailScreen } from "../screens/BookingDetailScreen";
 import { PaymentSuccessScreen } from "../screens/PaymentSuccessScreen";
@@ -213,6 +214,7 @@ function MainApp() {
         options={{ title: "Memberships" }}
       />
       <Stack.Screen name="MemberRewards" component={MemberRewardsScreen} options={{ title: "Rewards" }} />
+      <Stack.Screen name="MemberInsights" component={MemberInsightsScreen} options={{ title: "Insights" }} />
       <Stack.Screen name="Payments" component={PaymentsScreen} options={{ title: "Payments" }} />
       <Stack.Screen name="MemberDirectory" component={MemberDirectoryScreen} options={{ title: "Directory" }} />
       <Stack.Screen name="AccessPasses" component={AccessPassesScreen} options={{ title: "Access Passes" }} />

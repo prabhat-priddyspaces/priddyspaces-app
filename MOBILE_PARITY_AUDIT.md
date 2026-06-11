@@ -73,7 +73,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/member/access-passes` | `access/AccessPassesScreen` | parity | `/api/access-passes` |
 | `/member/calendar` | `MemberCalendarScreen` | parity | **same endpoint both sides: `/api/me/calendar`** (verified) |
 | `/member/directory` | `access/MemberDirectoryScreen` | parity | `/api/member/directory` with search/location/in-office filters |
-| `/member/insights` | — | missing-on-mobile | proposal needed |
+| `/member/insights` | `member/MemberInsightsScreen` | parity *(Run 11, 2026-06-11)* | same `/api/analytics/me/summary`: KPI totals, favourite space, usual day/time, 12-week visit bars, upcoming list; member menu "Insights" |
 | `/member/invoices` | `InvoicesScreen` | parity | list + open PDF |
 | `/member/locations` | — | missing-on-mobile | `HomeScreen` search overlaps but isn't "my locations" |
 | `/member/my-space-qr` | `access/MySpaceQrScreen` | parity | |
@@ -217,7 +217,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 8. ~~**Owner space media**~~ — **DONE (Run 8, 2026-06-11)**, see §6a.
 9. ~~**Owner calendar**~~ — **DONE (Run 9, 2026-06-11)**, see §6a.
 10. ~~**Member rewards**~~ — **DONE (Run 10, 2026-06-11)**, see changelog.
-11. **Member insights** — propose build spec. *(missing)*
+11. ~~**Member insights**~~ — **DONE (Run 11, 2026-06-11)**, see changelog.
 12. **Member locations** — propose build spec. *(missing)*
 13. **Owner signup + onboarding on mobile** — propose build spec. *(Q1: confirmed wanted)*
 14. **Owner analytics / marketing / loyalty / floor-plan** — propose build specs one at a time. *(Q3: confirmed wanted)*
@@ -332,6 +332,7 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 
 ## 7. Changelog
 
+- **2026-06-11 — Run 11: member insights.** New `MemberInsightsScreen` (member menu "Insights") mirroring `webUI/app/member/insights/page.tsx` on the same `/api/analytics/me/summary` endpoint: KPI cards (visits, hours, spent, upcoming/past), favourite space, usual day/time, 12-week visit series as native bar rows, upcoming bookings list. Loading/error/empty states; 3 new tests (24 suites / 90 tests green). Checklist: all ✅; web's chart component rendered as lightweight bar rows (↔ visualization simplification).
 - **2026-06-11 — Run 10: member rewards.** New `MemberRewardsScreen` (member menu "Rewards") mirroring `webUI/app/member/rewards/page.tsx`: Priddy Points wallet with recent platform transactions, per-org wallet selector chips, metrics (available/cash value/tier/expiring), balance grid, tier-progress note, and the full rewards ledger with +/- point styling — same four loyalty endpoints and formatters as web. Loading/error/empty states; 4 new tests in `mobile/__tests__/memberRewards.test.tsx` (23 suites / 87 tests green). Checklist: routing ✅ auth ✅ data ✅ actions ✅ (read-only like web) flags ✅ works ✅; tier-progress bar rendered as text note (↔ visualization simplification).
 - **2026-06-11 — Run 9: owner calendar.** New `OwnerCalendarScreen` (owner menu "Calendar"): day view of `/api/owner/calendar` with org-location filter, member names, event → BookingDetail, create-booking shortcut. 5 new tests.
 - **2026-06-11 — Run 8: owner space media.** New `OwnerSpaceMediaScreen` with photo-library picking and web's presign upload flow; "Photos" entry on room cards; photo permissions added to app.json; `expo-image-picker` dependency added. 5 new tests.
