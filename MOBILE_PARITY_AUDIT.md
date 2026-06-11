@@ -107,7 +107,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/marketing/*` (8 routes) | — | missing-on-mobile | campaign/segments/templates/workflows suite; Open Q3 |
 | `/owner/members`, `/owner/members/[public_id]` | `owner/OwnerMembersScreen` + `owner/OwnerMemberDetailScreen` | parity *(Run 16, 2026-06-11)* | CRM list (`/api/owner/members` with org/search/status filters, counts, stats, tags) + detail (stats grid, editable status/phone/company/tags/notes via PATCH, upcoming/past activity from member-filtered `/api/owner/calendar`); owner menu "Members" |
 | `/owner/payments` | `owner/OwnerPaymentsScreen` | parity *(Run 15, 2026-06-11)* | new owner payments overview: status stats, org-scoped payout ledger summary (`/api/owner/payout-summary`), rich ledger (member/space/when, fee/net/commission, failure reasons), invoice + follow-up links; owner menu and dashboard money cards now point here (members keep `PaymentsScreen`) |
-| `/owner/payments/health` | — | missing-on-mobile | |
+| `/owner/payments/health` | `owner/OwnerPaymentHealthScreen` | parity *(Run 18, 2026-06-11)* | at-risk card dashboard: summary, status/window/location/search filters, single (forced) + bulk reminder emails via `/api/owner/payment-health/card-notices`; owner menu "Payment health". ↔ CSV export web-only |
 | `/owner/requests` | `owner/OwnerBookingsScreen` | parity *(Runs 2+14, 2026-06-11)* | approve/reject + operator notes, status filter chips (all/pending/approved/payment-failed/rejected/cancelled), waitlist section with invite-to-book + notes (`/api/booking-waitlist/{id}/invite`), per-request email delivery summaries with resend for failed/bounced/not-sent (`/api/booking-requests/{id}/emails/resend`) |
 | `/owner/settings` | `owner/OwnerSettingsScreen` | partial | mobile covers pricing rules, promo codes, waitlist, cancellation policies, Stripe connect; full web settings surface unverified |
 | `/owner/settings/assistant-policies` | — | missing-on-mobile | |
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 18: owner payment health.** New `OwnerPaymentHealthScreen` mirroring `webUI/app/owner/payments/health/page.tsx`: summary cards (expired/expiring/missing-expiry/upcoming value/recent volume), web's default filters (`status=at_risk`, `window_days=30`) with status/window/location chips + search, card rows with member/card/expiry/risk counts/money/last-notice, per-card forced reminder and bulk select+send via `POST /api/owner/payment-health/card-notices` with web's exact payload and result message. ↔ CSV export stays web-only. 5 new tests (29 suites / 115 tests green). Checklist: all ✅.
 
 - **2026-06-11 — Run 17: owner account.** Web `/owner/account` is a profile editor over the same `GET/PATCH /api/me` that `ProfileScreen` (Run 1) already implements for all roles. Closed the one real delta: web's phone validation (≥7 digits) now enforced before save. Web's security section opens Clerk's hosted user-profile modal, which `@clerk/expo` does not provide — recorded as ↔ intentional divergence. 1 new test (28 suites / 110 tests green). Checklist: all ✅.
 

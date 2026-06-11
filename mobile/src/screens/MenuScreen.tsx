@@ -22,6 +22,7 @@ const ownerItems: MenuItem[] = [
   { label: "Settings", screen: "OwnerSettings", target: "stack" },
   { label: "Payment providers", screen: "OwnerPaymentSettings", target: "stack" },
   { label: "Payments", screen: "OwnerPayments", target: "stack" },
+  { label: "Payment health", screen: "OwnerPaymentHealth", target: "stack" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" }
 ];
