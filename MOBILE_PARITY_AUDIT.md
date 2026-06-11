@@ -2,7 +2,7 @@
 
 Goal: bring `mobile/` (Expo / React Native) to functional + UI parity with `webUI/` (Next.js App Router) — same capabilities, data, states, and auth/org gating, while preserving intentional mobile-native patterns.
 
-- **Last updated:** 2026-06-11 (Step 0 — discovery run, no code changed)
+- **Last updated:** 2026-06-11 (Run 39 — parity initiative COMPLETE: every web route is at parity or documented intentional divergence)
 - **Web root:** `webUI/app` — Next.js App Router, 97 `page.tsx` routes
 - **Mobile root:** `mobile/` — Expo + classic React Navigation (NOT expo-router); navigator at `mobile/src/navigation/AppNavigator.tsx`, 32 screens under `mobile/src/screens/`
 
@@ -129,7 +129,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/admin/owner-companies`, `/admin/payments` | `admin/Admin{OwnerCompanies,Payments}Screen` | parity *(Run 36, 2026-06-11)* | companies: q-search, review approve/reject with notes + commission override (web's PATCH payload), payment status/blockers, role-gated edit controls; payments: GMV/earnings/net/failed summary + full ledger. ↔ review-history JSON web-only |
 | `/admin/platform-team`, `/admin/assistant-quality` | `admin/Admin{PlatformTeam,AssistantQuality}Screen` | parity *(Run 37, 2026-06-11)* | team: superadmin-gated invite/role/active/remove with web's payloads; quality: metrics + reliability/tool-failure/policy-gap/persona/low-rated breakdowns |
 | `/admin/users`, `/admin/calendar` | `admin/Admin{Users,Calendar}Screen` | parity *(Run 38, 2026-06-11)* | users: q + role/status filters, owner-invite form with web's optional-field payload, per-user role/activity rows; calendar: day view across all owners with company filter. ↔ pagination + email-verified filter simplified to core filters |
-| 2 other `/admin/*` routes (analytics, settings) | — | missing-on-mobile | final bucket C run |
+| `/admin/analytics`, `/admin/settings` | `admin/Admin{Analytics,Settings}Screen` | parity *(Run 39, 2026-06-11)* | analytics: platform summary (GMV/earnings/take-rate/failed/new members/owners) + org leaderboard + top cities with date range (↔ charts/CSV web-only); settings: platform defaults incl. Priddy Points config with web's PATCH payload, admin profile, password change with web's current-password rule. **Bucket C complete — all 16 admin routes covered.** |
 
 ### Mobile-only / cross-platform widgets
 
@@ -233,8 +233,8 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 11. ~~**Member insights**~~ — **DONE (Run 11, 2026-06-11)**, see changelog.
 12. ~~**Member locations**~~ — **DONE (Run 12, 2026-06-11)**, see changelog (reclassified: covered by enhanced `LocationSpacesScreen` + existing `SpaceDetail` flow).
 13. ~~**Owner signup + onboarding on mobile**~~ — **DONE (Run 13, 2026-06-11)**, see changelog.
-14. **Owner analytics / marketing / loyalty / floor-plan** — propose build specs one at a time. *(Q3: confirmed wanted)*
-15. **Admin console screens** — propose build specs one at a time. *(Q4: confirmed wanted)*
+14. ~~**Owner analytics / marketing / loyalty / floor-plan**~~ — **DONE (Runs 23–32)**.
+15. ~~**Admin console screens**~~ — **DONE (Runs 33–39)**. Parity initiative complete; remaining intentional divergences are documented per-row in the matrix.
 
 ## 6a. Per-screen findings
 
@@ -344,6 +344,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 39: admin analytics + settings — PARITY INITIATIVE COMPLETE.** Analytics screen on the three admin analytics endpoints (platform summary with take-rate, org leaderboard, top cities, date range; charts/heatmap/CSV stay web-only per policy); settings screen with platform defaults (commission, Priddy Points enable/signup points/eligible space types + booking modes, calendar daily prices) saved with web's exact PATCH payload, admin profile editing, and password change honoring web's has-password rule. 3 new tests (48 suites / 178 tests green). **All 16 `/admin/*` routes covered — every web route in the parity matrix is now at parity or a documented intentional divergence.**
 
 - **2026-06-11 — Run 38: admin users + platform calendar.** Users screen with q + role (all/member/owner/platform/unassigned) + status filters mapped to web's params, owner-invite form posting web's optional-field payload (then jumping to the owner filter like web), and per-user role/verification/activity rows; platform calendar with day navigation and the owner-company filter feeding `organization_public_id`. 3 new tests (47 suites / 175 tests green).
 

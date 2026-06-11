@@ -60,6 +60,8 @@ const adminItems: MenuItem[] = [
   { label: "Calendar", screen: "AdminCalendar", target: "stack" },
   { label: "Platform team", screen: "AdminPlatformTeam", target: "stack" },
   { label: "Assistant quality", screen: "AdminAssistantQuality", target: "stack" },
+  { label: "Analytics", screen: "AdminAnalytics", target: "stack" },
+  { label: "Settings", screen: "AdminSettings", target: "stack" },
   { label: "Attendance", screen: "Attendance", target: "tab" },
   { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" },
