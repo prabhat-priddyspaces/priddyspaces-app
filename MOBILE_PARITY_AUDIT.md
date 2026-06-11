@@ -106,12 +106,12 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/loyalty` | — | missing-on-mobile | Open Q3 |
 | `/owner/marketing/*` (8 routes) | — | missing-on-mobile | campaign/segments/templates/workflows suite; Open Q3 |
 | `/owner/members`, `/owner/members/[public_id]` | — (overlaps `OwnerTeamScreen`) | partial | both web pages and mobile `OwnerTeamScreen` hit `/api/orgs/{orgId}/members`; exact split members-vs-team needs per-screen verification |
-| `/owner/payments` | `PaymentsScreen` (history only) | partial | web page = payment **provider settings**; mobile only has history + Stripe connect inside `OwnerSettingsScreen` |
+| `/owner/payments` | `PaymentsScreen` + `InvoicesScreen` | partial | *(corrected Run 4: this web page is a payments **overview** — payments list, invoices, payout summary, not provider settings)*; mobile covers payments + invoices; payout summary (`/api/owner/payouts` area) missing |
 | `/owner/payments/health` | — | missing-on-mobile | |
 | `/owner/requests` | `owner/OwnerBookingsScreen` | partial *(approve/reject added Run 2, 2026-06-11)* | approve/reject with operator notes now on mobile (`POST /api/booking-requests/{id}/approve\|reject`); still web-only: waitlist invite (`/api/booking-waitlist/{id}/invite`), email resend (`/api/booking-requests/{id}/emails/resend`), status filters/history view |
 | `/owner/settings` | `owner/OwnerSettingsScreen` | partial | mobile covers pricing rules, promo codes, waitlist, cancellation policies, Stripe connect; full web settings surface unverified |
 | `/owner/settings/assistant-policies` | — | missing-on-mobile | |
-| `/owner/settings/payments` | `OwnerSettingsScreen` (connect only) | partial | provider enable/disable toggles missing |
+| `/owner/settings/payments` | `owner/OwnerPaymentSettingsScreen` | parity *(Run 4, 2026-06-11)* | new screen: marketplace readiness, Stripe/CardPointe credential form, test connection, enable/disable, org + location provider overrides — same endpoints as web; in owner menu as "Payment providers" |
 | `/owner/spaces/new` | `owner/OwnerAddSpaceScreen` | parity | |
 | `/owner/spaces/{edit,[spaceId]/edit}` | — | missing-on-mobile | owners can create but not edit spaces on mobile |
 | `/owner/spaces/{media,[spaceId]/media}` | — | missing-on-mobile | no media management on mobile |
@@ -159,7 +159,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 1. ~~**Member profile**~~ — **DONE (Run 1, 2026-06-11)**, see §6a.
 2. ~~**Owner request approval**~~ — **DONE (Run 2, 2026-06-11)**, see §6a. Follow-ups (waitlist invite, email resend) tracked in the matrix as partial.
 3. ~~**Owner dashboard states + KPIs**~~ — **DONE (Run 3, 2026-06-11)**, see §6a.
-4. **Owner payments settings** — provider toggles parity vs `/owner/payments`. *(partial)*
+4. ~~**Owner payments settings**~~ — **DONE (Run 4, 2026-06-11)**, see §6a. (Target corrected to `/owner/settings/payments`; `/owner/payments` payout summary remains a small partial gap.)
 5. **Marketplace filters** — verify/align `HomeScreen` filters vs `/spaces`. *(partial)*
 6. **Member subscriptions** — propose build spec. *(missing)*
 7. **Owner space edit** — propose build spec (`/owner/spaces/[spaceId]/edit`). *(missing)*
@@ -209,8 +209,21 @@ Checklist results after change (`mobile/src/screens/owner/OwnerDashboardScreen.t
 - ⚠️ Fixed along the way: payment volume previously summed raw `payment.amount` (ignored `amount_cents` and payment status) — now matches web's gross (succeeded, cents-aware).
 - ↔ Deferred visualizations (not gaps): 30-day revenue chart, today timeline (no chart lib on mobile; data surfaced as KPIs).
 
+### Run 4 — `OwnerPaymentSettingsScreen` vs `/owner/settings/payments` (2026-06-11)
+
+Checklist results (new screen `mobile/src/screens/owner/OwnerPaymentSettingsScreen.tsx`, mirrors `webUI/app/owner/settings/payments/page.tsx`):
+
+- **Routing:** ✅ — registered as `OwnerPaymentSettings` in the main stack (`AppNavigator.tsx`); owner menu entry "Payment providers" in `MenuScreen`.
+- **Auth + tenancy:** ✅ — org-scoped via `?organization_public_id=`; same endpoints as web (`/api/owner/payment-settings*`, `/api/owner/marketplace-readiness`, `/api/owner/payment-provider/{organization,location}/{id}`).
+- **Data:** ✅ — marketplace readiness card (status text identical to web), configured-providers list, form prefill from selected provider incl. "saved" placeholders for write-only secrets; loading/error/empty (no providers) states present.
+- **Actions:** ✅ — save credentials (same payload as web), test connection, enable/disable, org provider override, location provider override. Secrets use `secureTextEntry`.
+- **Feature flags/permissions:** ✅ — authorization enforced server-side as on web.
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerPaymentSettings.test.tsx` (load/prefill/readiness, save payload, disable+test, overrides payloads, CardPointe switch + load error). Full suite green (17 suites / 58 tests).
+- Matrix correction made during this run: web `/owner/payments` is a payments *overview* (payments, invoices, payout summary), not provider settings — matrix updated; payout summary remains a small partial gap.
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 4: owner payment provider settings.** New `OwnerPaymentSettingsScreen` (stack route `OwnerPaymentSettings`, owner menu "Payment providers") mirroring web's `/owner/settings/payments`: readiness card, Stripe/CardPointe credential forms with write-only secret placeholders, test connection, enable/disable, org/location provider overrides. 5 new tests. Matrix corrected re `/owner/payments` (overview page, not provider settings).
 - **2026-06-11 — Run 3: owner dashboard parity.** `OwnerDashboardScreen` now computes web's KPIs (MTD revenue, occupancy, approved bookings, active memberships, today's bookings via `/api/owner/calendar`) with web's exact money math, and gained error + empty (no-locations → create CTA) states. Payment-volume math fixed to be cents-aware and succeeded-only. Tests rewritten (4 tests).
 - **2026-06-11 — Run 2: owner request decisions.** Added approve/reject with operator notes to `mobile/src/screens/owner/OwnerBookingsScreen.tsx` (`POST /api/booking-requests/{id}/approve|reject`, reject behind an inline confirm step, list reload + success/error feedback). Added `mobile/__tests__/ownerRequestDecisions.test.tsx` (5 tests). Also this date: fixed repo-wide `mobile-security` CI failures via npm overrides for joi (GHSA-q7cg-457f-vx79) and shell-quote (GHSA-w7jw-789q-3m8p) in PR #185.
 - **2026-06-11 — Run 1: member profile parity.** Rewrote `mobile/src/screens/ProfileScreen.tsx` from static (email/role/logout) to full profile editor matching `webUI/app/member/profile/page.tsx`: `GET /api/me` prefill, `PATCH /api/me` save (first/last/phone/company, phone sanitized), loading/error/success states, link to `NotificationsScreen` for prefs (intentional divergence), logout retained. Added `mobile/__tests__/profile.test.tsx` (6 tests). Decisions recorded for Q1–Q5 (§5).

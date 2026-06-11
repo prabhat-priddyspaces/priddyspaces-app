@@ -24,6 +24,7 @@ import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen"
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
 import { OwnerSettingsScreen } from "../screens/owner/OwnerSettingsScreen";
+import { OwnerPaymentSettingsScreen } from "../screens/owner/OwnerPaymentSettingsScreen";
 import { OwnerTeamScreen } from "../screens/owner/OwnerTeamScreen";
 import { LocationSpacesScreen } from "../screens/member/LocationSpacesScreen";
 import { SpaceDetailScreen } from "../screens/member/SpaceDetailScreen";
@@ -214,6 +215,11 @@ function MainApp() {
       <Stack.Screen name="OwnerAddSpace" component={OwnerAddSpaceScreen} options={{ title: "Add space" }} />
       <Stack.Screen name="OwnerNewLocation" component={OwnerNewLocationScreen} options={{ title: "New location" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
+      <Stack.Screen
+        name="OwnerPaymentSettings"
+        component={OwnerPaymentSettingsScreen}
+        options={{ title: "Payment settings" }}
+      />
       <Stack.Screen name="OwnerTeam" component={OwnerTeamScreen} options={{ title: "Team" }} />
       <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} />
     </Stack.Navigator>
