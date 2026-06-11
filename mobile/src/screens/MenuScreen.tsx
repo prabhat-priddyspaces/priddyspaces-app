@@ -20,6 +20,7 @@ const ownerItems: MenuItem[] = [
   { label: "Team", screen: "OwnerTeam", target: "stack" },
   { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Settings", screen: "OwnerSettings", target: "stack" },
+  { label: "Assistant policies", screen: "OwnerAssistantPolicies", target: "stack" },
   { label: "Payment providers", screen: "OwnerPaymentSettings", target: "stack" },
   { label: "Payments", screen: "OwnerPayments", target: "stack" },
   { label: "Payment health", screen: "OwnerPaymentHealth", target: "stack" },
