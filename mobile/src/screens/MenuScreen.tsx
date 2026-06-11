@@ -54,6 +54,8 @@ const adminItems: MenuItem[] = [
   { label: "Audit logs", screen: "AdminAuditLogs", target: "stack" },
   { label: "Members", screen: "AdminMembers", target: "stack" },
   { label: "Owner users", screen: "AdminOwnerUsers", target: "stack" },
+  { label: "Owner companies", screen: "AdminOwnerCompanies", target: "stack" },
+  { label: "Payments", screen: "AdminPayments", target: "stack" },
   { label: "Attendance", screen: "Attendance", target: "tab" },
   { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Profile", screen: "Profile", target: "tab" },

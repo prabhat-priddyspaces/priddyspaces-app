@@ -126,7 +126,8 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/admin` (dashboard) | `admin/AdminDashboardScreen` | parity *(Run 33, 2026-06-11)* | all 8 platform metrics + recent-activity feed from `/api/admin/dashboard`; new Dashboard tab in AdminTabs + admin menu entry |
 | `/admin/audit-logs`, `/admin/bookings`, `/admin/listings` | `admin/Admin{AuditLogs,Bookings,Listings}Screen` | parity *(Run 34, 2026-06-11)* | read-only oversight lists with web's grouping (requests + bookings sections), search on listings; admin menu entries. ↔ audit-log before/after JSON dumps web-only |
 | `/admin/members`, `/admin/owner-users` | `admin/Admin{Members,OwnerUsers}Screen` | parity *(Run 35, 2026-06-11)* | members: q/signup-range/subscription/failed-payment filters with web's params; owner-users: q-search, org + review status, role, locations. ↔ Impersonate stays web-only — web's flow swaps the access token, incompatible with mobile's Clerk-token auth |
-| 8 other `/admin/*` routes (analytics, calendar, owner-companies, payments, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | bucket C in progress |
+| `/admin/owner-companies`, `/admin/payments` | `admin/Admin{OwnerCompanies,Payments}Screen` | parity *(Run 36, 2026-06-11)* | companies: q-search, review approve/reject with notes + commission override (web's PATCH payload), payment status/blockers, role-gated edit controls; payments: GMV/earnings/net/failed summary + full ledger. ↔ review-history JSON web-only |
+| 6 other `/admin/*` routes (analytics, calendar, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | bucket C in progress |
 
 ### Mobile-only / cross-platform widgets
 
@@ -341,6 +342,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 36: admin owner companies + payments.** Companies screen with q-search, approve/reject/save-notes using web's exact PATCH payload (review status, notes, numeric-or-null commission override), payment status + blockers, listing/location counts, and edit controls gated to admin/superadmin platform roles like web; payments screen with the GMV/platform-earnings/owner-net/failed summary and the full cents-aware ledger. 3 new tests (45 suites / 169 tests green).
 
 - **2026-06-11 — Run 35: admin members + owner users.** Two screens mirroring their web pages: members with q, signup from/to, and subscribed/not-subscribed/failed-payments filters mapped to web's exact query params, plus activity counts per member; owner-users with q-search and org/review-status/role/assigned-locations rows. ↔ Impersonate documented as web-only (web swaps the access token — incompatible with Clerk-token mobile auth; mobile shows the impersonation banner when active, Run 22). 3 new tests (44 suites / 166 tests green).
 
