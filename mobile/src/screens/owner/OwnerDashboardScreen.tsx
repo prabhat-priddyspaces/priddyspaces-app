@@ -230,7 +230,7 @@ export function OwnerDashboardScreen() {
             <StatCard
               label="MTD revenue"
               value={formatMoney(monthRevenue)}
-              onPress={() => navigation.navigate("Payments")}
+              onPress={() => navigation.navigate("OwnerPayments")}
             />
             <StatCard
               label="Occupancy"
@@ -261,7 +261,7 @@ export function OwnerDashboardScreen() {
             <StatCard
               label="Payment volume"
               value={formatMoney(paymentsTotal)}
-              onPress={() => navigation.navigate("Payments")}
+              onPress={() => navigation.navigate("OwnerPayments")}
             />
             <StatCard
               label="Invoice count"

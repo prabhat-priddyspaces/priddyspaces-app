@@ -23,6 +23,7 @@ import { OwnerAddSpaceScreen } from "../screens/owner/OwnerAddSpaceScreen";
 import { OwnerSpaceEditScreen } from "../screens/owner/OwnerSpaceEditScreen";
 import { OwnerSpaceMediaScreen } from "../screens/owner/OwnerSpaceMediaScreen";
 import { OwnerCalendarScreen } from "../screens/owner/OwnerCalendarScreen";
+import { OwnerPaymentsScreen } from "../screens/owner/OwnerPaymentsScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -229,6 +230,7 @@ function MainApp() {
       <Stack.Screen name="OwnerSpaceEdit" component={OwnerSpaceEditScreen} options={{ title: "Edit space" }} />
       <Stack.Screen name="OwnerSpaceMedia" component={OwnerSpaceMediaScreen} options={{ title: "Space photos" }} />
       <Stack.Screen name="OwnerCalendar" component={OwnerCalendarScreen} options={{ title: "Calendar" }} />
+      <Stack.Screen name="OwnerPayments" component={OwnerPaymentsScreen} options={{ title: "Payments" }} />
       <Stack.Screen name="OwnerNewLocation" component={OwnerNewLocationScreen} options={{ title: "New location" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
       <Stack.Screen

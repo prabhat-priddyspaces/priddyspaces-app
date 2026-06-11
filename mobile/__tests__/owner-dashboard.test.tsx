@@ -114,13 +114,13 @@ describe("OwnerDashboardScreen", () => {
     expect(mockNavigate).toHaveBeenCalledWith("Bookings");
 
     fireEvent.press(getByLabelText("Open MTD revenue"));
-    expect(mockNavigate).toHaveBeenCalledWith("Payments");
+    expect(mockNavigate).toHaveBeenCalledWith("OwnerPayments");
 
     fireEvent.press(getByLabelText("Open Occupancy"));
     expect(mockNavigate).toHaveBeenCalledWith("Locations");
 
     fireEvent.press(getByLabelText("Open Payment volume"));
-    expect(mockNavigate).toHaveBeenCalledWith("Payments");
+    expect(mockNavigate).toHaveBeenCalledWith("OwnerPayments");
 
     fireEvent.press(getByLabelText("Open Invoice count"));
     expect(mockNavigate).toHaveBeenCalledWith("Invoices");
