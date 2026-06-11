@@ -1,0 +1,16 @@
+#!/bin/sh
+# Block direct pushes to main. GitHub-side branch protection requires Pro or a
+# public repo, so this hook is the local guard. Bypass intentionally with:
+#   ALLOW_MAIN_PUSH=1 git push ...
+# Enable per-clone with: git config core.hooksPath .githooks
+if [ "$ALLOW_MAIN_PUSH" = "1" ]; then
+  exit 0
+fi
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "pre-push: direct pushes to main are blocked (use a PR)." >&2
+    echo "pre-push: set ALLOW_MAIN_PUSH=1 to bypass intentionally." >&2
+    exit 1
+  fi
+done
+exit 0

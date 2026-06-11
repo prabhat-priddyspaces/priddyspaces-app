@@ -142,3 +142,13 @@ docker compose down -v         # stop + remove volumes (resets DB)
 - Payments: Stripe (single account for MVP).
 - Email verification required before payment.
 - Booking overlap prevention when a space is already subscribed.
+
+## Branch protection
+
+Direct pushes to `main` are blocked by a local pre-push hook. After cloning, enable it with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+GitHub-side branch protection/rulesets are unavailable on the current plan (private repo on GitHub Free); enable them in repo settings if the repo moves to Pro or becomes public.
