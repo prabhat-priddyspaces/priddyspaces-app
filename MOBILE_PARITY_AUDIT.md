@@ -84,7 +84,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/member/requests/[bookingId]` | `BookingDetailScreen` | parity | pay now / update card / retry payment |
 | `/member/rewards` | — | missing-on-mobile | loyalty wallet/ledger; proposal needed |
 | `/member/spaces/[spaceId]` | `member/SpaceDetailScreen` | parity | shared with public detail |
-| `/member/subscriptions` | — | missing-on-mobile | subscribe exists in `SpaceDetailScreen`, but no manage-subscriptions screen |
+| `/member/subscriptions` | `member/MemberSubscriptionsScreen` | parity *(Run 6, 2026-06-11)* | list + status stats + past-due banner + cancel-at-period-end (inline confirm); member menu "Memberships"; links to `SpaceDetail` and Payments |
 
 ### Owner
 
@@ -195,7 +195,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 3. ~~**Owner dashboard states + KPIs**~~ — **DONE (Run 3, 2026-06-11)**, see §6a.
 4. ~~**Owner payments settings**~~ — **DONE (Run 4, 2026-06-11)**, see §6a. (Target corrected to `/owner/settings/payments`; `/owner/payments` payout summary remains a small partial gap.)
 5. ~~**Marketplace filters**~~ — **DONE (Run 5, 2026-06-11)**, see §6a.
-6. **Member subscriptions** — propose build spec. *(missing)*
+6. ~~**Member subscriptions**~~ — **DONE (Run 6, 2026-06-11)**, see §6a.
 7. **Owner space edit** — propose build spec (`/owner/spaces/[spaceId]/edit`). *(missing)*
 8. **Owner space media** — propose build spec. *(missing)*
 9. **Owner calendar** — propose build spec. *(missing)*
@@ -267,8 +267,20 @@ Checklist results after change (`mobile/src/screens/HomeScreen.tsx`, mirrors `we
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/marketplace.test.tsx` (auto-load + card render + nav, category re-query, full filter param parity, lat/lng q-drop rule, error/empty state). Full suite green (18 suites / 63 tests).
 - ↔ Intentional divergence: no embedded map view; manual lat/lng/radius fields instead of Google Places autocomplete (no geocoding dependency on mobile).
 
+### Run 6 — `MemberSubscriptionsScreen` vs `/member/subscriptions` (2026-06-11)
+
+Checklist results (new screen `mobile/src/screens/member/MemberSubscriptionsScreen.tsx`, mirrors `webUI/app/member/subscriptions/page.tsx`; specs 6–9 confirmed by user, `expo-image-picker` approved, owner calendar as menu entry):
+
+- **Routing:** ✅ — stack route `MemberSubscriptions`; member menu entry "Memberships"; links out to `SpaceDetail` (nested Marketplace stack) and `Payments`.
+- **Auth + tenancy:** ✅ — `GET /api/subscriptions` scoped server-side to the signed-in member, same as web.
+- **Data:** ✅ — list + Active/Past Due/Canceling stats + past-due banner; loading/error/empty (browse CTA) states present.
+- **Actions:** ✅ — cancel at period end (`POST /api/subscriptions/{id}/cancel`) behind inline confirm (web uses `window.confirm` — ↔ native pattern); cancel hidden for canceled/canceling like web; success message matches web copy.
+- **Feature flags/permissions:** ✅ — none.
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/memberSubscriptions.test.tsx`. Full suite green (19 suites / 68 tests).
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 6: member subscriptions.** New `MemberSubscriptionsScreen` (stack route + member menu "Memberships"): list, status stats, past-due banner → Payments, cancel-at-period-end with inline confirm, links to membership space. 5 new tests.
 - **2026-06-11 — Build specs proposed.** Specs 6–9 (member subscriptions, owner space edit, owner space media, owner calendar) written to §5 with real citations; awaiting go. Two blocking questions: `expo-image-picker` dependency for media uploads; owner calendar as menu entry vs 7th tab.
 - **2026-06-11 — Run 5: marketplace browser parity.** `HomeScreen` rewritten onto web's `/api/marketplace/locations` with category tabs, q/date/time/capacity/price/sort/geo filters (web's exact param rules incl. q-drop with lat/lng), location-grouped result cards with starting prices feeding the existing `LocationSpaces` → `SpaceDetail` flow. 5 new tests.
 - **2026-06-11 — Run 4: owner payment provider settings.** New `OwnerPaymentSettingsScreen` (stack route `OwnerPaymentSettings`, owner menu "Payment providers") mirroring web's `/owner/settings/payments`: readiness card, Stripe/CardPointe credential forms with write-only secret placeholders, test connection, enable/disable, org/location provider overrides. 5 new tests. Matrix corrected re `/owner/payments` (overview page, not provider settings).

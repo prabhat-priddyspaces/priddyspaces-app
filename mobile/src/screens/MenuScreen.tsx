@@ -30,6 +30,7 @@ const memberItems: MenuItem[] = [
   { label: "Bookings", screen: "Bookings", target: "tab" },
   { label: "Access Passes", screen: "AccessPasses", target: "tab" },
   { label: "My Space QR", screen: "MySpaceQr", target: "tab" },
+  { label: "Memberships", screen: "MemberSubscriptions", target: "stack" },
   { label: "Directory", screen: "Directory", target: "tab" },
   { label: "Notifications", screen: "Notifications", target: "stack" },
   { label: "Invoices", screen: "Invoices", target: "stack" },
