@@ -225,6 +225,16 @@ export function OwnerLocationsScreen() {
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={() =>
+                    navigation.navigate("OwnerFloorPlan", { locationId: loc.public_id, name: loc.name })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`Floor plan for ${loc.name}`}
+                >
+                  <Text style={styles.actionText}>Floor plan</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() =>
                     navigation.navigate("OwnerAddSpace", { locationId: loc.public_id, locationName: loc.name })
                   }
                   accessibilityRole="button"
