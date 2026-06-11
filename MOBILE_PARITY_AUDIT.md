@@ -108,7 +108,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/members`, `/owner/members/[public_id]` | — (overlaps `OwnerTeamScreen`) | partial | both web pages and mobile `OwnerTeamScreen` hit `/api/orgs/{orgId}/members`; exact split members-vs-team needs per-screen verification |
 | `/owner/payments` | `PaymentsScreen` (history only) | partial | web page = payment **provider settings**; mobile only has history + Stripe connect inside `OwnerSettingsScreen` |
 | `/owner/payments/health` | — | missing-on-mobile | |
-| `/owner/requests` | `owner/OwnerBookingsScreen` | **partial — confirmed real gap** | web has approve/deny actions (`webUI/app/owner/requests/page.tsx`); mobile lists requests but has **no approve/deny anywhere** (checked `OwnerBookingsScreen` + `BookingDetailScreen`) |
+| `/owner/requests` | `owner/OwnerBookingsScreen` | partial *(approve/reject added Run 2, 2026-06-11)* | approve/reject with operator notes now on mobile (`POST /api/booking-requests/{id}/approve\|reject`); still web-only: waitlist invite (`/api/booking-waitlist/{id}/invite`), email resend (`/api/booking-requests/{id}/emails/resend`), status filters/history view |
 | `/owner/settings` | `owner/OwnerSettingsScreen` | partial | mobile covers pricing rules, promo codes, waitlist, cancellation policies, Stripe connect; full web settings surface unverified |
 | `/owner/settings/assistant-policies` | — | missing-on-mobile | |
 | `/owner/settings/payments` | `OwnerSettingsScreen` (connect only) | partial | provider enable/disable toggles missing |
@@ -135,7 +135,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 
 ## 4. Cross-cutting findings (this run)
 
-1. **Confirmed real gap — owner request approval:** owners cannot approve/deny booking requests on mobile.
+1. ~~**Confirmed real gap — owner request approval**~~ — **FIXED in Run 2** (see §6a); waitlist invite + email resend remain web-only.
 2. ~~**Confirmed real gap — member profile editing**~~ — **FIXED in Run 1** (see §6a).
 3. **No code sharing:** API clients, types, and availability math are duplicated (§2). Any parity work should consider extracting shared types or accept duplication knowingly.
 4. **No deep-link scheme** in `mobile/app.json`; only push-tap → BookingDetail routing exists.
@@ -157,7 +157,7 @@ Build specs for confirmed `missing-on-mobile` screens will be added here one at 
 Fix confirmed gaps in existing screens first (small diffs, high value), then propose missing screens:
 
 1. ~~**Member profile**~~ — **DONE (Run 1, 2026-06-11)**, see §6a.
-2. **Owner request approval** — add approve/deny to `OwnerBookingsScreen`/`BookingDetailScreen` per `/owner/requests`. *(confirmed gap — next up)*
+2. ~~**Owner request approval**~~ — **DONE (Run 2, 2026-06-11)**, see §6a. Follow-ups (waitlist invite, email resend) tracked in the matrix as partial.
 3. **Owner dashboard states + KPIs** — error states + missing web KPIs on `OwnerDashboardScreen`. *(partial)*
 4. **Owner payments settings** — provider toggles parity vs `/owner/payments`. *(partial)*
 5. **Marketplace filters** — verify/align `HomeScreen` filters vs `/spaces`. *(partial)*
@@ -185,7 +185,19 @@ Checklist results after change (`mobile/src/screens/ProfileScreen.tsx`, mirrors 
 - **Feature flags/permissions:** ✅ — none on this surface (matches web).
 - **Works:** ✅ — 6 new Jest tests in `mobile/__tests__/profile.test.tsx` (prefill, save payload, phone sanitization, load error, save error, nav/logout). Full mobile suite green (15 suites / 45 tests).
 
+### Run 2 — `OwnerBookingsScreen` vs `/owner/requests` (2026-06-11)
+
+Checklist results after change (`mobile/src/screens/owner/OwnerBookingsScreen.tsx`, mirrors `webUI/app/owner/requests/page.tsx`):
+
+- **Routing:** ✅ — Bookings tab in `OwnerTabs`; unchanged. Card tap still opens `BookingDetail`.
+- **Auth + tenancy:** ✅ — decisions authorized server-side via `require_location_roles(... OWNER, ADMIN, STAFF)` (`backend/app/api/booking_requests.py:1239`), same as web.
+- **Data:** ✅ — same `GET /api/booking-requests`; list reloads after each decision; loading/empty/error states present; success feedback added.
+- **Actions:** ✅ approve (direct, like web) and reject (confirm step, mirroring web's confirm modal) with optional `operator_notes` — same `POST /api/booking-requests/{id}/approve|reject` payloads. ⚠️ remaining web-only: waitlist invite, email resend, full status filters (tracked in matrix as partial). Retry-charge for `payment_failed` exists on `BookingDetailScreen` (unchanged).
+- **Feature flags/permissions:** ✅ — decision buttons only on `status === "requested"`, matching web's `isPending` rule.
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerRequestDecisions.test.tsx` (approve payload + reload, reject confirm flow, cancel confirm, API error surface, no buttons on `payment_failed`). Full mobile suite green (16 suites / 50 tests).
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 2: owner request decisions.** Added approve/reject with operator notes to `mobile/src/screens/owner/OwnerBookingsScreen.tsx` (`POST /api/booking-requests/{id}/approve|reject`, reject behind an inline confirm step, list reload + success/error feedback). Added `mobile/__tests__/ownerRequestDecisions.test.tsx` (5 tests). Also this date: fixed repo-wide `mobile-security` CI failures via npm overrides for joi (GHSA-q7cg-457f-vx79) and shell-quote (GHSA-w7jw-789q-3m8p) in PR #185.
 - **2026-06-11 — Run 1: member profile parity.** Rewrote `mobile/src/screens/ProfileScreen.tsx` from static (email/role/logout) to full profile editor matching `webUI/app/member/profile/page.tsx`: `GET /api/me` prefill, `PATCH /api/me` save (first/last/phone/company, phone sanitized), loading/error/success states, link to `NotificationsScreen` for prefs (intentional divergence), logout retained. Added `mobile/__tests__/profile.test.tsx` (6 tests). Decisions recorded for Q1–Q5 (§5).
 - **2026-06-11 — Step 0 discovery run.** Created this audit. Enumerated 97 web routes and 32 mobile screens; built parity matrix; verified calendar endpoint parity (`/api/me/calendar` both sides), owner approve/deny gap, member profile gap, `role: "member"` hardcode in mobile onboarding, absence of code sharing and deep-link scheme. **No code changed.**
