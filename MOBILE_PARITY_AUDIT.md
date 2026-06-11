@@ -127,7 +127,8 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/admin/audit-logs`, `/admin/bookings`, `/admin/listings` | `admin/Admin{AuditLogs,Bookings,Listings}Screen` | parity *(Run 34, 2026-06-11)* | read-only oversight lists with web's grouping (requests + bookings sections), search on listings; admin menu entries. ↔ audit-log before/after JSON dumps web-only |
 | `/admin/members`, `/admin/owner-users` | `admin/Admin{Members,OwnerUsers}Screen` | parity *(Run 35, 2026-06-11)* | members: q/signup-range/subscription/failed-payment filters with web's params; owner-users: q-search, org + review status, role, locations. ↔ Impersonate stays web-only — web's flow swaps the access token, incompatible with mobile's Clerk-token auth |
 | `/admin/owner-companies`, `/admin/payments` | `admin/Admin{OwnerCompanies,Payments}Screen` | parity *(Run 36, 2026-06-11)* | companies: q-search, review approve/reject with notes + commission override (web's PATCH payload), payment status/blockers, role-gated edit controls; payments: GMV/earnings/net/failed summary + full ledger. ↔ review-history JSON web-only |
-| 6 other `/admin/*` routes (analytics, calendar, platform-team, settings, users, assistant-quality) | — | missing-on-mobile | bucket C in progress |
+| `/admin/platform-team`, `/admin/assistant-quality` | `admin/Admin{PlatformTeam,AssistantQuality}Screen` | parity *(Run 37, 2026-06-11)* | team: superadmin-gated invite/role/active/remove with web's payloads; quality: metrics + reliability/tool-failure/policy-gap/persona/low-rated breakdowns |
+| 4 other `/admin/*` routes (analytics, calendar, settings, users) | — | missing-on-mobile | bucket C in progress |
 
 ### Mobile-only / cross-platform widgets
 
@@ -342,6 +343,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 37: admin platform team + assistant quality.** Team screen with web's superadmin gate ("Only superadmins can manage…"), invite (email + support/admin/superadmin role), per-member role/active drafts saved with web's PATCH payload, and removal; assistant-quality screen with the metrics grid and reliability-events / tool-failure / missing-policy / persona-usage / low-rated breakdowns. 3 new tests (46 suites / 172 tests green).
 
 - **2026-06-11 — Run 36: admin owner companies + payments.** Companies screen with q-search, approve/reject/save-notes using web's exact PATCH payload (review status, notes, numeric-or-null commission override), payment status + blockers, listing/location counts, and edit controls gated to admin/superadmin platform roles like web; payments screen with the GMV/platform-earnings/owner-net/failed summary and the full cents-aware ledger. 3 new tests (45 suites / 169 tests green).
 

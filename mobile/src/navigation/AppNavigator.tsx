@@ -47,6 +47,8 @@ import { AdminMembersScreen } from "../screens/admin/AdminMembersScreen";
 import { AdminOwnerUsersScreen } from "../screens/admin/AdminOwnerUsersScreen";
 import { AdminOwnerCompaniesScreen } from "../screens/admin/AdminOwnerCompaniesScreen";
 import { AdminPaymentsScreen } from "../screens/admin/AdminPaymentsScreen";
+import { AdminPlatformTeamScreen } from "../screens/admin/AdminPlatformTeamScreen";
+import { AdminAssistantQualityScreen } from "../screens/admin/AdminAssistantQualityScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -313,6 +315,16 @@ function MainApp() {
         options={{ title: "Owner companies" }}
       />
       <Stack.Screen name="AdminPayments" component={AdminPaymentsScreen} options={{ title: "Payments" }} />
+      <Stack.Screen
+        name="AdminPlatformTeam"
+        component={AdminPlatformTeamScreen}
+        options={{ title: "Platform team" }}
+      />
+      <Stack.Screen
+        name="AdminAssistantQuality"
+        component={AdminAssistantQualityScreen}
+        options={{ title: "Assistant quality" }}
+      />
       <Stack.Screen
         name="OwnerAssistantPolicies"
         component={OwnerAssistantPoliciesScreen}
