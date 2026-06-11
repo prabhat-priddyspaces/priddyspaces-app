@@ -90,7 +90,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 
 | Web route | Mobile screen | Status | Notes |
 |---|---|---|---|
-| `/owner` (dashboard) | `owner/OwnerDashboardScreen` | partial | mobile shows counts only; web adds 30-day revenue chart, occupancy, today's calendar. Mobile has no error states |
+| `/owner` (dashboard) | `owner/OwnerDashboardScreen` | parity *(Run 3, 2026-06-11)* | KPI parity: MTD revenue, occupancy, approved bookings, active memberships, today's bookings + original counts; error + empty states added. ↔ intentionally simplified: 30-day revenue chart and today timeline render as KPI counts, pending-request actions live on the Bookings tab |
 | `/owner/access-scanner` | `access/AccessScannerScreen` | parity | camera scan + manual token + check-in/out |
 | `/owner/account` | — | missing-on-mobile | |
 | `/owner/analytics` | — | missing-on-mobile | desktop-heavy; Open Q3 |
@@ -140,7 +140,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 3. **No code sharing:** API clients, types, and availability math are duplicated (§2). Any parity work should consider extracting shared types or accept duplication knowingly.
 4. **No deep-link scheme** in `mobile/app.json`; only push-tap → BookingDetail routing exists.
 5. **No impersonation on mobile** (web layouts support admin impersonation).
-6. **Mobile gaps in state handling:** `OwnerDashboardScreen` lacks error states; `BookingDetailScreen` lacks empty state; auth screens surface errors via `Alert` only.
+6. **Mobile gaps in state handling:** ~~`OwnerDashboardScreen` lacks error states~~ (fixed Run 3); `BookingDetailScreen` lacks empty state; auth screens surface errors via `Alert` only.
 
 ## 5. Open questions — DECIDED 2026-06-11
 
@@ -158,7 +158,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 
 1. ~~**Member profile**~~ — **DONE (Run 1, 2026-06-11)**, see §6a.
 2. ~~**Owner request approval**~~ — **DONE (Run 2, 2026-06-11)**, see §6a. Follow-ups (waitlist invite, email resend) tracked in the matrix as partial.
-3. **Owner dashboard states + KPIs** — error states + missing web KPIs on `OwnerDashboardScreen`. *(partial)*
+3. ~~**Owner dashboard states + KPIs**~~ — **DONE (Run 3, 2026-06-11)**, see §6a.
 4. **Owner payments settings** — provider toggles parity vs `/owner/payments`. *(partial)*
 5. **Marketplace filters** — verify/align `HomeScreen` filters vs `/spaces`. *(partial)*
 6. **Member subscriptions** — propose build spec. *(missing)*
@@ -196,8 +196,22 @@ Checklist results after change (`mobile/src/screens/owner/OwnerBookingsScreen.ts
 - **Feature flags/permissions:** ✅ — decision buttons only on `status === "requested"`, matching web's `isPending` rule.
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerRequestDecisions.test.tsx` (approve payload + reload, reject confirm flow, cancel confirm, API error surface, no buttons on `payment_failed`). Full mobile suite green (16 suites / 50 tests).
 
+### Run 3 — `OwnerDashboardScreen` vs `/owner` (2026-06-11)
+
+Checklist results after change (`mobile/src/screens/owner/OwnerDashboardScreen.tsx`, mirrors `webUI/app/owner/page.tsx`):
+
+- **Routing:** ✅ — Dashboard tab in `OwnerTabs`; unchanged. New cards navigate to Payments/Locations/Bookings; empty state navigates to `OwnerNewLocation`.
+- **Auth + tenancy:** ✅ — same endpoints as web incl. `/api/owner/calendar` (today window) and `/api/locations?organization_public_id=` scoping.
+- **Data:** ✅ — same queries and the same KPI math as web (`paymentAmount`/`paymentRefundedAmount` cents-aware, MTD = succeeded − refunds this month, occupancy = non-available/total spaces, active memberships = active/trialing/past_due/canceling). Loading/error/empty states all present (error + empty were missing).
+- **Actions:** ✅ — stat-card navigation; pending-request approve/reject reachable one tap away on the Bookings tab (web shows an inline preview — ↔ intentional divergence).
+- **Feature flags/permissions:** ✅ — none on this surface.
+- **Works:** ✅ — rewrote `mobile/__tests__/owner-dashboard.test.tsx` (4 tests: KPI math vs fixtures, card navigation, empty state CTA, load-error surface). Full mobile suite green (16 suites / 53 tests).
+- ⚠️ Fixed along the way: payment volume previously summed raw `payment.amount` (ignored `amount_cents` and payment status) — now matches web's gross (succeeded, cents-aware).
+- ↔ Deferred visualizations (not gaps): 30-day revenue chart, today timeline (no chart lib on mobile; data surfaced as KPIs).
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 3: owner dashboard parity.** `OwnerDashboardScreen` now computes web's KPIs (MTD revenue, occupancy, approved bookings, active memberships, today's bookings via `/api/owner/calendar`) with web's exact money math, and gained error + empty (no-locations → create CTA) states. Payment-volume math fixed to be cents-aware and succeeded-only. Tests rewritten (4 tests).
 - **2026-06-11 — Run 2: owner request decisions.** Added approve/reject with operator notes to `mobile/src/screens/owner/OwnerBookingsScreen.tsx` (`POST /api/booking-requests/{id}/approve|reject`, reject behind an inline confirm step, list reload + success/error feedback). Added `mobile/__tests__/ownerRequestDecisions.test.tsx` (5 tests). Also this date: fixed repo-wide `mobile-security` CI failures via npm overrides for joi (GHSA-q7cg-457f-vx79) and shell-quote (GHSA-w7jw-789q-3m8p) in PR #185.
 - **2026-06-11 — Run 1: member profile parity.** Rewrote `mobile/src/screens/ProfileScreen.tsx` from static (email/role/logout) to full profile editor matching `webUI/app/member/profile/page.tsx`: `GET /api/me` prefill, `PATCH /api/me` save (first/last/phone/company, phone sanitized), loading/error/success states, link to `NotificationsScreen` for prefs (intentional divergence), logout retained. Added `mobile/__tests__/profile.test.tsx` (6 tests). Decisions recorded for Q1–Q5 (§5).
 - **2026-06-11 — Step 0 discovery run.** Created this audit. Enumerated 97 web routes and 32 mobile screens; built parity matrix; verified calendar endpoint parity (`/api/me/calendar` both sides), owner approve/deny gap, member profile gap, `role: "member"` hardcode in mobile onboarding, absence of code sharing and deep-link scheme. **No code changed.**
