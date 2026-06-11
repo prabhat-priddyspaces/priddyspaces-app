@@ -34,6 +34,7 @@ import { OwnerMarketingScreen } from "../screens/owner/OwnerMarketingScreen";
 import { OwnerMarketingCampaignsScreen } from "../screens/owner/OwnerMarketingCampaignsScreen";
 import { OwnerMarketingCampaignDetailScreen } from "../screens/owner/OwnerMarketingCampaignDetailScreen";
 import { OwnerMarketingSegmentsScreen } from "../screens/owner/OwnerMarketingSegmentsScreen";
+import { OwnerMarketingTemplatesScreen } from "../screens/owner/OwnerMarketingTemplatesScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -266,6 +267,11 @@ function MainApp() {
         name="OwnerMarketingSegments"
         component={OwnerMarketingSegmentsScreen}
         options={{ title: "Segments" }}
+      />
+      <Stack.Screen
+        name="OwnerMarketingTemplates"
+        component={OwnerMarketingTemplatesScreen}
+        options={{ title: "Templates" }}
       />
       <Stack.Screen
         name="OwnerAssistantPolicies"
