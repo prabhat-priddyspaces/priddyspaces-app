@@ -30,6 +30,8 @@ import { OwnerPaymentHealthScreen } from "../screens/owner/OwnerPaymentHealthScr
 import { OwnerAssistantPoliciesScreen } from "../screens/owner/OwnerAssistantPoliciesScreen";
 import { OwnerAnalyticsScreen } from "../screens/owner/OwnerAnalyticsScreen";
 import { OwnerLoyaltyScreen } from "../screens/owner/OwnerLoyaltyScreen";
+import { OwnerMarketingScreen } from "../screens/owner/OwnerMarketingScreen";
+import { OwnerMarketingCampaignsScreen } from "../screens/owner/OwnerMarketingCampaignsScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -247,6 +249,12 @@ function MainApp() {
       <Stack.Screen name="OwnerPaymentHealth" component={OwnerPaymentHealthScreen} options={{ title: "Payment health" }} />
       <Stack.Screen name="OwnerAnalytics" component={OwnerAnalyticsScreen} options={{ title: "Analytics" }} />
       <Stack.Screen name="OwnerLoyalty" component={OwnerLoyaltyScreen} options={{ title: "Loyalty" }} />
+      <Stack.Screen name="OwnerMarketing" component={OwnerMarketingScreen} options={{ title: "Marketing" }} />
+      <Stack.Screen
+        name="OwnerMarketingCampaigns"
+        component={OwnerMarketingCampaignsScreen}
+        options={{ title: "Campaigns" }}
+      />
       <Stack.Screen
         name="OwnerAssistantPolicies"
         component={OwnerAssistantPoliciesScreen}
