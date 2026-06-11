@@ -34,6 +34,8 @@ type AuthContextValue = AuthState & {
   signOut: () => Promise<void>;
   /** Fetch a fresh Clerk JWT for API calls */
   getToken: () => Promise<string | null>;
+  /** Re-fetch /api/me, e.g. after onboarding steps change role/org state */
+  refreshMe: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -188,9 +190,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const getToken = useCallback(() => clerkGetToken(), [clerkGetToken]);
 
+  const refreshMe = useCallback(async () => {
+    const token = await clerkGetToken();
+    if (!token) return;
+    const me = await fetchMe(token);
+    setState({ token, me, loading: false });
+  }, [clerkGetToken, fetchMe]);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, signIn, signUp, verifyEmailCode, signOut, getToken }),
-    [state, signIn, signUp, verifyEmailCode, signOut, getToken]
+    () => ({ ...state, signIn, signUp, verifyEmailCode, signOut, getToken, refreshMe }),
+    [state, signIn, signUp, verifyEmailCode, signOut, getToken, refreshMe]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

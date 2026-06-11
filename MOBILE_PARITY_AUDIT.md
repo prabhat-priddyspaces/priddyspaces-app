@@ -45,12 +45,12 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 |---|---|---|---|
 | `/sign-in`, `/(auth)/login` | `LoginScreen` | parity | Clerk email/password + OAuth |
 | `/sign-up`, `/(auth)/register` | `RegisterScreen` | parity | member signup + email verification |
-| `/owners/sign-up` | — | missing-on-mobile | mobile `OnboardingScreen.tsx:45` hardcodes `role: "member"` — owners cannot sign up on mobile. Open Q1 |
+| `/owners/sign-up` | `RegisterScreen` + `OnboardingScreen` role selector | parity *(Run 13, 2026-06-11)* | role choice now happens at onboarding (member/owner selector); owner path posts `role: "owner"` then flows to `OrgOnboardingScreen` |
 | `/auth/callback` | — | mobile-only-N/A | native Clerk OAuth; intentional divergence |
 | `/dashboard` (role router) | `AppNavigator` role switch | parity | different mechanism, same outcome; intentional divergence |
-| `/onboarding`, `/onboarding/member` | `OnboardingScreen` | partial | web flow has extra steps; see Q1 |
-| `/onboarding/organization` | `OrgOnboardingScreen` | parity | |
-| `/onboarding/owner` | — | missing-on-mobile | Spec 13 proposed (§5); `/onboarding/personal` + `/onboarding/organization` are web redirects only |
+| `/onboarding`, `/onboarding/member` | `OnboardingScreen` | parity *(Run 13)* | member/owner role selector; same profile payload as web incl. terms/privacy |
+| `/onboarding/organization` (redirect) | `OrgOnboardingScreen` | parity *(fields aligned Run 13)* | display name, business email, required business phone, description added to match web payload |
+| `/onboarding/owner` | `OnboardingScreen` (owner) → `OrgOnboardingScreen` | parity *(Run 13, 2026-06-11)* | two-step mobile flow matches web's combined form: owner profile (phone required) → org details; `AuthContext.refreshMe()` added so the navigator advances after each step |
 
 ### Marketplace / public
 
@@ -226,7 +226,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 10. ~~**Member rewards**~~ — **DONE (Run 10, 2026-06-11)**, see changelog.
 11. ~~**Member insights**~~ — **DONE (Run 11, 2026-06-11)**, see changelog.
 12. ~~**Member locations**~~ — **DONE (Run 12, 2026-06-11)**, see changelog (reclassified: covered by enhanced `LocationSpacesScreen` + existing `SpaceDetail` flow).
-13. **Owner signup + onboarding on mobile** — propose build spec. *(Q1: confirmed wanted)*
+13. ~~**Owner signup + onboarding on mobile**~~ — **DONE (Run 13, 2026-06-11)**, see changelog.
 14. **Owner analytics / marketing / loyalty / floor-plan** — propose build specs one at a time. *(Q3: confirmed wanted)*
 15. **Admin console screens** — propose build specs one at a time. *(Q4: confirmed wanted)*
 
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 13: owner signup + onboarding.** `OnboardingScreen` gained a member/owner role selector (replacing the `role: "member"` hardcode), owner-required phone, and adaptive copy; `OrgOnboardingScreen` payload aligned with web (`display_name`, `business_email`, required `business_phone`, `description`; `industry` kept — backend accepts it). Added `AuthContext.refreshMe()` and call it after both onboarding POSTs — previously **nothing** re-fetched `/api/me` after onboarding, so the navigator could not advance (latent bug fixed for the member flow too). 4 new tests in `mobile/__tests__/onboarding.test.tsx` (26 suites / 98 tests green). Checklist: all ✅; web's single combined owner form is two mobile steps (↔ native pattern, navigator-driven).
 
 - **2026-06-11 — Run 12: member locations.** Discovery correction: web `/member/locations` (`webUI/app/member/locations/page.tsx`) is a location-scoped quick-book page (`?locationId=`), not a "my locations" list. Mobile already covered the booking capability via `LocationSpacesScreen` → `SpaceDetailScreen` (full checkout incl. payment resolve + consent — richer than web's inline form, ↔ intentional). Closed the remaining info gaps in `LocationSpacesScreen`: location header with address/city (`GET /api/locations/{id}`, graceful fallback to route-param name), per-space prices (day/month) and availability hours, capacity+status line matching web. 4 new tests in `mobile/__tests__/memberLocationSpaces.test.tsx` (25 suites / 94 tests green). Checklist: all ✅.
 - **2026-06-11 — Run 11: member insights.** New `MemberInsightsScreen` (member menu "Insights") mirroring `webUI/app/member/insights/page.tsx` on the same `/api/analytics/me/summary` endpoint: KPI cards (visits, hours, spent, upcoming/past), favourite space, usual day/time, 12-week visit series as native bar rows, upcoming bookings list. Loading/error/empty states; 3 new tests (24 suites / 90 tests green). Checklist: all ✅; web's chart component rendered as lightweight bar rows (↔ visualization simplification).

@@ -11,18 +11,27 @@ import {
 
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../constants";
+import { sanitizePhone } from "../lib/phone";
 
 export function OrgOnboardingScreen() {
-  const { getToken } = useAuth();
+  const { getToken, refreshMe } = useAuth();
 
   const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
   const [industry, setIndustry] = useState("");
   const [website, setWebsite] = useState("");
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
     if (!name.trim()) {
-      Alert.alert("Name required", "Please enter your organization name.");
+      Alert.alert("Name required", "Please enter your legal business name.");
+      return;
+    }
+    if (!businessPhone.trim()) {
+      Alert.alert("Business phone required", "Please enter a business phone number.");
       return;
     }
     setLoading(true);
@@ -36,15 +45,19 @@ export function OrgOnboardingScreen() {
         },
         body: JSON.stringify({
           name: name.trim(),
+          display_name: displayName.trim() || undefined,
+          business_email: businessEmail.trim() || undefined,
+          business_phone: businessPhone.trim(),
           industry: industry.trim() || undefined,
           website: website.trim() || undefined,
+          description: description.trim() || undefined,
         }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Workspace organization setup failed");
       }
-      // AuthContext will refresh state on next render cycle
+      await refreshMe();
     } catch (err) {
       Alert.alert("Organization setup failed", err instanceof Error ? err.message : "Check the organization details and try again.");
     } finally {
@@ -55,15 +68,42 @@ export function OrgOnboardingScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Set up your organization</Text>
-      <Text style={styles.subtitle}>Tell us about the business that hosts your rooms, desks, and memberships.</Text>
+      <Text style={styles.subtitle}>Add your business details for marketplace review.</Text>
 
-      <Text style={styles.label}>Organization name *</Text>
+      <Text style={styles.label}>Legal business name *</Text>
       <TextInput
         style={styles.input}
-        placeholder="Acme Coworking"
+        placeholder="Acme Coworking LLC"
         value={name}
         onChangeText={setName}
         autoComplete="organization"
+      />
+
+      <Text style={styles.label}>Public display name (optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Acme Coworking"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
+
+      <Text style={styles.label}>Business email (optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="hello@example.com"
+        value={businessEmail}
+        onChangeText={setBusinessEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>Business phone *</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="5551234567"
+        value={businessPhone}
+        onChangeText={(value) => setBusinessPhone(sanitizePhone(value))}
+        keyboardType="phone-pad"
       />
 
       <Text style={styles.label}>Industry (optional)</Text>
@@ -82,6 +122,15 @@ export function OrgOnboardingScreen() {
         onChangeText={setWebsite}
         keyboardType="url"
         autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>Business description (optional)</Text>
+      <TextInput
+        style={[styles.input, styles.multiline]}
+        placeholder="Briefly describe your workspace business and the spaces you plan to list."
+        value={description}
+        onChangeText={setDescription}
+        multiline
       />
 
       <TouchableOpacity
@@ -113,6 +162,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 16,
     backgroundColor: "#FFF",
+  },
+  multiline: {
+    minHeight: 90,
+    textAlignVertical: "top",
   },
   primaryButton: {
     backgroundColor: "#111827",

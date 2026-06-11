@@ -14,14 +14,19 @@ import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../constants";
 import { sanitizePhone } from "../lib/phone";
 
-export function OnboardingScreen() {
-  const { getToken } = useAuth();
+type Role = "member" | "owner";
 
+export function OnboardingScreen() {
+  const { getToken, refreshMe } = useAuth();
+
+  const [role, setRole] = useState<Role>("member");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const isOwner = role === "owner";
 
   async function handleSubmit() {
     if (!termsAccepted) {
@@ -30,6 +35,10 @@ export function OnboardingScreen() {
     }
     if (!fullName.trim()) {
       Alert.alert("Name required", "Please enter your full name.");
+      return;
+    }
+    if (isOwner && !phone.trim()) {
+      Alert.alert("Phone required", "Please enter a phone number for your owner account.");
       return;
     }
     setLoading(true);
@@ -42,7 +51,7 @@ export function OnboardingScreen() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          role: "member",
+          role,
           full_name: fullName.trim(),
           phone: phone || undefined,
           country: country || undefined,
@@ -53,9 +62,10 @@ export function OnboardingScreen() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Member profile setup failed");
+        throw new Error(data.detail || "Profile setup failed");
       }
-      // AuthContext will refresh state on next render cycle
+      // Owners continue to organization setup; members land in the member tabs.
+      await refreshMe();
     } catch (err) {
       Alert.alert("Profile setup failed", err instanceof Error ? err.message : "Check your profile details and try again.");
     } finally {
@@ -66,7 +76,33 @@ export function OnboardingScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Complete your profile</Text>
-      <Text style={styles.subtitle}>Set up your member profile to book spaces and manage memberships.</Text>
+      <Text style={styles.subtitle}>
+        {isOwner
+          ? "Set up your owner profile, then add your business details for marketplace review."
+          : "Set up your member profile to book spaces and manage memberships."}
+      </Text>
+
+      <Text style={styles.label}>I want to *</Text>
+      <View style={styles.roleRow}>
+        <TouchableOpacity
+          style={[styles.roleCard, !isOwner && styles.roleCardActive]}
+          onPress={() => setRole("member")}
+          accessibilityRole="button"
+          accessibilityLabel="Join a workspace"
+        >
+          <Text style={[styles.roleTitle, !isOwner && styles.roleTitleActive]}>Join a workspace</Text>
+          <Text style={styles.roleHint}>Book desks, rooms, and memberships.</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.roleCard, isOwner && styles.roleCardActive]}
+          onPress={() => setRole("owner")}
+          accessibilityRole="button"
+          accessibilityLabel="List my workspace"
+        >
+          <Text style={[styles.roleTitle, isOwner && styles.roleTitleActive]}>List my workspace</Text>
+          <Text style={styles.roleHint}>Manage locations, spaces, and bookings.</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.label}>Full name *</Text>
       <TextInput
@@ -77,7 +113,7 @@ export function OnboardingScreen() {
         autoComplete="name"
       />
 
-      <Text style={styles.label}>Phone (optional)</Text>
+      <Text style={styles.label}>{isOwner ? "Phone *" : "Phone (optional)"}</Text>
       <TextInput
         style={styles.input}
         placeholder="5551234567"
@@ -116,7 +152,9 @@ export function OnboardingScreen() {
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryButtonText}>Save member profile</Text>
+          <Text style={styles.primaryButtonText}>
+            {isOwner ? "Continue to business details" : "Save member profile"}
+          </Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -128,6 +166,20 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: "600", color: "#111827", marginBottom: 4 },
   subtitle: { fontSize: 14, color: "#6B7280", marginBottom: 24 },
   label: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 6 },
+  roleRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  roleCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#FFF",
+    gap: 4,
+  },
+  roleCardActive: { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
+  roleTitle: { fontSize: 13, fontWeight: "700", color: "#374151" },
+  roleTitleActive: { color: "#3730A3" },
+  roleHint: { fontSize: 11, color: "#6B7280" },
   input: {
     borderWidth: 1,
     borderColor: "#E5E7EB",
