@@ -103,7 +103,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/locations/[id]/edit` | `owner/OwnerLocationEditScreen` | parity | |
 | `/owner/locations/floor-plan` | — | missing-on-mobile | desktop-heavy editor; Open Q3 |
 | `/owner/locations/spaces` | `owner/OwnerLocationRoomsScreen` | parity | |
-| `/owner/loyalty` | — | missing-on-mobile | Open Q3 |
+| `/owner/loyalty` | `owner/OwnerLoyaltyScreen` | parity *(Run 24, 2026-06-11)* | program summary, full settings (toggles, numeric knobs, allowed space types/booking modes) via web's exact PUT projection, campaign builder + pause/activate, manual point grants; owner menu "Loyalty" |
 | `/owner/marketing/*` (8 routes) | — | missing-on-mobile | campaign/segments/templates/workflows suite; Open Q3 |
 | `/owner/members`, `/owner/members/[public_id]` | `owner/OwnerMembersScreen` + `owner/OwnerMemberDetailScreen` | parity *(Run 16, 2026-06-11)* | CRM list (`/api/owner/members` with org/search/status filters, counts, stats, tags) + detail (stats grid, editable status/phone/company/tags/notes via PATCH, upcoming/past activity from member-filtered `/api/owner/calendar`); owner menu "Members" |
 | `/owner/payments` | `owner/OwnerPaymentsScreen` | parity *(Run 15, 2026-06-11)* | new owner payments overview: status stats, org-scoped payout ledger summary (`/api/owner/payout-summary`), rich ledger (member/space/when, fee/net/commission, failure reasons), invoice + follow-up links; owner menu and dashboard money cards now point here (members keep `PaymentsScreen`) |
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 24: owner loyalty.** New `OwnerLoyaltyScreen` mirroring `webUI/app/owner/loyalty/page.tsx`: per-org summary stats (issued/redeemed/outstanding/liability), the full settings surface (three toggles, seven numeric knobs, allowed space-type and booking-mode chip lists) saved with web's exact 12-field PUT projection, campaign builder (six types, promo/earned reward, draft/active, budget) with web's POST payload incl. `reward_json`/`rules_json`, campaign pause/activate, and manual point grants. 4 new tests (33 suites / 131 tests green). Checklist: all ✅.
 
 - **2026-06-11 — Run 23: owner analytics (reduced).** New `OwnerAnalyticsScreen` (owner menu "Analytics") on the same endpoints as `webUI/app/owner/analytics/page.tsx`: overview KPIs incl. revenue/booking deltas and the locations•spaces sub-line, occupancy-by-day bar rows, revenue-per-space list, top members, and top-5 busiest hours derived from the peak-hours matrix; start/end date range with web's defaults. ↔ chart/heatmap visualizations and CSV/PDF exports stay web-only per the visualization policy. 3 new tests (32 suites / 127 tests green). Checklist: all ✅.
 
