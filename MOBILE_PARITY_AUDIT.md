@@ -57,11 +57,11 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | Web route | Mobile screen | Status | Notes |
 |---|---|---|---|
 | `/` (landing) | — | intentional divergence | app opens straight into Login/tabs |
-| `/spaces` | `HomeScreen` (Marketplace tab) | partial | mobile has search + filters (`/api/marketplace/search`); filter-set parity unverified |
+| `/spaces` | `HomeScreen` (Marketplace tab) | parity *(Run 5, 2026-06-11)* | now uses web's `/api/marketplace/locations` with category tabs, q, date/time window, capacity, max price, sort, lat/lng+radius; location cards → `LocationSpaces`. ↔ intentional: no map view, manual lat/lng instead of Google Places autocomplete |
 | `/spaces/[spaceId]` | `member/SpaceDetailScreen` | parity | full booking checkout: preview, promo codes, payment method, membership subscribe |
 | `/locations/[locationId]` | `member/LocationSpacesScreen` | parity | `/api/locations/{id}/spaces` |
-| `/meeting-rooms{,/[locationId]}` | via `HomeScreen` type filter | partial | no dedicated surface; capability exists via space-type filter |
-| `/private-offices{,/[locationId]}` | via `HomeScreen` type filter | partial | same as above |
+| `/meeting-rooms{,/[locationId]}` | `HomeScreen` "Meeting rooms" category | parity *(Run 5)* | same `category=meeting_room` query the web route uses |
+| `/private-offices{,/[locationId]}` | `HomeScreen` "Private offices" category | parity *(Run 5)* | same `category=private_office` query the web route uses |
 | `/booking-payment/[token]` | `BookingDetailScreen` pay flow + `components/BookingPaymentMethodSetup.tsx` | partial | web token link is a guest/anonymous checkout; mobile pays in-app as signed-in user. Open Q2 |
 | `/guest/access-pass` | — | missing-on-mobile | guest flow — likely web-only by design. Open Q2 |
 | `/privacy`, `/terms` | — | missing-on-mobile | likely link-out; Open Q2 |
@@ -160,7 +160,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 2. ~~**Owner request approval**~~ — **DONE (Run 2, 2026-06-11)**, see §6a. Follow-ups (waitlist invite, email resend) tracked in the matrix as partial.
 3. ~~**Owner dashboard states + KPIs**~~ — **DONE (Run 3, 2026-06-11)**, see §6a.
 4. ~~**Owner payments settings**~~ — **DONE (Run 4, 2026-06-11)**, see §6a. (Target corrected to `/owner/settings/payments`; `/owner/payments` payout summary remains a small partial gap.)
-5. **Marketplace filters** — verify/align `HomeScreen` filters vs `/spaces`. *(partial)*
+5. ~~**Marketplace filters**~~ — **DONE (Run 5, 2026-06-11)**, see §6a.
 6. **Member subscriptions** — propose build spec. *(missing)*
 7. **Owner space edit** — propose build spec (`/owner/spaces/[spaceId]/edit`). *(missing)*
 8. **Owner space media** — propose build spec. *(missing)*
@@ -221,8 +221,21 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerPaymentSettingsScre
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerPaymentSettings.test.tsx` (load/prefill/readiness, save payload, disable+test, overrides payloads, CardPointe switch + load error). Full suite green (17 suites / 58 tests).
 - Matrix correction made during this run: web `/owner/payments` is a payments *overview* (payments, invoices, payout summary), not provider settings — matrix updated; payout summary remains a small partial gap.
 
+### Run 5 — `HomeScreen` vs `/spaces` (+ `/meeting-rooms`, `/private-offices`) (2026-06-11)
+
+Checklist results after change (`mobile/src/screens/HomeScreen.tsx`, mirrors `webUI/components/public-marketplace-browser.tsx` + `webUI/lib/public-marketplace.ts`):
+
+- **Routing:** ✅ — Marketplace tab root; location cards navigate to existing `LocationSpaces` (→ `SpaceDetail`), mirroring web's location-grouped results.
+- **Auth + tenancy:** ✅ — endpoint is public on backend; mobile passes its token when present.
+- **Data:** ✅ — switched from flat `/api/marketplace/search` to web's `/api/marketplace/locations`; renders matching-space count, distance, starting day-pass/hourly/monthly prices, amenities; loading/empty/error states present; auto-loads on mount and category switch like web.
+- **Actions:** ✅ — category tabs (coworking/private offices/meeting rooms — covers the `/meeting-rooms` and `/private-offices` web routes), q, date + start/end time availability window, capacity, max price (label varies by category like web), sort (default/relevance/distance/price asc/desc/name), lat/lng + radius_miles with web's q-drop rule.
+- **Feature flags/permissions:** ✅ — none (public surface).
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/marketplace.test.tsx` (auto-load + card render + nav, category re-query, full filter param parity, lat/lng q-drop rule, error/empty state). Full suite green (18 suites / 63 tests).
+- ↔ Intentional divergence: no embedded map view; manual lat/lng/radius fields instead of Google Places autocomplete (no geocoding dependency on mobile).
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 5: marketplace browser parity.** `HomeScreen` rewritten onto web's `/api/marketplace/locations` with category tabs, q/date/time/capacity/price/sort/geo filters (web's exact param rules incl. q-drop with lat/lng), location-grouped result cards with starting prices feeding the existing `LocationSpaces` → `SpaceDetail` flow. 5 new tests.
 - **2026-06-11 — Run 4: owner payment provider settings.** New `OwnerPaymentSettingsScreen` (stack route `OwnerPaymentSettings`, owner menu "Payment providers") mirroring web's `/owner/settings/payments`: readiness card, Stripe/CardPointe credential forms with write-only secret placeholders, test connection, enable/disable, org/location provider overrides. 5 new tests. Matrix corrected re `/owner/payments` (overview page, not provider settings).
 - **2026-06-11 — Run 3: owner dashboard parity.** `OwnerDashboardScreen` now computes web's KPIs (MTD revenue, occupancy, approved bookings, active memberships, today's bookings via `/api/owner/calendar`) with web's exact money math, and gained error + empty (no-locations → create CTA) states. Payment-volume math fixed to be cents-aware and succeeded-only. Tests rewritten (4 tests).
 - **2026-06-11 — Run 2: owner request decisions.** Added approve/reject with operator notes to `mobile/src/screens/owner/OwnerBookingsScreen.tsx` (`POST /api/booking-requests/{id}/approve|reject`, reject behind an inline confirm step, list reload + success/error feedback). Added `mobile/__tests__/ownerRequestDecisions.test.tsx` (5 tests). Also this date: fixed repo-wide `mobile-security` CI failures via npm overrides for joi (GHSA-q7cg-457f-vx79) and shell-quote (GHSA-w7jw-789q-3m8p) in PR #185.

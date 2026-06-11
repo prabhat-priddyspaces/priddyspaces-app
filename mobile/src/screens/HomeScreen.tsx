@@ -1,150 +1,321 @@
-import { useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
-type MarketplaceSpace = {
-  space_public_id: string;
-  space_type: string;
-  capacity: number;
-  price_daily: number | null;
-  price_monthly: number | null;
-  availability_status: string;
-  availability_start_time?: string | null;
-  availability_end_time?: string | null;
+type MoneyAmount = number | string | null;
+
+type MarketplaceLocation = {
   location_public_id: string;
-  location_name: string;
-  location_address: string;
-  location_city: string | null;
-  image_url: string | null;
+  name: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  neighborhood: string | null;
+  featured_image_url: string | null;
+  location_amenities: string[];
+  matching_space_count: number;
+  starting_day_pass_price: MoneyAmount;
+  starting_monthly_price: MoneyAmount;
+  starting_hourly_price: MoneyAmount;
+  starting_membership_price: number | null;
+  distance_miles: number | null;
 };
+
+type MarketplaceLocationSearchResponse = {
+  meta: { total_results?: number };
+  results: MarketplaceLocation[];
+};
+
+// Mirrors PUBLIC_MARKETPLACE_CONFIGS in webUI/lib/public-marketplace.ts.
+const CATEGORIES = [
+  { value: "coworking", label: "Coworking", priceLabel: "Max day-pass price" },
+  { value: "private_office", label: "Private offices", priceLabel: "Max monthly price" },
+  { value: "meeting_room", label: "Meeting rooms", priceLabel: "Max room price" },
+] as const;
+
+const SORTS = [
+  { value: "", label: "Default" },
+  { value: "relevance", label: "Relevance" },
+  { value: "distance", label: "Distance" },
+  { value: "price_asc", label: "Lowest price" },
+  { value: "price_desc", label: "Highest price" },
+  { value: "name", label: "Name" },
+] as const;
+
+function formatPrice(value: MoneyAmount): string | null {
+  if (value == null || value === "") return null;
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return `$${amount.toFixed(2).replace(/\.00$/, "")}`;
+}
 
 export function HomeScreen() {
   const { token } = useAuth();
   const navigation = useNavigation<any>();
-  const [city, setCity] = useState("");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["value"]>("coworking");
+  const [q, setQ] = useState("");
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [capacity, setCapacity] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [sort, setSort] = useState<(typeof SORTS)[number]["value"]>("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [radiusKm, setRadiusKm] = useState("25");
-  const [spaceType, setSpaceType] = useState("");
-  const [minCapacity, setMinCapacity] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [spaces, setSpaces] = useState<MarketplaceSpace[]>([]);
+  const [radiusMiles, setRadiusMiles] = useState("25");
+  const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function handleSearch() {
-    if (!token) return;
-    setLoading(true);
-    setMessage("");
-    try {
-      const params = new URLSearchParams();
-      if (city.trim()) params.set("city", city.trim());
-      if (lat.trim()) params.set("lat", lat.trim());
-      if (lng.trim()) params.set("lng", lng.trim());
-      if (radiusKm.trim()) params.set("radius_km", radiusKm.trim());
-      if (spaceType.trim()) params.set("space_type", spaceType.trim());
-      if (minCapacity.trim()) params.set("min_capacity", minCapacity.trim());
-      if (maxPrice.trim()) params.set("max_price", maxPrice.trim());
-      const query = params.toString();
-      const path = query ? `/api/marketplace/search?${query}` : "/api/marketplace/search";
-      const list = await apiFetch<MarketplaceSpace[]>(path, { method: "GET" }, token);
-      setSpaces(list);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Failed to load marketplace spaces");
-      setSpaces([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const search = useCallback(
+    async (activeCategory: string) => {
+      setLoading(true);
+      setMessage("");
+      try {
+        // Same param-building rules as web's buildApiSearchParams: with a
+        // lat/lng the radius does the location filtering and q is dropped.
+        const params = new URLSearchParams();
+        params.set("category", activeCategory);
+        if (date.trim()) params.set("date", date.trim());
+        if (startTime.trim()) params.set("start_time", startTime.trim());
+        if (endTime.trim()) params.set("end_time", endTime.trim());
+        if (capacity.trim()) params.set("capacity", capacity.trim());
+        if (sort) params.set("sort", sort);
+        if (maxPrice.trim()) params.set("max_price", maxPrice.trim());
+        if (lat.trim() && lng.trim()) {
+          params.set("lat", lat.trim());
+          params.set("lng", lng.trim());
+          if (radiusMiles.trim()) params.set("radius_miles", radiusMiles.trim());
+        } else if (q.trim()) {
+          params.set("q", q.trim());
+        }
+        const response = await apiFetch<MarketplaceLocationSearchResponse>(
+          `/api/marketplace/locations?${params.toString()}`,
+          { method: "GET" },
+          token || undefined,
+        );
+        setLocations(response.results || []);
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : "Failed to load marketplace locations");
+        setLocations([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [capacity, date, endTime, lat, lng, maxPrice, q, radiusMiles, sort, startTime, token],
+  );
+
+  useEffect(() => {
+    void search(category);
+    // Auto-load on mount and on category switch, like the web browser.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, token]);
+
+  const priceLabel = CATEGORIES.find((item) => item.value === category)?.priceLabel || "Max price";
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
       <Text style={styles.title}>Marketplace</Text>
-      <Text style={styles.subtitle}>Search rooms, desks, and offices by city, capacity, or price.</Text>
+      <Text style={styles.subtitle}>Browse coworking, private offices, and meeting rooms.</Text>
+
+      <View style={styles.chipRow}>
+        {CATEGORIES.map((item) => (
+          <Chip
+            key={item.value}
+            label={item.label}
+            active={category === item.value}
+            accessibilityLabel={`Category ${item.label}`}
+            onPress={() => setCategory(item.value)}
+          />
+        ))}
+      </View>
+
       <TextInput
         style={styles.input}
-        placeholder="City (optional)"
-        value={city}
-        onChangeText={setCity}
+        placeholder="Neighborhood, city, state, or ZIP"
+        accessibilityLabel="Search query"
+        value={q}
+        onChangeText={setQ}
       />
-      <View style={styles.geoRow}>
+      <View style={styles.row}>
         <TextInput
-          style={[styles.input, styles.geoInput]}
-          placeholder="Latitude"
-          value={lat}
-          onChangeText={setLat}
+          style={[styles.input, styles.rowInput]}
+          placeholder="Date YYYY-MM-DD"
+          accessibilityLabel="Date"
+          value={date}
+          onChangeText={setDate}
         />
         <TextInput
-          style={[styles.input, styles.geoInput]}
-          placeholder="Longitude"
-          value={lng}
-          onChangeText={setLng}
+          style={[styles.input, styles.rowInput]}
+          placeholder="Start HH:MM"
+          accessibilityLabel="Start time"
+          value={startTime}
+          onChangeText={setStartTime}
         />
         <TextInput
-          style={[styles.input, styles.geoInput]}
-          placeholder="Radius km"
-          value={radiusKm}
-          onChangeText={setRadiusKm}
+          style={[styles.input, styles.rowInput]}
+          placeholder="End HH:MM"
+          accessibilityLabel="End time"
+          value={endTime}
+          onChangeText={setEndTime}
         />
       </View>
-      <View style={styles.geoRow}>
+      <View style={styles.row}>
         <TextInput
-          style={[styles.input, styles.geoInput]}
-          placeholder="Space type"
-          value={spaceType}
-          onChangeText={setSpaceType}
+          style={[styles.input, styles.rowInput]}
+          placeholder="Capacity"
+          accessibilityLabel="Capacity"
+          keyboardType="number-pad"
+          value={capacity}
+          onChangeText={setCapacity}
         />
         <TextInput
-          style={[styles.input, styles.geoInput]}
-          placeholder="Min seats"
-          value={minCapacity}
-          onChangeText={setMinCapacity}
-        />
-        <TextInput
-          style={[styles.input, styles.geoInput]}
-          placeholder="Max daily $"
+          style={[styles.input, styles.rowInput]}
+          placeholder={priceLabel}
+          accessibilityLabel="Max price"
+          keyboardType="number-pad"
           value={maxPrice}
           onChangeText={setMaxPrice}
         />
       </View>
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSearch} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Search spaces</Text>}
+      <View style={styles.row}>
+        <TextInput
+          style={[styles.input, styles.rowInput]}
+          placeholder="Latitude"
+          accessibilityLabel="Latitude"
+          value={lat}
+          onChangeText={setLat}
+        />
+        <TextInput
+          style={[styles.input, styles.rowInput]}
+          placeholder="Longitude"
+          accessibilityLabel="Longitude"
+          value={lng}
+          onChangeText={setLng}
+        />
+        <TextInput
+          style={[styles.input, styles.rowInput]}
+          placeholder="Radius mi"
+          accessibilityLabel="Radius miles"
+          value={radiusMiles}
+          onChangeText={setRadiusMiles}
+        />
+      </View>
+      <View style={styles.chipRow}>
+        {SORTS.map((item) => (
+          <Chip
+            key={item.value || "default"}
+            label={item.label}
+            active={sort === item.value}
+            accessibilityLabel={`Sort ${item.label}`}
+            onPress={() => setSort(item.value)}
+          />
+        ))}
+      </View>
+
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={() => void search(category)}
+        disabled={loading}
+        accessibilityRole="button"
+        accessibilityLabel="Search locations"
+      >
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Search</Text>}
       </TouchableOpacity>
       {message ? <Text style={styles.message}>{message}</Text> : null}
+
       <View style={styles.list}>
-        {spaces.length === 0 && !loading ? (
-          <Text style={styles.empty}>No marketplace spaces match these filters.</Text>
+        {locations.length === 0 && !loading ? (
+          <Text style={styles.empty}>No locations match these filters.</Text>
         ) : (
-          spaces.map((space) => (
-            <TouchableOpacity
-              key={space.space_public_id}
-              style={styles.card}
-              onPress={() => navigation.navigate("SpaceDetail", { spaceId: space.space_public_id })}
-            >
-              {space.image_url ? (
-                <Image source={{ uri: space.image_url }} style={styles.cardImage} />
-              ) : null}
-              <Text style={styles.cardTitle}>{space.space_type}</Text>
-              <Text style={styles.cardSubtitle}>{space.location_name}</Text>
-              <Text style={styles.cardMuted}>{space.location_address}</Text>
-              {space.location_city ? <Text style={styles.cardMuted}>{space.location_city}</Text> : null}
-              {space.availability_start_time || space.availability_end_time ? (
-                <Text style={styles.cardMuted}>
-                  Hours: {space.availability_start_time || "--:--"} to {space.availability_end_time || "--:--"}
+          locations.map((location) => {
+            const dayPass = formatPrice(location.starting_day_pass_price);
+            const monthly = formatPrice(location.starting_monthly_price);
+            const hourly = formatPrice(location.starting_hourly_price);
+            const prices = [
+              dayPass ? `Day pass from ${dayPass}` : null,
+              hourly ? `Hourly from ${hourly}` : null,
+              monthly ? `Monthly from ${monthly}` : null,
+            ].filter(Boolean);
+            return (
+              <TouchableOpacity
+                key={location.location_public_id}
+                style={styles.card}
+                onPress={() =>
+                  navigation.navigate("LocationSpaces", {
+                    locationId: location.location_public_id,
+                    name: location.name,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`Open location ${location.name}`}
+              >
+                {location.featured_image_url ? (
+                  <Image source={{ uri: location.featured_image_url }} style={styles.cardImage} />
+                ) : null}
+                <Text style={styles.cardTitle}>{location.name}</Text>
+                <Text style={styles.cardSubtitle}>
+                  {[location.address, location.city, location.state].filter(Boolean).join(", ")}
                 </Text>
-              ) : null}
-            </TouchableOpacity>
-          ))
+                <Text style={styles.cardMuted}>
+                  {location.matching_space_count}{" "}
+                  {location.matching_space_count === 1 ? "matching space" : "matching spaces"}
+                  {location.distance_miles != null ? ` • ${location.distance_miles.toFixed(1)} mi` : ""}
+                </Text>
+                {prices.length > 0 ? <Text style={styles.cardMuted}>{prices.join(" • ")}</Text> : null}
+                {location.location_amenities.length > 0 ? (
+                  <Text style={styles.cardMuted} numberOfLines={1}>
+                    {location.location_amenities.join(" • ")}
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })
         )}
       </View>
-    </View>
+    </ScrollView>
+  );
+}
+
+function Chip({
+  label,
+  active,
+  onPress,
+  accessibilityLabel,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.chip, active && styles.chipActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1
+  },
   container: {
     padding: 24
   },
@@ -158,8 +329,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280"
   },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#FFFFFF"
+  },
+  chipActive: {
+    borderColor: "#4F46E5",
+    backgroundColor: "#EEF2FF"
+  },
+  chipText: {
+    color: "#4B5563",
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  chipTextActive: {
+    color: "#3730A3"
+  },
   input: {
-    marginTop: 16,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 10,
@@ -168,14 +365,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: "#FFFFFF"
   },
-  geoRow: {
+  row: {
     flexDirection: "row",
-    gap: 8,
-    marginTop: 8
+    gap: 8
   },
-  geoInput: {
-    flex: 1,
-    marginTop: 0
+  rowInput: {
+    flex: 1
   },
   primaryButton: {
     marginTop: 12,
