@@ -142,6 +142,124 @@ describe("OwnerBookingsScreen request decisions", () => {
     await waitFor(() => expect(getByText("Space is no longer available")).toBeTruthy());
   });
 
+  it("filters requests by status like web", async () => {
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/booking-requests" && options?.method === "GET") {
+        return Promise.resolve([
+          requests[0],
+          { ...requests[1], public_id: "req_9", status: "approved" },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const { getByLabelText, getByText, queryByText } = render(<OwnerBookingsScreen />);
+
+    await waitFor(() => expect(getByText("requested")).toBeTruthy());
+    expect(getByText("approved")).toBeTruthy();
+
+    fireEvent.press(getByLabelText("Filter Approved"));
+    expect(queryByText("requested")).toBeNull();
+    expect(getByText("approved")).toBeTruthy();
+
+    fireEvent.press(getByLabelText("Filter Rejected"));
+    expect(getByText("No booking requests match this filter.")).toBeTruthy();
+  });
+
+  it("invites a waitlisted member with operator notes", async () => {
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/booking-requests" && options?.method === "GET") return Promise.resolve([]);
+      if (path === "/api/booking-waitlist" && options?.method === "GET") {
+        return Promise.resolve([
+          {
+            public_id: "wl_1",
+            status: "waitlisted",
+            member_name: "Casey Member",
+            member_email: "customer@test.com",
+            membership_plan_name: null,
+            space_name: "Board Room",
+            space_type: "conference_room",
+            location_name: "Rochester Hub",
+            desired_start_date: "2026-07-01",
+            start_datetime: null,
+            end_datetime: null,
+            invite_expires_at: null,
+            operator_notes: null,
+          },
+        ]);
+      }
+      if (path === "/api/booking-waitlist/wl_1/invite" && options?.method === "POST") {
+        return Promise.resolve({});
+      }
+      return Promise.resolve([]);
+    });
+
+    const { getByLabelText, getByText } = render(<OwnerBookingsScreen />);
+
+    await waitFor(() => expect(getByText("Casey Member")).toBeTruthy());
+    expect(getByText("Desired start 2026-07-01")).toBeTruthy();
+    fireEvent.changeText(getByLabelText("Operator notes for wl_1"), "Front desk will greet you");
+    fireEvent.press(getByLabelText("Invite wl_1"));
+
+    await waitFor(() => expect(getByText("Waitlist invite sent")).toBeTruthy());
+    const inviteCall = (apiFetch as jest.Mock).mock.calls.find(
+      ([path, options]) => path === "/api/booking-waitlist/wl_1/invite" && options?.method === "POST",
+    );
+    expect(JSON.parse(inviteCall[1].body)).toEqual({ operator_notes: "Front desk will greet you" });
+  });
+
+  it("resends failed booking emails", async () => {
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      if (path === "/api/booking-requests" && options?.method === "GET") {
+        return Promise.resolve([
+          {
+            ...requests[0],
+            email_delivery_summary: [
+              {
+                notification_type: "booking_confirmation",
+                label: "Booking confirmation",
+                status: "failed",
+                recipient_count: 1,
+                last_error: "Mailbox unavailable",
+                recipients: ["customer@test.com"],
+              },
+              {
+                notification_type: "owner_alert",
+                label: "Owner alert",
+                status: "delivered",
+                recipient_count: 1,
+                last_error: null,
+                recipients: [],
+              },
+            ],
+          },
+        ]);
+      }
+      if (
+        path === "/api/booking-requests/req_1/emails/resend" &&
+        options?.method === "POST"
+      ) {
+        return Promise.resolve({});
+      }
+      return Promise.resolve([]);
+    });
+
+    const { getByLabelText, getByText, queryByLabelText } = render(<OwnerBookingsScreen />);
+
+    await waitFor(() => expect(getByText("Booking confirmation")).toBeTruthy());
+    expect(getByText("Mailbox unavailable")).toBeTruthy();
+    // Delivered emails offer no resend.
+    expect(queryByLabelText("Resend owner_alert for req_1")).toBeNull();
+
+    fireEvent.press(getByLabelText("Resend booking_confirmation for req_1"));
+    await waitFor(() => expect(getByText("Email resent")).toBeTruthy());
+    const resendCall = (apiFetch as jest.Mock).mock.calls.find(
+      ([path, options]) =>
+        path === "/api/booking-requests/req_1/emails/resend" && options?.method === "POST",
+    );
+    expect(JSON.parse(resendCall[1].body)).toEqual({ notification_type: "booking_confirmation" });
+  });
+
   it("offers no decision buttons on payment_failed requests", async () => {
     (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
       if (path === "/api/booking-requests" && options?.method === "GET") {
