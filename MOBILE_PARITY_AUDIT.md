@@ -50,7 +50,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/dashboard` (role router) | `AppNavigator` role switch | parity | different mechanism, same outcome; intentional divergence |
 | `/onboarding`, `/onboarding/member` | `OnboardingScreen` | partial | web flow has extra steps; see Q1 |
 | `/onboarding/organization` | `OrgOnboardingScreen` | parity | |
-| `/onboarding/owner`, `/onboarding/personal` | — | missing-on-mobile | tied to Q1 (owner signup path) |
+| `/onboarding/owner` | — | missing-on-mobile | Spec 13 proposed (§5); `/onboarding/personal` + `/onboarding/organization` are web redirects only |
 
 ### Marketplace / public
 
@@ -154,7 +154,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 
 Per the workflow (propose → confirm → build, one screen per run). Confirm any subset; they will be built one at a time in this order.
 
-**Spec 6 — `MemberSubscriptionsScreen`** *(plan item 6)*
+**Spec 6 — `MemberSubscriptionsScreen`** *(DONE — Run 6)*
 - Mirrors: `webUI/app/member/subscriptions/page.tsx` (165 lines).
 - Data: `GET /api/subscriptions` (list + status summary counts: active/trialing/past_due/canceling/canceled).
 - Actions: cancel membership at period end — `POST /api/subscriptions/{publicId}/cancel`. Web uses `window.confirm`; mobile will use the inline confirm pattern from Run 2.
@@ -162,7 +162,7 @@ Per the workflow (propose → confirm → build, one screen per run). Confirm an
 - Gating: signed-in member; server scopes to own subscriptions.
 - Open questions: none.
 
-**Spec 7 — `OwnerSpaceEditScreen`** *(plan item 7)*
+**Spec 7 — `OwnerSpaceEditScreen`** *(DONE — Run 7; advanced managers staged)*
 - Mirrors: `webUI/app/owner/spaces/[spaceId]/edit/client.tsx` (395 lines).
 - Data: `GET /api/spaces/{spaceId}`; save via `PATCH /api/spaces/{spaceId}`.
 - Reuses: form patterns + space-type/pricing rules from `mobile/src/screens/owner/OwnerAddSpaceScreen.tsx`.
@@ -170,7 +170,7 @@ Per the workflow (propose → confirm → build, one screen per run). Confirm an
 - Gating: owner; server-side location-role check.
 - Open question: the web client is 395 lines — during the run I'll inventory which advanced sections it includes (booking modes / setup fees / volume discounts have their own backend routers) and either match them or stage them as an explicit follow-up; will not silently drop capabilities.
 
-**Spec 8 — `OwnerSpaceMediaScreen`** *(plan item 8)*
+**Spec 8 — `OwnerSpaceMediaScreen`** *(DONE — Run 8)*
 - Mirrors: `webUI/app/owner/spaces/[spaceId]/media/client.tsx` (231 lines).
 - Data: `GET /api/spaces/{spaceId}/media`, `GET /api/spaces/{spaceId}`.
 - Actions: upload via presigned flow (`POST /api/media/presign` → upload → `POST /api/media`), set primary, delete, reorder (whatever subset the web client exposes — verified in-run).
@@ -178,24 +178,31 @@ Per the workflow (propose → confirm → build, one screen per run). Confirm an
 - Gating: owner.
 - **Open question (blocking): requires a new dependency `expo-image-picker` for photo selection. OK to add?**
 
-**Spec 10 — `MemberRewardsScreen`** *(plan item 10 — AWAITING GO)*
+**Spec 13 — Owner signup + onboarding on mobile** *(plan item 13 — AWAITING GO)*
+- Mirrors: `webUI/app/onboarding/owner/page.tsx` (235 lines; the real flow — `/onboarding/personal` and `/onboarding/organization` are just web redirects, and `/owners/sign-up` is a thin Clerk wrapper).
+- Web flow: `POST /api/onboarding/profile` with `role: "owner"` (full name, phone *required*, country, timezone, terms + privacy) → `POST /api/onboarding/organization` (`name`*, `display_name`, `website`, `business_email`, `business_phone`*, `description`) → route to owner dashboard.
+- Mobile design (smallest diff — **no new screens needed**): `AppNavigator` already routes `role === "owner" && !has_organization` → `OrgOnboardingScreen`. Changes: (1) add a role selector to `OnboardingScreen` ("Join a workspace" = member / "List my workspace" = owner) replacing the `role: "member"` hardcode at `OnboardingScreen.tsx:45`, posting web's owner profile payload; (2) align `OrgOnboardingScreen` fields/payload with web's organization payload (add display_name, business_email, required business_phone, description); (3) ensure `me` refreshes after each POST so the navigator advances (verify `AuthContext` refresh path in-run).
+- Gating: signed-in Clerk user without `role`; same backend endpoints enforce the rest.
+- Open questions: none blocking.
+
+**Spec 10 — `MemberRewardsScreen`** *(DONE — Run 10)*
 - Mirrors: `webUI/app/member/rewards/page.tsx` (201 lines).
 - Data: `GET /api/loyalty/priddy-wallet`, `GET /api/loyalty/priddy-wallet/transactions`, `GET /api/loyalty/wallets`, `GET /api/loyalty/wallets/{org}/transactions`.
 - Nav: stack screen + member menu entry "Rewards".
 - Open questions: none anticipated; read-only surface.
 
-**Spec 11 — `MemberInsightsScreen`** *(plan item 11 — AWAITING GO)*
+**Spec 11 — `MemberInsightsScreen`** *(DONE — Run 11)*
 - Mirrors: `webUI/app/member/insights/page.tsx` (117 lines).
 - Data: `GET /api/analytics/me/summary` (single endpoint).
 - Nav: stack screen + member menu entry "Insights".
 - Open questions: if web renders charts, mobile shows stat cards (same divergence policy as owner dashboard).
 
-**Spec 12 — `MemberLocationsScreen`** *(plan item 12 — AWAITING GO)*
+**Spec 12 — `MemberLocationsScreen`** *(DONE — Run 12, via enhanced `LocationSpacesScreen`)*
 - Mirrors: `webUI/app/member/locations/page.tsx` (322 lines) — "my locations" derived from `GET /api/booking-requests` + `GET /api/locations/{id}` + `GET /api/locations/{id}/spaces`, with quick re-book (payment method resolve).
 - Nav: stack screen + member menu entry "My locations"; space taps reuse `SpaceDetail`.
 - Open questions: quick-rebook flow scope to be inventoried in-run (may stage like Run 7's managers).
 
-**Spec 9 — `OwnerCalendarScreen`** *(plan item 9)*
+**Spec 9 — `OwnerCalendarScreen`** *(DONE — Run 9)*
 - Mirrors: `webUI/app/owner/calendar/page.tsx` (134 lines).
 - Data: `GET /api/orgs`, `GET /api/locations?organization_public_id=`, `GET /api/owner/calendar?start&end&include=bookings,requests,subscriptions`.
 - Reuses: day-navigation + location-filter + event-card patterns from `mobile/src/screens/MemberCalendarScreen.tsx`.
