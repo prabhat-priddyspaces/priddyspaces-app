@@ -82,7 +82,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/member/profile` | `ProfileScreen` | parity *(Run 1, 2026-06-11)* | profile edit (first/last/phone/company) via `PATCH /api/me` now on mobile; notification prefs + push enable live on `NotificationsScreen` (intentional divergence, linked from profile) |
 | `/member/requests` | `BookingsScreen` | parity | `/api/booking-requests` |
 | `/member/requests/[bookingId]` | `BookingDetailScreen` | parity | pay now / update card / retry payment |
-| `/member/rewards` | — | missing-on-mobile | loyalty wallet/ledger; proposal needed |
+| `/member/rewards` | `member/MemberRewardsScreen` | parity *(Run 10, 2026-06-11)* | Priddy Points wallet + per-org loyalty wallets (metrics, balances, tier note) + transactions ledger; member menu "Rewards" |
 | `/member/spaces/[spaceId]` | `member/SpaceDetailScreen` | parity | shared with public detail |
 | `/member/subscriptions` | `member/MemberSubscriptionsScreen` | parity *(Run 6, 2026-06-11)* | list + status stats + past-due banner + cancel-at-period-end (inline confirm); member menu "Memberships"; links to `SpaceDetail` and Payments |
 
@@ -216,7 +216,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 7. ~~**Owner space edit**~~ — **core form DONE (Run 7, 2026-06-11)**, see §6a; advanced managers (lease terms / volume discounts / setup fees) staged as follow-up.
 8. ~~**Owner space media**~~ — **DONE (Run 8, 2026-06-11)**, see §6a.
 9. ~~**Owner calendar**~~ — **DONE (Run 9, 2026-06-11)**, see §6a.
-10. **Member rewards** — propose build spec. *(missing)*
+10. ~~**Member rewards**~~ — **DONE (Run 10, 2026-06-11)**, see changelog.
 11. **Member insights** — propose build spec. *(missing)*
 12. **Member locations** — propose build spec. *(missing)*
 13. **Owner signup + onboarding on mobile** — propose build spec. *(Q1: confirmed wanted)*
@@ -332,6 +332,7 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 
 ## 7. Changelog
 
+- **2026-06-11 — Run 10: member rewards.** New `MemberRewardsScreen` (member menu "Rewards") mirroring `webUI/app/member/rewards/page.tsx`: Priddy Points wallet with recent platform transactions, per-org wallet selector chips, metrics (available/cash value/tier/expiring), balance grid, tier-progress note, and the full rewards ledger with +/- point styling — same four loyalty endpoints and formatters as web. Loading/error/empty states; 4 new tests in `mobile/__tests__/memberRewards.test.tsx` (23 suites / 87 tests green). Checklist: routing ✅ auth ✅ data ✅ actions ✅ (read-only like web) flags ✅ works ✅; tier-progress bar rendered as text note (↔ visualization simplification).
 - **2026-06-11 — Run 9: owner calendar.** New `OwnerCalendarScreen` (owner menu "Calendar"): day view of `/api/owner/calendar` with org-location filter, member names, event → BookingDetail, create-booking shortcut. 5 new tests.
 - **2026-06-11 — Run 8: owner space media.** New `OwnerSpaceMediaScreen` with photo-library picking and web's presign upload flow; "Photos" entry on room cards; photo permissions added to app.json; `expo-image-picker` dependency added. 5 new tests.
 - **2026-06-11 — Run 7: owner space edit (core form).** New `OwnerSpaceEditScreen` + "Edit space" entry on `OwnerLocationRoomsScreen`. Web-parity PATCH payload and type-dependent form rules. Advanced managers staged. 5 new tests.
