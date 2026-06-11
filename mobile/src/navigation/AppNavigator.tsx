@@ -43,6 +43,8 @@ import { AdminDashboardScreen } from "../screens/admin/AdminDashboardScreen";
 import { AdminAuditLogsScreen } from "../screens/admin/AdminAuditLogsScreen";
 import { AdminBookingsScreen } from "../screens/admin/AdminBookingsScreen";
 import { AdminListingsScreen } from "../screens/admin/AdminListingsScreen";
+import { AdminMembersScreen } from "../screens/admin/AdminMembersScreen";
+import { AdminOwnerUsersScreen } from "../screens/admin/AdminOwnerUsersScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -301,6 +303,8 @@ function MainApp() {
       <Stack.Screen name="AdminAuditLogs" component={AdminAuditLogsScreen} options={{ title: "Audit logs" }} />
       <Stack.Screen name="AdminBookings" component={AdminBookingsScreen} options={{ title: "All bookings" }} />
       <Stack.Screen name="AdminListings" component={AdminListingsScreen} options={{ title: "Listings" }} />
+      <Stack.Screen name="AdminMembers" component={AdminMembersScreen} options={{ title: "Members" }} />
+      <Stack.Screen name="AdminOwnerUsers" component={AdminOwnerUsersScreen} options={{ title: "Owner users" }} />
       <Stack.Screen
         name="OwnerAssistantPolicies"
         component={OwnerAssistantPoliciesScreen}
