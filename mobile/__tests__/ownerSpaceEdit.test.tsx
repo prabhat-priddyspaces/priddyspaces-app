@@ -189,6 +189,52 @@ describe("OwnerSpaceEditScreen", () => {
     });
   });
 
+  it("creates a lease term and enables the booking mode for the first plan", async () => {
+    (apiFetch as jest.Mock).mockImplementation((path: string, options?: RequestInit) => {
+      const method = options?.method || "GET";
+      if (path === "/api/spaces/space_1" && method === "GET") {
+        return Promise.resolve({ ...conferenceSpace, space_type: "private_office" });
+      }
+      if (path.startsWith("/api/membership-plans?") && method === "GET") return Promise.resolve([]);
+      if (path === "/api/membership-plans" && method === "POST") {
+        return Promise.resolve({ public_id: "plan_1" });
+      }
+      if (path === "/api/spaces/space_1/booking-modes" && method === "PUT") return Promise.resolve({});
+      return Promise.resolve([]);
+    });
+
+    const { getByLabelText, getByText } = render(<OwnerSpaceEditScreen />);
+
+    await waitFor(() => expect(getByText("Lease Terms")).toBeTruthy());
+    fireEvent.press(getByLabelText("Add lease term"));
+    fireEvent.changeText(getByLabelText("Term length (months, blank = month-to-month)"), "12");
+    fireEvent.changeText(getByLabelText("Monthly price"), "1200");
+    fireEvent.press(getByLabelText("Save lease term"));
+
+    await waitFor(() => {
+      const postCall = (apiFetch as jest.Mock).mock.calls.find(
+        ([path, options]) => path === "/api/membership-plans" && options?.method === "POST",
+      );
+      expect(postCall).toBeTruthy();
+      expect(JSON.parse(postCall[1].body)).toEqual({
+        space_public_id: "space_1",
+        booking_mode: "private_office_lease",
+        name: "12-month Term",
+        price_cents: 120000,
+        billing_cycle: "monthly",
+        commitment_months: 12,
+        seats_per_plan: 8,
+        max_active_subscriptions: null,
+        is_active: true,
+      });
+    });
+    expect(
+      (apiFetch as jest.Mock).mock.calls.some(
+        ([path, options]) => path === "/api/spaces/space_1/booking-modes" && options?.method === "PUT",
+      ),
+    ).toBe(true);
+  });
+
   it("surfaces load errors", async () => {
     (apiFetch as jest.Mock).mockImplementation(() => Promise.reject(new Error("Failed to load space")));
 

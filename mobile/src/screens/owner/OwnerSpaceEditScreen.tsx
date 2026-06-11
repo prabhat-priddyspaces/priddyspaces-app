@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -297,11 +297,332 @@ export function OwnerSpaceEditScreen() {
         {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save Changes</Text>}
       </TouchableOpacity>
 
+      {form.space_type !== "conference_room" ? (
+        <LeaseTermsSection
+          spaceId={spaceId}
+          token={token}
+          spaceType={form.space_type}
+          spaceCapacity={Number.parseInt(form.capacity, 10) || 1}
+        />
+      ) : null}
       {form.space_type === "conference_room" || form.space_type === "shared_desk" ? (
         <VolumeDiscountsSection spaceId={spaceId} token={token} />
       ) : null}
       <SetupFeesSection spaceId={spaceId} token={token} />
     </ScrollView>
+  );
+}
+
+type LeaseBookingMode =
+  | "private_office_lease"
+  | "suite_lease"
+  | "monthly_membership"
+  | "virtual_membership";
+
+type OwnerMembershipPlan = {
+  public_id: string;
+  booking_mode: string;
+  name: string;
+  price_cents: number;
+  commitment_months: number | null;
+  seats_per_plan: number;
+  max_active_subscriptions: number | null;
+  is_active: boolean;
+};
+
+function bookingModeFor(spaceType: SpaceType): LeaseBookingMode {
+  if (spaceType === "suite") return "suite_lease";
+  if (spaceType === "shared_desk") return "monthly_membership";
+  if (spaceType === "virtual_office") return "virtual_membership";
+  return "private_office_lease";
+}
+
+function defaultPlanName(commitmentMonths: number | null) {
+  if (commitmentMonths == null) return "Month-to-month";
+  return `${commitmentMonths}-month Term`;
+}
+
+function LeaseTermsSection({
+  spaceId,
+  token,
+  spaceType,
+  spaceCapacity,
+}: {
+  spaceId?: string;
+  token: string | null;
+  spaceType: SpaceType;
+  spaceCapacity: number;
+}) {
+  const bookingMode = bookingModeFor(spaceType);
+  const sectionLabel =
+    spaceType === "shared_desk"
+      ? "Membership Terms"
+      : spaceType === "virtual_office"
+        ? "Virtual Membership Terms"
+        : "Lease Terms";
+  const [plans, setPlans] = useState<OwnerMembershipPlan[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [planForm, setPlanForm] = useState({
+    commitment_months: "",
+    monthly_price: "",
+    name: "",
+    seats_per_plan: String(spaceCapacity || 1),
+    max_active_subscriptions: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const loadPlans = useCallback(async () => {
+    if (!token || !spaceId) return;
+    try {
+      const list = await apiFetch<OwnerMembershipPlan[]>(
+        `/api/membership-plans?space_public_id=${encodeURIComponent(spaceId)}`,
+        { method: "GET" },
+        token,
+      );
+      setPlans(list.filter((plan) => plan.booking_mode === bookingMode));
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to load lease terms");
+    }
+  }, [token, spaceId, bookingMode]);
+
+  useEffect(() => {
+    loadPlans();
+  }, [loadPlans]);
+
+  function startEdit(plan: OwnerMembershipPlan) {
+    setEditingId(plan.public_id);
+    setPlanForm({
+      commitment_months: plan.commitment_months != null ? String(plan.commitment_months) : "",
+      monthly_price: String(Math.round(plan.price_cents / 100)),
+      name: plan.name,
+      seats_per_plan: String(plan.seats_per_plan),
+      max_active_subscriptions:
+        plan.max_active_subscriptions != null ? String(plan.max_active_subscriptions) : "",
+    });
+    setShowForm(true);
+    setMessage("");
+  }
+
+  async function submit() {
+    if (!token || !spaceId) return;
+    const monthlyPrice = Number(planForm.monthly_price);
+    if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) {
+      setMessage("Monthly price must be greater than zero.");
+      return;
+    }
+    const commitmentMonths = planForm.commitment_months.trim()
+      ? Number(planForm.commitment_months)
+      : null;
+    if (commitmentMonths != null && (!Number.isInteger(commitmentMonths) || commitmentMonths < 1)) {
+      setMessage("Term length must be a whole number of months.");
+      return;
+    }
+    const seatsPerPlan = Number(planForm.seats_per_plan || spaceCapacity || 1);
+    if (!Number.isInteger(seatsPerPlan) || seatsPerPlan < 1) {
+      setMessage("Seats per plan must be at least 1.");
+      return;
+    }
+    const maxActiveSubscriptions = planForm.max_active_subscriptions.trim()
+      ? Number(planForm.max_active_subscriptions)
+      : null;
+    if (
+      maxActiveSubscriptions != null &&
+      (!Number.isInteger(maxActiveSubscriptions) || maxActiveSubscriptions < 1)
+    ) {
+      setMessage("Max active subscriptions must be at least 1.");
+      return;
+    }
+    setSubmitting(true);
+    setMessage("");
+    try {
+      if (editingId) {
+        await apiFetch(
+          `/api/membership-plans/${editingId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              name: planForm.name.trim() || defaultPlanName(commitmentMonths),
+              price_cents: Math.round(monthlyPrice * 100),
+              commitment_months: commitmentMonths,
+              seats_per_plan: seatsPerPlan,
+              max_active_subscriptions: maxActiveSubscriptions,
+            }),
+          },
+          token,
+        );
+      } else {
+        const isFirstPlan = plans.length === 0;
+        await apiFetch(
+          "/api/membership-plans",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              space_public_id: spaceId,
+              booking_mode: bookingMode,
+              name: planForm.name.trim() || defaultPlanName(commitmentMonths),
+              price_cents: Math.round(monthlyPrice * 100),
+              billing_cycle: "monthly",
+              commitment_months: commitmentMonths,
+              seats_per_plan: seatsPerPlan,
+              max_active_subscriptions: maxActiveSubscriptions,
+              is_active: true,
+            }),
+          },
+          token,
+        );
+        if (isFirstPlan) {
+          await apiFetch(
+            `/api/spaces/${spaceId}/booking-modes`,
+            { method: "PUT", body: JSON.stringify({ booking_mode: bookingMode, is_enabled: true }) },
+            token,
+          );
+        }
+      }
+      setShowForm(false);
+      setEditingId(null);
+      await loadPlans();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to save lease term");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleActive(plan: OwnerMembershipPlan) {
+    if (!token) return;
+    setMessage("");
+    try {
+      if (plan.is_active) {
+        await apiFetch(`/api/membership-plans/${plan.public_id}`, { method: "DELETE" }, token);
+      } else {
+        await apiFetch(
+          `/api/membership-plans/${plan.public_id}`,
+          { method: "PATCH", body: JSON.stringify({ is_active: true }) },
+          token,
+        );
+      }
+      await loadPlans();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to update lease term");
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{sectionLabel}</Text>
+      {plans.length === 0 ? <Text style={styles.helperText}>No recurring terms yet.</Text> : null}
+      {plans.map((plan) => (
+        <View key={plan.public_id} style={styles.planRow}>
+          <Text style={styles.planName}>
+            {plan.name}
+            {!plan.is_active ? " (inactive)" : ""}
+          </Text>
+          <Text style={styles.helperText}>
+            ${Math.round(plan.price_cents / 100)}/mo •{" "}
+            {plan.commitment_months != null ? `${plan.commitment_months} mo term` : "Month-to-month"} •{" "}
+            {plan.seats_per_plan} seats
+            {plan.max_active_subscriptions != null ? ` • max ${plan.max_active_subscriptions}` : ""}
+          </Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => startEdit(plan)}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit plan ${plan.public_id}`}
+            >
+              <Text style={styles.secondaryButtonText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => toggleActive(plan)}
+              accessibilityRole="button"
+              accessibilityLabel={`${plan.is_active ? "Deactivate" : "Activate"} plan ${plan.public_id}`}
+            >
+              <Text style={styles.secondaryButtonText}>{plan.is_active ? "Deactivate" : "Activate"}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
+      {showForm ? (
+        <View style={{ gap: 8 }}>
+          <Field
+            label="Term length (months, blank = month-to-month)"
+            value={planForm.commitment_months}
+            onChange={(commitment_months) => setPlanForm({ ...planForm, commitment_months })}
+            keyboardType="number-pad"
+          />
+          <Field
+            label="Monthly price"
+            value={planForm.monthly_price}
+            onChange={(monthly_price) => setPlanForm({ ...planForm, monthly_price })}
+            keyboardType="decimal-pad"
+          />
+          <Field
+            label="Plan name"
+            value={planForm.name}
+            onChange={(name) => setPlanForm({ ...planForm, name })}
+          />
+          <Field
+            label="Seats per plan"
+            value={planForm.seats_per_plan}
+            onChange={(seats_per_plan) => setPlanForm({ ...planForm, seats_per_plan })}
+            keyboardType="number-pad"
+          />
+          <Field
+            label="Max active subscriptions"
+            value={planForm.max_active_subscriptions}
+            onChange={(max_active_subscriptions) => setPlanForm({ ...planForm, max_active_subscriptions })}
+            keyboardType="number-pad"
+          />
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={submit}
+              disabled={submitting}
+              accessibilityRole="button"
+              accessibilityLabel="Save lease term"
+            >
+              <Text style={styles.secondaryButtonText}>{submitting ? "Saving…" : "Save term"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setMessage("");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel lease term"
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => {
+            setEditingId(null);
+            setPlanForm({
+              commitment_months: "",
+              monthly_price: "",
+              name: "",
+              seats_per_plan: String(spaceCapacity || 1),
+              max_active_subscriptions: "",
+            });
+            setShowForm(true);
+            setMessage("");
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Add lease term"
+        >
+          <Text style={styles.secondaryButtonText}>Add term</Text>
+        </TouchableOpacity>
+      )}
+      {message ? <Text style={styles.message}>{message}</Text> : null}
+    </View>
   );
 }
 
@@ -740,6 +1061,18 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontSize: 12,
     fontWeight: "700"
+  },
+  planRow: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    padding: 10,
+    gap: 4
+  },
+  planName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827"
   },
   message: {
     color: "#DC2626",

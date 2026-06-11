@@ -113,7 +113,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/settings/assistant-policies` | `owner/OwnerAssistantPoliciesScreen` | parity *(Run 19, 2026-06-11)* | policy form (scope org/location/space → record, 9 categories, title/body/source URL) + list with archive; same `/api/assistant/policies` endpoints; owner menu "Assistant policies" |
 | `/owner/settings/payments` | `owner/OwnerPaymentSettingsScreen` | parity *(Run 4, 2026-06-11)* | new screen: marketplace readiness, Stripe/CardPointe credential form, test connection, enable/disable, org + location provider overrides — same endpoints as web; in owner menu as "Payment providers" |
 | `/owner/spaces/new` | `owner/OwnerAddSpaceScreen` | parity | |
-| `/owner/spaces/{edit,[spaceId]/edit}` | `owner/OwnerSpaceEditScreen` | partial *(Runs 7+20)* | core form + volume discounts (conference/shared-desk, `PUT /api/spaces/{id}/volume-discounts`) + setup fees (`PUT /api/spaces/{id}/setup-fees`) now at parity. ⚠️ remaining: lease-terms manager (membership plans CRUD, `webUI/components/lease-terms-manager.tsx`, 394 lines) — next run |
+| `/owner/spaces/{edit,[spaceId]/edit}` | `owner/OwnerSpaceEditScreen` | parity *(Runs 7+20+21, 2026-06-11)* | core form + volume discounts + setup fees + lease/membership terms (plans CRUD with web's validations, type→booking-mode mapping, first-plan booking-mode enable, deactivate/reactivate) |
 | `/owner/spaces/{media,[spaceId]/media}` | `owner/OwnerSpaceMediaScreen` | parity *(Run 8, 2026-06-11)* | photo gallery + presign upload flow (`/api/media/presign` → PUT → `/api/media`) with primary flag, sort order, 10 MB cap — same as web; uses `expo-image-picker` (approved) |
 | `/owner/team` | `owner/OwnerTeamScreen` | parity | add member, role, pricing override, push toggles |
 
@@ -338,6 +338,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 21: lease terms manager.** `OwnerSpaceEditScreen` gained web's `LeaseTermsManager` capabilities for non-conference types: membership-plan list filtered by the space-type→booking-mode mapping, create/edit form (term months, monthly price, default plan names, seats, max subscriptions) with web's validations and payloads, first-plan `PUT /api/spaces/{id}/booking-modes` enable, and deactivate/reactivate via DELETE/PATCH. 1 new test (30 suites / 121 tests green). `/owner/spaces/.../edit` now fully at parity — the Run 7 staged set is complete.
 
 - **2026-06-11 — Run 20: space volume discounts + setup fees.** `OwnerSpaceEditScreen` gained the two smaller advanced managers staged in Run 7, with web's exact gating (volume discounts only for conference rooms/shared desks; setup fees for all types) and payload rules (tier filter `min_hours>0 && 0<discount<100`; fee filter label+cents>0, cents rounding, inactive fees hidden on load). 1 comprehensive test added (30 suites / 120 tests green). Lease-terms manager (membership plans CRUD) split into its own run.
 
