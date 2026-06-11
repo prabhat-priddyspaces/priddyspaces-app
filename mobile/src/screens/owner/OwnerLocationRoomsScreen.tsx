@@ -75,6 +75,19 @@ export function OwnerLocationRoomsScreen() {
               </View>
               <Text style={styles.cardMuted}>{rateSummary(space)}</Text>
               {space.visibility ? <Text style={styles.cardMuted}>Visibility: {titleize(space.visibility)}</Text> : null}
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() =>
+                  navigation.navigate("OwnerSpaceEdit", {
+                    spaceId: space.public_id,
+                    name: space.name || titleize(space.space_type),
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${space.name || titleize(space.space_type)}`}
+              >
+                <Text style={styles.editButtonText}>Edit space</Text>
+              </TouchableOpacity>
             </View>
           ))
         )}
@@ -181,6 +194,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 5,
     backgroundColor: "#EEF2FF"
+  },
+  editButton: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#FFFFFF"
+  },
+  editButtonText: {
+    color: "#374151",
+    fontSize: 12,
+    fontWeight: "700"
   },
   statusText: {
     color: "#3730A3",

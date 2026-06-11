@@ -113,7 +113,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/settings/assistant-policies` | — | missing-on-mobile | |
 | `/owner/settings/payments` | `owner/OwnerPaymentSettingsScreen` | parity *(Run 4, 2026-06-11)* | new screen: marketplace readiness, Stripe/CardPointe credential form, test connection, enable/disable, org + location provider overrides — same endpoints as web; in owner menu as "Payment providers" |
 | `/owner/spaces/new` | `owner/OwnerAddSpaceScreen` | parity | |
-| `/owner/spaces/{edit,[spaceId]/edit}` | — | missing-on-mobile | owners can create but not edit spaces on mobile |
+| `/owner/spaces/{edit,[spaceId]/edit}` | `owner/OwnerSpaceEditScreen` | partial *(core form Run 7, 2026-06-11)* | core edit form at parity (typed pricing rules, availability status/hours, buffers, visibility — same PATCH payload as web). ⚠️ staged follow-up: web's advanced managers (lease terms, volume discounts, setup fees — `webUI/components/{lease-terms,volume-discount,setup-fee}-manager.tsx`) not yet on mobile |
 | `/owner/spaces/{media,[spaceId]/media}` | — | missing-on-mobile | no media management on mobile |
 | `/owner/team` | `owner/OwnerTeamScreen` | parity | add member, role, pricing override, push toggles |
 
@@ -196,7 +196,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 4. ~~**Owner payments settings**~~ — **DONE (Run 4, 2026-06-11)**, see §6a. (Target corrected to `/owner/settings/payments`; `/owner/payments` payout summary remains a small partial gap.)
 5. ~~**Marketplace filters**~~ — **DONE (Run 5, 2026-06-11)**, see §6a.
 6. ~~**Member subscriptions**~~ — **DONE (Run 6, 2026-06-11)**, see §6a.
-7. **Owner space edit** — propose build spec (`/owner/spaces/[spaceId]/edit`). *(missing)*
+7. ~~**Owner space edit**~~ — **core form DONE (Run 7, 2026-06-11)**, see §6a; advanced managers (lease terms / volume discounts / setup fees) staged as follow-up.
 8. **Owner space media** — propose build spec. *(missing)*
 9. **Owner calendar** — propose build spec. *(missing)*
 10. **Member rewards** — propose build spec. *(missing)*
@@ -278,8 +278,21 @@ Checklist results (new screen `mobile/src/screens/member/MemberSubscriptionsScre
 - **Feature flags/permissions:** ✅ — none.
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/memberSubscriptions.test.tsx`. Full suite green (19 suites / 68 tests).
 
+### Run 7 — `OwnerSpaceEditScreen` vs `/owner/spaces/[spaceId]/edit` (2026-06-11)
+
+Checklist results (new screen `mobile/src/screens/owner/OwnerSpaceEditScreen.tsx`, mirrors `webUI/app/owner/spaces/[spaceId]/edit/client.tsx`):
+
+- **Routing:** ✅ — stack route `OwnerSpaceEdit` (`{spaceId, name}`); entry from per-space "Edit space" buttons on `OwnerLocationRoomsScreen`.
+- **Auth + tenancy:** ✅ — same `GET/PATCH /api/spaces/{id}` as web; location-role authorization server-side.
+- **Data:** ✅ — prefill of all editable fields; loading/error states; type-dependent field visibility identical to web's `typeConfig` (hourly+daily+hours+buffers for conference rooms, daily+hours for shared desks, none for offices/suites/virtual).
+- **Actions:** ✅ — save with web's exact PATCH payload incl. `price_monthly: null` always (web edit never exposes monthly), capacity forced to 1 for virtual offices, required-price validation disabling save.
+- **Feature flags/permissions:** ✅ — none beyond server checks.
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerSpaceEdit.test.tsx` (prefill + payload, required-price gating, type-switch field dropping, load error, rooms-screen entry point). Full suite green (20 suites / 73 tests).
+- ⚠️ Staged follow-up (web has, mobile not yet): LeaseTermsManager (non-conference types), VolumeDiscountManager (conference/shared desk), SetupFeeManager — each is a self-contained web component with its own endpoints; tracked in matrix as partial.
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 7: owner space edit (core form).** New `OwnerSpaceEditScreen` + "Edit space" entry on `OwnerLocationRoomsScreen`. Web-parity PATCH payload and type-dependent form rules. Advanced managers staged. 5 new tests.
 - **2026-06-11 — Run 6: member subscriptions.** New `MemberSubscriptionsScreen` (stack route + member menu "Memberships"): list, status stats, past-due banner → Payments, cancel-at-period-end with inline confirm, links to membership space. 5 new tests.
 - **2026-06-11 — Build specs proposed.** Specs 6–9 (member subscriptions, owner space edit, owner space media, owner calendar) written to §5 with real citations; awaiting go. Two blocking questions: `expo-image-picker` dependency for media uploads; owner calendar as menu entry vs 7th tab.
 - **2026-06-11 — Run 5: marketplace browser parity.** `HomeScreen` rewritten onto web's `/api/marketplace/locations` with category tabs, q/date/time/capacity/price/sort/geo filters (web's exact param rules incl. q-drop with lat/lng), location-grouped result cards with starting prices feeding the existing `LocationSpaces` → `SpaceDetail` flow. 5 new tests.

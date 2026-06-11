@@ -20,6 +20,7 @@ import { OwnerLocationsScreen } from "../screens/owner/OwnerLocationsScreen";
 import { OwnerLocationRoomsScreen } from "../screens/owner/OwnerLocationRoomsScreen";
 import { OwnerLocationEditScreen } from "../screens/owner/OwnerLocationEditScreen";
 import { OwnerAddSpaceScreen } from "../screens/owner/OwnerAddSpaceScreen";
+import { OwnerSpaceEditScreen } from "../screens/owner/OwnerSpaceEditScreen";
 import { OwnerNewLocationScreen } from "../screens/owner/OwnerNewLocationScreen";
 import { OwnerBookingsScreen } from "../screens/owner/OwnerBookingsScreen";
 import { OwnerCreateBookingScreen } from "../screens/owner/OwnerCreateBookingScreen";
@@ -219,6 +220,7 @@ function MainApp() {
       <Stack.Screen name="OwnerLocationRooms" component={OwnerLocationRoomsScreen} options={{ title: "Manage rooms" }} />
       <Stack.Screen name="OwnerLocationEdit" component={OwnerLocationEditScreen} options={{ title: "Edit location" }} />
       <Stack.Screen name="OwnerAddSpace" component={OwnerAddSpaceScreen} options={{ title: "Add space" }} />
+      <Stack.Screen name="OwnerSpaceEdit" component={OwnerSpaceEditScreen} options={{ title: "Edit space" }} />
       <Stack.Screen name="OwnerNewLocation" component={OwnerNewLocationScreen} options={{ title: "New location" }} />
       <Stack.Screen name="OwnerSettings" component={OwnerSettingsScreen} options={{ title: "Settings" }} />
       <Stack.Screen
