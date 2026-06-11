@@ -75,19 +75,34 @@ export function OwnerLocationRoomsScreen() {
               </View>
               <Text style={styles.cardMuted}>{rateSummary(space)}</Text>
               {space.visibility ? <Text style={styles.cardMuted}>Visibility: {titleize(space.visibility)}</Text> : null}
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={() =>
-                  navigation.navigate("OwnerSpaceEdit", {
-                    spaceId: space.public_id,
-                    name: space.name || titleize(space.space_type),
-                  })
-                }
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${space.name || titleize(space.space_type)}`}
-              >
-                <Text style={styles.editButtonText}>Edit space</Text>
-              </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() =>
+                    navigation.navigate("OwnerSpaceEdit", {
+                      spaceId: space.public_id,
+                      name: space.name || titleize(space.space_type),
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${space.name || titleize(space.space_type)}`}
+                >
+                  <Text style={styles.editButtonText}>Edit space</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() =>
+                    navigation.navigate("OwnerSpaceMedia", {
+                      spaceId: space.public_id,
+                      name: space.name || titleize(space.space_type),
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`Photos for ${space.name || titleize(space.space_type)}`}
+                >
+                  <Text style={styles.editButtonText}>Photos</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))
         )}
@@ -195,8 +210,13 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     backgroundColor: "#EEF2FF"
   },
-  editButton: {
+  cardActions: {
     marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  editButton: {
     alignSelf: "flex-start",
     borderWidth: 1,
     borderColor: "#D1D5DB",

@@ -114,7 +114,7 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/owner/settings/payments` | `owner/OwnerPaymentSettingsScreen` | parity *(Run 4, 2026-06-11)* | new screen: marketplace readiness, Stripe/CardPointe credential form, test connection, enable/disable, org + location provider overrides — same endpoints as web; in owner menu as "Payment providers" |
 | `/owner/spaces/new` | `owner/OwnerAddSpaceScreen` | parity | |
 | `/owner/spaces/{edit,[spaceId]/edit}` | `owner/OwnerSpaceEditScreen` | partial *(core form Run 7, 2026-06-11)* | core edit form at parity (typed pricing rules, availability status/hours, buffers, visibility — same PATCH payload as web). ⚠️ staged follow-up: web's advanced managers (lease terms, volume discounts, setup fees — `webUI/components/{lease-terms,volume-discount,setup-fee}-manager.tsx`) not yet on mobile |
-| `/owner/spaces/{media,[spaceId]/media}` | — | missing-on-mobile | no media management on mobile |
+| `/owner/spaces/{media,[spaceId]/media}` | `owner/OwnerSpaceMediaScreen` | parity *(Run 8, 2026-06-11)* | photo gallery + presign upload flow (`/api/media/presign` → PUT → `/api/media`) with primary flag, sort order, 10 MB cap — same as web; uses `expo-image-picker` (approved) |
 | `/owner/team` | `owner/OwnerTeamScreen` | parity | add member, role, pricing override, push toggles |
 
 ### Admin (platform)
@@ -197,7 +197,7 @@ Fix confirmed gaps in existing screens first (small diffs, high value), then pro
 5. ~~**Marketplace filters**~~ — **DONE (Run 5, 2026-06-11)**, see §6a.
 6. ~~**Member subscriptions**~~ — **DONE (Run 6, 2026-06-11)**, see §6a.
 7. ~~**Owner space edit**~~ — **core form DONE (Run 7, 2026-06-11)**, see §6a; advanced managers (lease terms / volume discounts / setup fees) staged as follow-up.
-8. **Owner space media** — propose build spec. *(missing)*
+8. ~~**Owner space media**~~ — **DONE (Run 8, 2026-06-11)**, see §6a.
 9. **Owner calendar** — propose build spec. *(missing)*
 10. **Member rewards** — propose build spec. *(missing)*
 11. **Member insights** — propose build spec. *(missing)*
@@ -290,8 +290,21 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerSpaceEditScreen.tsx
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerSpaceEdit.test.tsx` (prefill + payload, required-price gating, type-switch field dropping, load error, rooms-screen entry point). Full suite green (20 suites / 73 tests).
 - ⚠️ Staged follow-up (web has, mobile not yet): LeaseTermsManager (non-conference types), VolumeDiscountManager (conference/shared desk), SetupFeeManager — each is a self-contained web component with its own endpoints; tracked in matrix as partial.
 
+### Run 8 — `OwnerSpaceMediaScreen` vs `/owner/spaces/[spaceId]/media` (2026-06-11)
+
+Checklist results (new screen `mobile/src/screens/owner/OwnerSpaceMediaScreen.tsx`, mirrors `webUI/app/owner/spaces/[spaceId]/media/client.tsx`):
+
+- **Routing:** ✅ — stack route `OwnerSpaceMedia` (`{spaceId, name}`); entry from per-space "Photos" buttons on `OwnerLocationRoomsScreen`.
+- **Auth + tenancy:** ✅ — same endpoints as web: `GET /api/spaces/{id}` + `GET /api/spaces/{id}/media`, presign via `POST /api/media/presign` (server validates space ownership), storage PUT, register via `POST /api/media`.
+- **Data:** ✅ — gallery with sort order + primary badge; first-image defaults (`is_primary` true when empty, sort order = count) match web; loading/error/empty states present.
+- **Actions:** ✅ — pick from photo library (`expo-image-picker`, permission-gated), primary toggle, sort order, upload with web's 10 MB cap and exact payloads. Web exposes no delete/reorder actions — none added (parity).
+- **Feature flags/permissions:** ✅ — OS photo permission handled; `NSPhotoLibraryUsageDescription` + `READ_MEDIA_IMAGES` added to `mobile/app.json`.
+- **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerSpaceMedia.test.tsx` (gallery render, full presign upload flow with payload checks, permission denial, 10 MB rejection, rooms entry point). Full suite green (21 suites / 78 tests).
+- Dependency added: `expo-image-picker@~17.0.11` (user-approved); lockfile regenerated with npm 10 for CI compatibility.
+
 ## 7. Changelog
 
+- **2026-06-11 — Run 8: owner space media.** New `OwnerSpaceMediaScreen` with photo-library picking and web's presign upload flow; "Photos" entry on room cards; photo permissions added to app.json; `expo-image-picker` dependency added. 5 new tests.
 - **2026-06-11 — Run 7: owner space edit (core form).** New `OwnerSpaceEditScreen` + "Edit space" entry on `OwnerLocationRoomsScreen`. Web-parity PATCH payload and type-dependent form rules. Advanced managers staged. 5 new tests.
 - **2026-06-11 — Run 6: member subscriptions.** New `MemberSubscriptionsScreen` (stack route + member menu "Memberships"): list, status stats, past-due banner → Payments, cancel-at-period-end with inline confirm, links to membership space. 5 new tests.
 - **2026-06-11 — Build specs proposed.** Specs 6–9 (member subscriptions, owner space edit, owner space media, owner calendar) written to §5 with real citations; awaiting go. Two blocking questions: `expo-image-picker` dependency for media uploads; owner calendar as menu entry vs 7th tab.

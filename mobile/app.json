@@ -13,11 +13,12 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Camera access is used to scan Space Access Pass QR codes for check-in."
+        "NSCameraUsageDescription": "Camera access is used to scan Space Access Pass QR codes for check-in.",
+        "NSPhotoLibraryUsageDescription": "Photo library access is used to upload space listing photos."
       }
     },
     "android": {
-      "permissions": ["CAMERA", "POST_NOTIFICATIONS"],
+      "permissions": ["CAMERA", "POST_NOTIFICATIONS", "READ_MEDIA_IMAGES"],
       "adaptiveIcon": {
         "backgroundColor": "#F9FAFB"
       }
