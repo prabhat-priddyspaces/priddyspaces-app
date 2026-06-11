@@ -150,7 +150,41 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 - **Q4 — Admin console:** **WANTED ON MOBILE.** The 16 `/admin/*` routes beyond Scanner/Attendance stay in backlog as missing-on-mobile; build specs proposed one at a time.
 - **Q5 — Plan order:** **CONFIRMED** as proposed in §6.
 
-Build specs for confirmed `missing-on-mobile` screens will be added here one at a time as their runs are confirmed (per the workflow: propose → confirm → build).
+### Proposed build specs — AWAITING GO (2026-06-11)
+
+Per the workflow (propose → confirm → build, one screen per run). Confirm any subset; they will be built one at a time in this order.
+
+**Spec 6 — `MemberSubscriptionsScreen`** *(plan item 6)*
+- Mirrors: `webUI/app/member/subscriptions/page.tsx` (165 lines).
+- Data: `GET /api/subscriptions` (list + status summary counts: active/trialing/past_due/canceling/canceled).
+- Actions: cancel membership at period end — `POST /api/subscriptions/{publicId}/cancel`. Web uses `window.confirm`; mobile will use the inline confirm pattern from Run 2.
+- Nav: stack screen `MemberSubscriptions` + member menu entry "Memberships".
+- Gating: signed-in member; server scopes to own subscriptions.
+- Open questions: none.
+
+**Spec 7 — `OwnerSpaceEditScreen`** *(plan item 7)*
+- Mirrors: `webUI/app/owner/spaces/[spaceId]/edit/client.tsx` (395 lines).
+- Data: `GET /api/spaces/{spaceId}`; save via `PATCH /api/spaces/{spaceId}`.
+- Reuses: form patterns + space-type/pricing rules from `mobile/src/screens/owner/OwnerAddSpaceScreen.tsx`.
+- Nav: stack screen `OwnerSpaceEdit`, opened from per-space "Edit" buttons added to `OwnerLocationRoomsScreen` rows.
+- Gating: owner; server-side location-role check.
+- Open question: the web client is 395 lines — during the run I'll inventory which advanced sections it includes (booking modes / setup fees / volume discounts have their own backend routers) and either match them or stage them as an explicit follow-up; will not silently drop capabilities.
+
+**Spec 8 — `OwnerSpaceMediaScreen`** *(plan item 8)*
+- Mirrors: `webUI/app/owner/spaces/[spaceId]/media/client.tsx` (231 lines).
+- Data: `GET /api/spaces/{spaceId}/media`, `GET /api/spaces/{spaceId}`.
+- Actions: upload via presigned flow (`POST /api/media/presign` → upload → `POST /api/media`), set primary, delete, reorder (whatever subset the web client exposes — verified in-run).
+- Nav: stack screen `OwnerSpaceMedia`, opened from `OwnerSpaceEditScreen` (Spec 7) and/or `OwnerLocationRoomsScreen`.
+- Gating: owner.
+- **Open question (blocking): requires a new dependency `expo-image-picker` for photo selection. OK to add?**
+
+**Spec 9 — `OwnerCalendarScreen`** *(plan item 9)*
+- Mirrors: `webUI/app/owner/calendar/page.tsx` (134 lines).
+- Data: `GET /api/orgs`, `GET /api/locations?organization_public_id=`, `GET /api/owner/calendar?start&end&include=bookings,requests,subscriptions`.
+- Reuses: day-navigation + location-filter + event-card patterns from `mobile/src/screens/MemberCalendarScreen.tsx`.
+- Nav: stack screen `OwnerCalendar` + owner menu entry "Calendar" (OwnerTabs already has 6 tabs — a 7th would crowd the tab bar).
+- Gating: owner.
+- **Open question: menu entry (proposed) or 7th bottom tab — preference?**
 
 ## 6. Proposed plan (ordered, one screen per run)
 
@@ -235,6 +269,7 @@ Checklist results after change (`mobile/src/screens/HomeScreen.tsx`, mirrors `we
 
 ## 7. Changelog
 
+- **2026-06-11 — Build specs proposed.** Specs 6–9 (member subscriptions, owner space edit, owner space media, owner calendar) written to §5 with real citations; awaiting go. Two blocking questions: `expo-image-picker` dependency for media uploads; owner calendar as menu entry vs 7th tab.
 - **2026-06-11 — Run 5: marketplace browser parity.** `HomeScreen` rewritten onto web's `/api/marketplace/locations` with category tabs, q/date/time/capacity/price/sort/geo filters (web's exact param rules incl. q-drop with lat/lng), location-grouped result cards with starting prices feeding the existing `LocationSpaces` → `SpaceDetail` flow. 5 new tests.
 - **2026-06-11 — Run 4: owner payment provider settings.** New `OwnerPaymentSettingsScreen` (stack route `OwnerPaymentSettings`, owner menu "Payment providers") mirroring web's `/owner/settings/payments`: readiness card, Stripe/CardPointe credential forms with write-only secret placeholders, test connection, enable/disable, org/location provider overrides. 5 new tests. Matrix corrected re `/owner/payments` (overview page, not provider settings).
 - **2026-06-11 — Run 3: owner dashboard parity.** `OwnerDashboardScreen` now computes web's KPIs (MTD revenue, occupancy, approved bookings, active memberships, today's bookings via `/api/owner/calendar`) with web's exact money math, and gained error + empty (no-locations → create CTA) states. Payment-volume math fixed to be cents-aware and succeeded-only. Tests rewritten (4 tests).
