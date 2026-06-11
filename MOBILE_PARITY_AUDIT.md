@@ -128,7 +128,8 @@ Status ∈ **parity** / **partial** / **missing-on-mobile** / **mobile-only**. "
 | `/admin/members`, `/admin/owner-users` | `admin/Admin{Members,OwnerUsers}Screen` | parity *(Run 35, 2026-06-11)* | members: q/signup-range/subscription/failed-payment filters with web's params; owner-users: q-search, org + review status, role, locations. ↔ Impersonate stays web-only — web's flow swaps the access token, incompatible with mobile's Clerk-token auth |
 | `/admin/owner-companies`, `/admin/payments` | `admin/Admin{OwnerCompanies,Payments}Screen` | parity *(Run 36, 2026-06-11)* | companies: q-search, review approve/reject with notes + commission override (web's PATCH payload), payment status/blockers, role-gated edit controls; payments: GMV/earnings/net/failed summary + full ledger. ↔ review-history JSON web-only |
 | `/admin/platform-team`, `/admin/assistant-quality` | `admin/Admin{PlatformTeam,AssistantQuality}Screen` | parity *(Run 37, 2026-06-11)* | team: superadmin-gated invite/role/active/remove with web's payloads; quality: metrics + reliability/tool-failure/policy-gap/persona/low-rated breakdowns |
-| 4 other `/admin/*` routes (analytics, calendar, settings, users) | — | missing-on-mobile | bucket C in progress |
+| `/admin/users`, `/admin/calendar` | `admin/Admin{Users,Calendar}Screen` | parity *(Run 38, 2026-06-11)* | users: q + role/status filters, owner-invite form with web's optional-field payload, per-user role/activity rows; calendar: day view across all owners with company filter. ↔ pagination + email-verified filter simplified to core filters |
+| 2 other `/admin/*` routes (analytics, settings) | — | missing-on-mobile | final bucket C run |
 
 ### Mobile-only / cross-platform widgets
 
@@ -343,6 +344,8 @@ Checklist results (new screen `mobile/src/screens/owner/OwnerCalendarScreen.tsx`
 - **Works:** ✅ — 5 new Jest tests in `mobile/__tests__/ownerCalendar.test.tsx` (events render incl. member/plan, location filter param, booking-vs-subscription tap behavior, create-booking nav, load error). Full suite green (22 suites / 83 tests).
 
 ## 7. Changelog
+
+- **2026-06-11 — Run 38: admin users + platform calendar.** Users screen with q + role (all/member/owner/platform/unassigned) + status filters mapped to web's params, owner-invite form posting web's optional-field payload (then jumping to the owner filter like web), and per-user role/verification/activity rows; platform calendar with day navigation and the owner-company filter feeding `organization_public_id`. 3 new tests (47 suites / 175 tests green).
 
 - **2026-06-11 — Run 37: admin platform team + assistant quality.** Team screen with web's superadmin gate ("Only superadmins can manage…"), invite (email + support/admin/superadmin role), per-member role/active drafts saved with web's PATCH payload, and removal; assistant-quality screen with the metrics grid and reliability-events / tool-failure / missing-policy / persona-usage / low-rated breakdowns. 3 new tests (46 suites / 172 tests green).
 
