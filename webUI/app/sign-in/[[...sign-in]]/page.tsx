@@ -12,7 +12,7 @@ export function generateStaticParams() {
 
 export default function SignInPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-bg px-6 py-12">
       <Suspense fallback={null}>
         <AuthNextStash />
       </Suspense>
@@ -20,18 +20,20 @@ export default function SignInPage() {
         routing="hash"
         appearance={{
           variables: {
-            colorPrimary: "#111827",
-            colorBackground: "#ffffff",
-            colorInputBackground: "#ffffff",
-            borderRadius: "10px",
+            colorPrimary: "#2F5D50",
+            colorBackground: "#FFFCF8",
+            colorInputBackground: "#FFFFFF",
+            colorText: "#1F2320",
+            colorTextSecondary: "#5E625B",
+            borderRadius: "12px",
           },
           elements: {
-            card: "shadow-none border border-border rounded-md",
-            headerTitle: "text-textPrimary font-semibold",
-            headerSubtitle: "text-textSecondary",
+            card: "shadow-none border border-line rounded-2xl bg-surface",
+            headerTitle: "text-text font-semibold",
+            headerSubtitle: "text-text-2",
             formButtonPrimary:
-              "bg-accent hover:bg-accentHover text-white rounded-md",
-            footerActionLink: "text-accent hover:underline",
+              "bg-brand hover:bg-brand-hover text-white rounded-xl",
+            footerActionLink: "text-brand hover:underline",
           },
         }}
       />

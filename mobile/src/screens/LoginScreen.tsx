@@ -12,6 +12,7 @@ import { useOAuth } from "@clerk/expo";
 import * as WebBrowser from "expo-web-browser";
 
 import { useAuth } from "../context/AuthContext";
+import { colors, fontSizes, radii } from "../theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -51,6 +52,7 @@ export function LoginScreen() {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor={colors.text4}
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
@@ -59,6 +61,7 @@ export function LoginScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor={colors.text4}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -66,7 +69,7 @@ export function LoginScreen() {
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.primaryButtonText}>Sign in</Text>
         )}
@@ -106,43 +109,44 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24 },
-  title: { fontSize: 24, fontWeight: "600", color: "#111827" },
-  subtitle: { marginTop: 8, fontSize: 14, color: "#6B7280", marginBottom: 20 },
+  container: { flex: 1, padding: 24, backgroundColor: colors.bg },
+  title: { fontSize: fontSizes.pageTitle, fontWeight: "600", color: colors.text },
+  subtitle: { marginTop: 8, fontSize: fontSizes.body, color: colors.text2, marginBottom: 20 },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderColor: colors.lineStrong,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: fontSizes.body,
+    color: colors.text,
     marginBottom: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
   },
   primaryButton: {
     marginTop: 4,
-    backgroundColor: "#111827",
+    backgroundColor: colors.brand,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center",
   },
-  primaryButtonText: { color: "#FFFFFF", fontWeight: "600" },
+  primaryButtonText: { color: colors.white, fontWeight: "600", fontSize: fontSizes.body },
   divider: {
     flexDirection: "row",
     alignItems: "center",
     marginVertical: 16,
     gap: 8,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
-  dividerText: { fontSize: 12, color: "#9CA3AF" },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.line },
+  dividerText: { fontSize: fontSizes.caption, color: colors.text4 },
   socialButton: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
+    borderColor: colors.line,
+    borderRadius: radii.md,
     paddingVertical: 12,
     alignItems: "center",
     marginBottom: 8,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.surface,
   },
-  socialButtonText: { fontSize: 14, fontWeight: "500", color: "#111827" },
+  socialButtonText: { fontSize: fontSizes.body, fontWeight: "500", color: colors.text },
 });

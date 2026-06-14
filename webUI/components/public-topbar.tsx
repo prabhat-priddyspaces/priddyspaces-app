@@ -67,10 +67,10 @@ export function PublicTopbar({
         >
           <Logo size={32} />
           <div>
-            <div className="text-[15px] font-semibold tracking-[-0.01em] text-text">
+            <div className="text-[16px] font-semibold text-text">
               Priddyspaces
             </div>
-            <div className="text-[11px] text-text-3 -mt-0.5">{subtitle}</div>
+            <div className="-mt-0.5 text-[12px] text-text-3">{subtitle}</div>
           </div>
         </Link>
         <div className="flex items-center gap-2">
@@ -112,7 +112,7 @@ export function PublicTopbar({
                   <div
                     role="menu"
                     aria-label="Registration options"
-                    className="absolute right-0 top-full z-40 mt-2 w-56 overflow-hidden rounded-md border border-line bg-surface p-1 shadow-[0_18px_50px_-24px_rgba(15,23,42,0.45)]"
+                    className="absolute right-0 top-full z-40 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-lg"
                   >
                     <Link
                       href="/sign-up"

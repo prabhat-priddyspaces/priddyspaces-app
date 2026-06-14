@@ -353,10 +353,10 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
 
       <section className="mx-auto max-w-[1440px] px-4 sm:px-6 pt-6 lg:pt-8">
         <div className="flex flex-col gap-1.5 mb-4">
-          <h1 className="text-[28px] lg:text-[32px] font-semibold tracking-[-0.02em] text-text">
+          <h1 className="text-[32px] lg:text-[40px] font-semibold text-text">
             {config.title}
           </h1>
-          <p className="text-[13px] text-text-3 max-w-2xl">{config.subtitle}</p>
+          <p className="max-w-2xl text-[14px] text-text-2">{config.subtitle}</p>
         </div>
 
         {/* Tab pills — labels are the canonical PUBLIC_MARKETPLACE_TABS values
@@ -381,7 +381,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 </span>
                 <span
                   className={cn(
-                    "text-[11px] leading-tight mt-0.5",
+                    "mt-0.5 text-[12px] leading-tight",
                     active ? "text-white/80" : "text-text-3"
                   )}
                 >
@@ -426,14 +426,14 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                   }}
                   placeholder={config.queryPlaceholder}
                   autoComplete="off"
-                  className="flex-1 min-w-0 bg-transparent text-[13px] font-medium text-text outline-none placeholder:text-text-4"
+                  className="flex-1 min-w-0 bg-transparent text-[14px] font-medium text-text outline-none placeholder:text-text-4"
                 />
                 <button
                   type="button"
                   onClick={handleUseMyLocation}
                   disabled={locating}
                   title="Use my current location"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-text-3 transition hover:border-brand hover:text-brand disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[12px] font-medium text-text-3 transition hover:border-brand hover:text-brand disabled:cursor-wait disabled:opacity-60"
                 >
                   <Compass className="h-3 w-3" />
                   {locating ? "Locating…" : "Locate me"}
@@ -450,7 +450,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 name="date"
                 value={form.date}
                 onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
-                className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
+                className="bg-transparent text-[14px] font-medium text-text outline-none w-full"
               />
             </SearchField>
 
@@ -465,7 +465,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                     name="start_time"
                     value={form.start_time}
                     onChange={(event) => setForm((current) => ({ ...current, start_time: event.target.value }))}
-                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
+                    className="bg-transparent text-[14px] font-medium text-text outline-none w-full"
                   />
                 </SearchField>
                 <SearchField
@@ -477,7 +477,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                     name="end_time"
                     value={form.end_time}
                     onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))}
-                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full"
+                    className="bg-transparent text-[14px] font-medium text-text outline-none w-full"
                   />
                 </SearchField>
               </>
@@ -494,7 +494,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                     value={form.capacity}
                     onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))}
                     placeholder="Min capacity"
-                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full placeholder:text-text-4"
+                    className="bg-transparent text-[14px] font-medium text-text outline-none w-full placeholder:text-text-4"
                   />
                 </SearchField>
                 <SearchField
@@ -512,7 +512,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                     }
                     onChange={(event) => updatePriceValue(event.target.value)}
                     placeholder="Any"
-                    className="bg-transparent text-[13px] font-medium text-text outline-none w-full placeholder:text-text-4"
+                    className="bg-transparent text-[14px] font-medium text-text outline-none w-full placeholder:text-text-4"
                   />
                 </SearchField>
               </>
@@ -533,9 +533,9 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
 
         {/* Helper / radius / sort row */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
-          <label className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-3 h-9 text-[12px] text-text-3">
+          <label className="inline-flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-[12px] text-text-3">
             <Compass className="h-3.5 w-3.5" />
-            <span className="uppercase tracking-[0.06em] text-[10px] text-text-3 font-semibold">Within</span>
+            <span className="text-[12px] text-text-3 font-semibold">Within</span>
             <input
               type="number"
               min="1"
@@ -559,7 +559,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             />
             <span className="text-[12px] text-text-3">mi</span>
             {!form.lat || !form.lng ? (
-              <span className="text-[10px] text-text-4">Pick a place</span>
+              <span className="text-[12px] text-text-4">Pick a place</span>
             ) : null}
           </label>
           <div className="relative">
@@ -581,10 +581,10 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
             />
           </div>
           {autocompleteWarning && (
-            <p className="text-[11px] text-text-4">{autocompleteWarning}</p>
+            <p className="text-[12px] text-text-4">{autocompleteWarning}</p>
           )}
           {locationNotice && (
-            <p className="text-[11px] text-text-4">{locationNotice}</p>
+            <p className="text-[12px] text-text-4">{locationNotice}</p>
           )}
         </div>
       </section>
@@ -597,7 +597,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                 <div className="text-[14px] text-text-2">
                   <strong className="text-text">Showing {resultCards.length} listings</strong>
                 </div>
-                <div className="text-[11px] text-text-3 mt-0.5">
+                <div className="mt-0.5 text-[12px] text-text-3">
                   Results stay in the URL, so you can refresh or share this search.
                 </div>
               </div>
@@ -695,7 +695,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       {featured ? (
                         <Badge
                           variant="violet"
-                          className="absolute top-2 right-2 h-[18px] text-[10px] px-1.5 bg-brand text-white"
+                          className="absolute right-2 top-2 h-6 bg-brand px-2 text-[12px] text-white"
                         >
                           <Sparkles size={10} strokeWidth={2.5} />
                           Featured
@@ -711,10 +711,10 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       <div>
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <h2 className="text-[15px] font-semibold tracking-[-0.01em] truncate">
+                            <h2 className="truncate text-[16px] font-semibold">
                               {listingTitle}
                             </h2>
-                            <div className="text-[11px] text-text-3 mt-0.5 truncate">
+                            <div className="mt-0.5 truncate text-[13px] text-text-3">
                               {formatLocationAddress(location)}
                             </div>
                             {waitlistAvailable ? (
@@ -736,13 +736,13 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                             {location.location_amenities.slice(0, 5).map((amenity) => (
                               <span
                                 key={amenity}
-                                className="inline-flex items-center h-[20px] px-1.5 text-[10px] font-medium rounded-full bg-surface-2 text-text-3"
+                                className="inline-flex h-6 items-center rounded-full bg-surface-2 px-2 text-[12px] font-medium text-text-3"
                               >
                                 {amenity}
                               </span>
                             ))}
                             {location.location_amenities.length > 5 ? (
-                              <span className="text-[10px] text-text-3 self-center">
+                              <span className="self-center text-[12px] text-text-3">
                                 +{location.location_amenities.length - 5} more
                               </span>
                             ) : null}
@@ -752,7 +752,7 @@ export function PublicMarketplaceBrowser({ routeKey }: PublicMarketplaceBrowserP
                       <div className="flex flex-wrap items-end gap-x-2 gap-y-2 mt-2">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           {space ? (
-                            <div className="flex items-center gap-1 text-[11px] text-text-3">
+                            <div className="flex items-center gap-1 text-[12px] text-text-3">
                               <Users size={11} />
                               <strong className="text-text font-mono" style={{ fontVariantNumeric: "tabular-nums" }}>
                                 {space.capacity}
@@ -821,7 +821,7 @@ function SearchField({
 }) {
   return (
     <label className="block px-4 py-3">
-      <div className="text-[10px] uppercase tracking-[0.06em] font-semibold text-text-3 mb-1">
+      <div className="mb-1 text-[12px] font-semibold text-text-3">
         {label}
       </div>
       <div className="flex items-center gap-2">

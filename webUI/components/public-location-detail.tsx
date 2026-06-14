@@ -85,22 +85,22 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-bg">
         <PublicTopbar />
-        <div className="mx-auto max-w-6xl px-6 py-8 text-sm text-textMuted">Loading location…</div>
+        <div className="mx-auto max-w-6xl px-6 py-8 text-sm text-text-3">Loading location…</div>
       </main>
     );
   }
 
   if (error && !location) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-6xl px-6 py-8">
-          <Link href={backHref} className="text-sm text-accent hover:underline">
+          <Link href={backHref} className="text-sm text-brand hover:underline">
             Back to search
           </Link>
-          <p className="mt-4 text-sm text-error">{error}</p>
+          <p className="mt-4 text-sm text-danger">{error}</p>
         </div>
       </main>
     );
@@ -108,13 +108,13 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
 
   if (!location) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-bg">
         <PublicTopbar />
         <div className="mx-auto max-w-6xl px-6 py-8">
-          <Link href={backHref} className="text-sm text-accent hover:underline">
+          <Link href={backHref} className="text-sm text-brand hover:underline">
             Back to search
           </Link>
-          <p className="mt-4 text-sm text-textMuted">Location not found</p>
+          <p className="mt-4 text-sm text-text-3">Location not found</p>
         </div>
       </main>
     );
@@ -123,29 +123,29 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
   const chips = getLocationPriceChips(activeConfig, location);
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#eef6f8_100%)]">
+    <main className="min-h-screen bg-bg">
       <PublicTopbar />
       <div className="mx-auto max-w-6xl px-6 py-8">
-        <Link href={backHref} className="text-sm font-medium text-teal-700 hover:underline">
+        <Link href={backHref} className="text-sm font-medium text-brand hover:underline">
           Back to search
         </Link>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-5">
-            <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
               <PublicImageWithFallback
                 src={location.featured_image_url}
                 alt={location.name}
                 className="h-80 w-full object-cover"
-                fallbackClassName="flex h-80 items-center justify-center bg-[linear-gradient(135deg,_#d1fae5,_#e2e8f0)] text-sm font-semibold uppercase tracking-[0.24em] text-slate-600"
+                fallbackClassName="flex h-80 items-center justify-center bg-surface-2 text-sm font-semibold text-text-3"
               />
             </div>
 
-            <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-              <h1 className="text-3xl font-semibold text-slate-900">{location.name}</h1>
-              <p className="mt-2 text-sm text-slate-600">{formatLocationAddress(location)}</p>
+            <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+              <h1 className="text-[32px] font-semibold text-text">{location.name}</h1>
+              <p className="mt-2 text-sm text-text-2">{formatLocationAddress(location)}</p>
               {location.neighborhood ? (
-                <p className="mt-2 text-xs uppercase tracking-[0.24em] text-teal-700">{location.neighborhood}</p>
+                <p className="mt-2 text-xs font-medium text-brand">{location.neighborhood}</p>
               ) : null}
 
               {chips.length > 0 ? (
@@ -153,9 +153,9 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                   {chips.map((chip) => (
                     <div
                       key={`${location.location_public_id}-${chip.label}`}
-                      className="rounded-full border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-900"
+                      className="rounded-full border border-line bg-brand-soft px-3 py-2 text-sm font-semibold text-brand-strong"
                     >
-                      <span className="mr-2 text-teal-700">{chip.label}</span>
+                      <span className="mr-2 text-brand">{chip.label}</span>
                       {chip.value}
                     </div>
                   ))}
@@ -167,7 +167,7 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                   {location.location_amenities.map((amenity) => (
                     <span
                       key={amenity}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600"
+                      className="rounded-full border border-line bg-surface-2 px-3 py-1 text-xs font-medium text-text-2"
                     >
                       {amenity}
                     </span>
@@ -178,8 +178,8 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-center text-base font-semibold text-slate-900">
+            <div className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+              <div className="text-center text-[17px] font-semibold text-text">
                 Find Your Ideal Workspace
               </div>
               <div
@@ -195,23 +195,23 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                       onClick={() => setActiveRoute(tab.routeKey)}
                       className={`rounded-2xl border px-3 py-3 text-left transition ${
                         isActive
-                          ? "border-slate-900 bg-white shadow-sm"
-                          : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
+                          ? "border-brand bg-brand-soft shadow-sm"
+                          : "border-line bg-surface-2 hover:border-line-strong hover:bg-surface"
                       }`}
                     >
-                      <div className="text-sm font-semibold text-slate-900">{tab.label}</div>
-                      <div className="mt-1 text-xs text-slate-500">{tab.subtitle.split(".")[0]}</div>
+                      <div className="text-sm font-semibold text-text">{tab.label}</div>
+                      <div className="mt-1 text-xs text-text-3">{tab.subtitle.split(".")[0]}</div>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold text-slate-900">
+            <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm">
+              <div className="text-sm font-semibold text-text">
                 {location.spaces.length} matching {location.spaces.length === 1 ? "space" : "spaces"}
               </div>
-              <div className="mt-1 text-sm text-slate-500">
+              <div className="mt-1 text-sm text-text-3">
                 {activeConfig.label} at this location, filtered by your current search.
               </div>
             </div>
@@ -222,7 +222,7 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
             />
 
             {location.spaces.length === 0 ? (
-              <div className="rounded-[28px] border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+              <div className="rounded-2xl border border-dashed border-line-strong bg-surface p-6 text-sm text-text-3">
                 No {activeConfig.label.toLowerCase()} match your filters at this location. Try a different category above.
               </div>
             ) : null}
@@ -235,36 +235,36 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
               );
 
               return (
-                <div key={space.public_id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                <div key={space.public_id} className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
                   <div className="flex gap-4">
-                    <div className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
+                    <div className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-surface-2">
                       <PublicImageWithFallback
                         src={space.image_url}
                         alt={space.space_type}
                         className="h-full w-full object-cover"
                         fallbackLabel="Space"
-                        fallbackClassName="flex h-full items-center justify-center bg-slate-100 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500"
+                        fallbackClassName="flex h-full items-center justify-center bg-surface-2 text-[12px] font-semibold text-text-3"
                       />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div className="text-lg font-semibold text-slate-900">
+                          <div className="text-[17px] font-semibold text-text">
                             {space.name}
                           </div>
-                          <div className="mt-1 text-sm text-slate-600">
+                          <div className="mt-1 text-sm text-text-2">
                             {formatSpaceTypeLabel(space.space_type)} • Capacity {space.capacity} •{" "}
                             {waitlistAvailable ? "currently leased · waitlist available" : space.availability_status.replaceAll("_", " ")}
                           </div>
                           {space.availability_start_time || space.availability_end_time ? (
-                            <div className="mt-1 text-sm text-slate-500">
+                            <div className="mt-1 text-sm text-text-3">
                               Hours: {space.availability_start_time || "—"} to {space.availability_end_time || "—"}
                             </div>
                           ) : null}
                         </div>
                         <Link
                           href={spaceHref}
-                          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                          className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover"
                         >
                           View space
                         </Link>
@@ -275,7 +275,7 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                           {chipsForSpace.map((chip) => (
                             <span
                               key={`${space.public_id}-${chip}`}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700"
+                              className="rounded-full border border-line bg-surface-2 px-3 py-1 text-xs font-semibold text-text-2"
                             >
                               {chip}
                             </span>
@@ -288,7 +288,7 @@ export function PublicLocationDetail({ routeKey, locationId }: PublicLocationDet
                           {space.amenities.slice(0, 6).map((amenity) => (
                             <span
                               key={`${space.public_id}-${amenity}`}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                              className="rounded-full border border-line bg-surface-2 px-3 py-1 text-xs text-text-2"
                             >
                               {amenity}
                             </span>

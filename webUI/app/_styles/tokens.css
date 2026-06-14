@@ -1,69 +1,96 @@
 /* ============================================================
    PRIDDYSPACES — DESIGN TOKENS
-   Premium soft violet · generous radius · gentle motion
+   Warm workspace palette · generous radius · gentle motion
    ============================================================ */
 
 :root {
   /* —— Brand ————————————————————————————— */
-  --ps-violet-50:  #F5F2FF;
-  --ps-violet-100: #EAE3FF;
-  --ps-violet-200: #D5C7FF;
-  --ps-violet-300: #B59FFF;
-  --ps-violet-400: #9576FF;
-  --ps-violet-500: #7C5BF5;   /* primary */
-  --ps-violet-600: #6741E0;
-  --ps-violet-700: #5430C2;
-  --ps-violet-800: #3F2596;
-  --ps-violet-900: #28195D;
+  --ps-sage-50:  #EEF4EF;
+  --ps-sage-100: #DDEADF;
+  --ps-sage-200: #C3D7C7;
+  --ps-sage-300: #9FBEA7;
+  --ps-sage-400: #6F977F;
+  --ps-sage-500: #2F5D50;   /* primary */
+  --ps-sage-600: #274D43;
+  --ps-sage-700: #1F3F37;
+  --ps-sage-800: #18322D;
+  --ps-sage-900: #10231F;
 
-  --ps-mint-50:  #ECFBF5;
-  --ps-mint-100: #D2F4E6;
-  --ps-mint-300: #7FDDB8;
-  --ps-mint-500: #2EB888;
-  --ps-mint-700: #15885F;
+  --ps-copper-50:  #FAF1E8;
+  --ps-copper-100: #F3E4D4;
+  --ps-copper-200: #E5C4A4;
+  --ps-copper-300: #D39D68;
+  --ps-copper-400: #C08349;
+  --ps-copper-500: #B8753A;
+  --ps-copper-600: #9A5E2F;
+  --ps-copper-700: #7B4A27;
+  --ps-copper-800: #5D3820;
+  --ps-copper-900: #3E2517;
+
+  /* Backward-compatible palette aliases. */
+  --ps-violet-50:  var(--ps-copper-50);
+  --ps-violet-100: var(--ps-copper-100);
+  --ps-violet-200: var(--ps-copper-200);
+  --ps-violet-300: var(--ps-copper-300);
+  --ps-violet-400: var(--ps-copper-400);
+  --ps-violet-500: var(--ps-copper-500);
+  --ps-violet-600: var(--ps-copper-600);
+  --ps-violet-700: var(--ps-copper-700);
+  --ps-violet-800: var(--ps-copper-800);
+  --ps-violet-900: var(--ps-copper-900);
+
+  --ps-mint-50:  var(--ps-sage-50);
+  --ps-mint-100: var(--ps-sage-100);
+  --ps-mint-300: var(--ps-sage-300);
+  --ps-mint-500: var(--ps-sage-500);
+  --ps-mint-700: var(--ps-sage-700);
 
   /* Semantic */
-  --ps-success: #15885F;
-  --ps-success-bg: #ECFBF5;
-  --ps-warning: #B25B00;
-  --ps-warning-bg: #FFF4E5;
-  --ps-danger: #C0271F;
-  --ps-danger-bg: #FDECEC;
-  --ps-info: #1E5FD1;
-  --ps-info-bg: #EAF2FF;
+  --ps-success: #2F6B4F;
+  --ps-success-bg: #EDF7F0;
+  --ps-warning: #9A5E2F;
+  --ps-warning-bg: #FAF1E8;
+  --ps-danger: #B42318;
+  --ps-danger-bg: #FDEDEA;
+  --ps-info: #356899;
+  --ps-info-bg: #EEF4F8;
 
   /* —— Light theme ————————————————————————— */
-  --bg: #F8F7FB;
-  --bg-elev: #FFFFFF;
-  --bg-sunken: #F1EFF7;
-  --bg-tint: #FAF8FF;
+  --bg: #F7F3EC;
+  --bg-elev: #FFFCF8;
+  --bg-sunken: #EFE7DC;
+  --bg-tint: #FBF7F1;
   --surface: #FFFFFF;
-  --surface-2: #F4F2F9;
-  --surface-3: #ECE9F4;
+  --surface-2: #F3EDE4;
+  --surface-3: #E9DED1;
 
-  --line: #ECE8F3;
-  --line-strong: #DDD7EC;
-  --line-soft: rgba(124, 91, 245, 0.08);
+  --line: #E2D8CB;
+  --line-strong: #CDBFAC;
+  --line-soft: rgba(47, 93, 80, 0.1);
 
-  --text: #100A1F;
-  --text-2: #4A4459;
-  --text-3: #7A748A;
-  --text-4: #A7A1B5;
+  --text: #1F2320;
+  --text-2: #5E625B;
+  --text-3: #817C72;
+  --text-4: #AAA295;
 
-  --brand: var(--ps-violet-500);
-  --brand-hover: var(--ps-violet-600);
-  --brand-soft: var(--ps-violet-50);
-  --brand-strong: var(--ps-violet-700);
+  --brand: var(--ps-sage-500);
+  --brand-hover: #23463D;
+  --brand-soft: var(--ps-sage-50);
+  --brand-strong: var(--ps-sage-700);
   --brand-fg: #FFFFFF;
+  --accent: var(--ps-copper-500);
+  --accent-hover: var(--ps-copper-600);
+  --accent-soft: var(--ps-copper-100);
+  --accent-strong: var(--ps-copper-700);
 
-  --ring: rgba(124, 91, 245, 0.3);
-  --ring-strong: rgba(124, 91, 245, 0.6);
+  --ring: rgba(47, 93, 80, 0.3);
+  --ring-strong: rgba(47, 93, 80, 0.6);
 
-  --shadow-xs: 0 1px 2px rgba(16, 10, 31, 0.04);
-  --shadow-sm: 0 1px 3px rgba(16, 10, 31, 0.06), 0 1px 2px rgba(16, 10, 31, 0.04);
-  --shadow-md: 0 4px 14px rgba(16, 10, 31, 0.05), 0 1px 3px rgba(16, 10, 31, 0.03);
-  --shadow-lg: 0 14px 40px rgba(40, 25, 93, 0.08), 0 4px 12px rgba(40, 25, 93, 0.04);
-  --shadow-pop: 0 24px 60px rgba(40, 25, 93, 0.18), 0 8px 20px rgba(40, 25, 93, 0.08);
+  --shadow-xs: 0 1px 2px rgba(31, 35, 32, 0.05);
+  --shadow-sm: 0 1px 3px rgba(31, 35, 32, 0.07), 0 1px 2px rgba(31, 35, 32, 0.05);
+  --shadow-md: 0 4px 14px rgba(31, 35, 32, 0.07), 0 1px 3px rgba(31, 35, 32, 0.04);
+  --shadow-lg: 0 14px 40px rgba(35, 70, 61, 0.1), 0 4px 12px rgba(31, 35, 32, 0.06);
+  --shadow-pop: 0 24px 60px rgba(31, 35, 32, 0.2), 0 8px 20px rgba(31, 35, 32, 0.1);
 
   /* Radii */
   --r-xs: 6px;
@@ -108,29 +135,33 @@
 }
 
 .theme-dark {
-  --bg: #0B0916;
-  --bg-elev: #14112A;
-  --bg-sunken: #07061A;
-  --bg-tint: #16132E;
-  --surface: #15122B;
-  --surface-2: #1C1937;
-  --surface-3: #252146;
+  --bg: #111713;
+  --bg-elev: #18211C;
+  --bg-sunken: #0C120F;
+  --bg-tint: #1B261F;
+  --surface: #1B231E;
+  --surface-2: #242E27;
+  --surface-3: #2D3A31;
 
-  --line: #232049;
-  --line-strong: #312B5C;
-  --line-soft: rgba(149, 118, 255, 0.12);
+  --line: #334237;
+  --line-strong: #48584D;
+  --line-soft: rgba(159, 190, 167, 0.14);
 
-  --text: #F5F2FF;
-  --text-2: #C4BDE0;
-  --text-3: #8A82A8;
-  --text-4: #5C5479;
+  --text: #F7F3EC;
+  --text-2: #D6CCBE;
+  --text-3: #AFA596;
+  --text-4: #7E756A;
 
-  --brand: #9576FF;
-  --brand-hover: #B59FFF;
-  --brand-soft: rgba(149, 118, 255, 0.12);
-  --brand-strong: #D5C7FF;
+  --brand: #9FBEA7;
+  --brand-hover: #C3D7C7;
+  --brand-soft: rgba(159, 190, 167, 0.14);
+  --brand-strong: #DDEADF;
+  --accent: #D39D68;
+  --accent-hover: #E5C4A4;
+  --accent-soft: rgba(211, 157, 104, 0.16);
+  --accent-strong: #F3E4D4;
 
-  --ring: rgba(149, 118, 255, 0.4);
+  --ring: rgba(159, 190, 167, 0.4);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -138,10 +169,10 @@
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.55);
   --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.7);
 
-  --ps-success-bg: rgba(46, 184, 136, 0.12);
-  --ps-warning-bg: rgba(178, 91, 0, 0.18);
-  --ps-danger-bg: rgba(192, 39, 31, 0.18);
-  --ps-info-bg: rgba(30, 95, 209, 0.18);
+  --ps-success-bg: rgba(159, 190, 167, 0.14);
+  --ps-warning-bg: rgba(211, 157, 104, 0.18);
+  --ps-danger-bg: rgba(180, 35, 24, 0.18);
+  --ps-info-bg: rgba(53, 104, 153, 0.18);
 }
 
 /* ============================================================

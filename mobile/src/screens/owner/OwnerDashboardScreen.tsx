@@ -11,6 +11,7 @@ import { useNavigation } from "@react-navigation/native";
 
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
+import { colors, fontSizes, radii, shadows } from "../../theme";
 
 type BookingRequest = {
   status: string;
@@ -207,7 +208,7 @@ export function OwnerDashboardScreen() {
       <Text style={styles.subtitle}>Booking requests, owner revenue, invoices, and team access.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 12 }} />
+        <ActivityIndicator style={{ marginTop: 12 }} color={colors.brand} />
       ) : (
         <>
           {!hasLocations ? (
@@ -282,25 +283,26 @@ export function OwnerDashboardScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1
+    flex: 1,
+    backgroundColor: colors.bg
   },
   container: {
     padding: 24
   },
   title: {
-    fontSize: 20,
+    fontSize: fontSizes.pageTitle,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   subtitle: {
     marginTop: 6,
-    fontSize: 14,
-    color: "#6B7280"
+    fontSize: fontSizes.body,
+    color: colors.text2
   },
   error: {
     marginTop: 12,
-    color: "#DC2626",
-    fontSize: 12
+    color: colors.danger,
+    fontSize: fontSizes.caption
   },
   stats: {
     marginTop: 16,
@@ -310,50 +312,52 @@ const styles = StyleSheet.create({
   },
   statCard: {
     minWidth: 140,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: colors.line,
+    ...shadows.card
   },
   statLabel: {
-    fontSize: 12,
-    color: "#6B7280"
+    fontSize: fontSizes.caption,
+    color: colors.text3
   },
   statValue: {
     marginTop: 6,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   emptyCard: {
     marginTop: 16,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.line,
     padding: 16,
-    gap: 8
+    gap: 8,
+    ...shadows.card
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: fontSizes.cardTitle,
     fontWeight: "700",
-    color: "#111827"
+    color: colors.text
   },
   emptyText: {
-    fontSize: 13,
-    color: "#6B7280"
+    fontSize: fontSizes.small,
+    color: colors.text2
   },
   emptyButton: {
     alignSelf: "flex-start",
-    borderRadius: 10,
-    backgroundColor: "#4F46E5",
+    borderRadius: radii.md,
+    backgroundColor: colors.brand,
     paddingHorizontal: 14,
     paddingVertical: 9
   },
   emptyButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: colors.white,
+    fontSize: fontSizes.caption,
     fontWeight: "700"
   }
 });

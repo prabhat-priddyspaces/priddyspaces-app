@@ -1,29 +1,31 @@
 import { StyleSheet } from "react-native";
 
+import { colors, fontSizes, radii, shadows } from "../../theme";
+
 // Shared look for the admin list screens.
 export const adminStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F9FAFB"
+    backgroundColor: colors.bg
   },
   container: {
     padding: 20,
     gap: 12
   },
   title: {
-    fontSize: 22,
+    fontSize: fontSizes.pageTitle,
     fontWeight: "700",
-    color: "#111827"
+    color: colors.text
   },
   subtitle: {
     marginTop: 4,
-    fontSize: 14,
-    color: "#6B7280"
+    fontSize: fontSizes.body,
+    color: colors.text2
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: fontSizes.cardTitle,
     fontWeight: "700",
-    color: "#111827"
+    color: colors.text
   },
   searchRow: {
     flexDirection: "row",
@@ -32,47 +34,48 @@ export const adminStyles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 14,
-    color: "#111827",
-    backgroundColor: "#FFFFFF"
+    borderColor: colors.lineStrong,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: fontSizes.body,
+    color: colors.text,
+    backgroundColor: colors.surface
   },
   searchButton: {
-    borderRadius: 10,
-    backgroundColor: "#4F46E5",
+    borderRadius: radii.md,
+    backgroundColor: colors.brand,
     paddingHorizontal: 14,
     justifyContent: "center"
   },
   searchButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
+    color: colors.white,
+    fontSize: fontSizes.caption,
     fontWeight: "700"
   },
   list: {
     gap: 12
   },
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.line,
     padding: 12,
-    gap: 3
+    gap: 3,
+    ...shadows.card
   },
   cardTitle: {
-    fontSize: 13,
+    fontSize: fontSizes.small,
     fontWeight: "700",
-    color: "#111827"
+    color: colors.text
   },
   mutedText: {
-    fontSize: 12,
-    color: "#6B7280"
+    fontSize: fontSizes.caption,
+    color: colors.text3
   },
   message: {
-    color: "#DC2626",
-    fontSize: 12
+    color: colors.danger,
+    fontSize: fontSizes.caption
   }
 });
