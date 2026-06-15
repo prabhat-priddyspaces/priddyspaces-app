@@ -13,6 +13,7 @@ import { useNavigation } from "@react-navigation/native";
 
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { colors, fontSizes, radii, shadows } from "../theme";
 
 type MoneyAmount = number | string | null;
 
@@ -145,6 +146,7 @@ export function HomeScreen() {
       <TextInput
         style={styles.input}
         placeholder="Neighborhood, city, state, or ZIP"
+        placeholderTextColor={colors.text4}
         accessibilityLabel="Search query"
         value={q}
         onChangeText={setQ}
@@ -153,6 +155,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="Date YYYY-MM-DD"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Date"
           value={date}
           onChangeText={setDate}
@@ -160,6 +163,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="Start HH:MM"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Start time"
           value={startTime}
           onChangeText={setStartTime}
@@ -167,6 +171,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="End HH:MM"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="End time"
           value={endTime}
           onChangeText={setEndTime}
@@ -176,6 +181,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="Capacity"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Capacity"
           keyboardType="number-pad"
           value={capacity}
@@ -184,6 +190,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder={priceLabel}
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Max price"
           keyboardType="number-pad"
           value={maxPrice}
@@ -194,6 +201,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="Latitude"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Latitude"
           value={lat}
           onChangeText={setLat}
@@ -201,6 +209,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="Longitude"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Longitude"
           value={lng}
           onChangeText={setLng}
@@ -208,6 +217,7 @@ export function HomeScreen() {
         <TextInput
           style={[styles.input, styles.rowInput]}
           placeholder="Radius mi"
+          placeholderTextColor={colors.text4}
           accessibilityLabel="Radius miles"
           value={radiusMiles}
           onChangeText={setRadiusMiles}
@@ -232,7 +242,7 @@ export function HomeScreen() {
         accessibilityRole="button"
         accessibilityLabel="Search locations"
       >
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Search</Text>}
+        {loading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryButtonText}>Search</Text>}
       </TouchableOpacity>
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -314,20 +324,21 @@ function Chip({
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1
+    flex: 1,
+    backgroundColor: colors.bg
   },
   container: {
     padding: 24
   },
   title: {
-    fontSize: 20,
+    fontSize: fontSizes.pageTitle,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   subtitle: {
     marginTop: 6,
-    fontSize: 14,
-    color: "#6B7280"
+    fontSize: fontSizes.body,
+    color: colors.text2
   },
   chipRow: {
     flexDirection: "row",
@@ -337,33 +348,34 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 999,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#FFFFFF"
+    backgroundColor: colors.surface
   },
   chipActive: {
-    borderColor: "#4F46E5",
-    backgroundColor: "#EEF2FF"
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft
   },
   chipText: {
-    color: "#4B5563",
-    fontSize: 12,
+    color: colors.text2,
+    fontSize: fontSizes.caption,
     fontWeight: "700"
   },
   chipTextActive: {
-    color: "#3730A3"
+    color: colors.brandStrong
   },
   input: {
     marginTop: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    backgroundColor: "#FFFFFF"
+    borderColor: colors.lineStrong,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: fontSizes.body,
+    color: colors.text,
+    backgroundColor: colors.surface
   },
   row: {
     flexDirection: "row",
@@ -374,54 +386,56 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: 12,
-    backgroundColor: "#111827",
+    backgroundColor: colors.brand,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center"
   },
   primaryButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600"
+    color: colors.white,
+    fontWeight: "600",
+    fontSize: fontSizes.body
   },
   message: {
     marginTop: 12,
-    color: "#DC2626",
-    fontSize: 12
+    color: colors.danger,
+    fontSize: fontSizes.caption
   },
   list: {
     marginTop: 16,
     gap: 12
   },
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: colors.line,
+    ...shadows.card
   },
   cardImage: {
     height: 140,
-    borderRadius: 10,
+    borderRadius: radii.md,
     marginBottom: 12,
-    backgroundColor: "#F3F4F6"
+    backgroundColor: colors.surface2
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: fontSizes.cardTitle,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   cardSubtitle: {
     marginTop: 4,
-    fontSize: 13,
-    color: "#374151"
+    fontSize: fontSizes.small,
+    color: colors.text2
   },
   cardMuted: {
     marginTop: 4,
-    fontSize: 12,
-    color: "#6B7280"
+    fontSize: fontSizes.caption,
+    color: colors.text3
   },
   empty: {
-    fontSize: 12,
-    color: "#6B7280"
+    fontSize: fontSizes.caption,
+    color: colors.text3
   }
 });

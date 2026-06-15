@@ -61,7 +61,7 @@ export function MobileBottomNav({
     <nav
       aria-label="Primary"
       className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-bg-elev border-t border-line pb-[env(safe-area-inset-bottom)]"
-      style={{ boxShadow: "0 -4px 20px rgba(16,10,31,.06)" }}
+      style={{ boxShadow: "0 -4px 20px rgba(31,35,32,.08)" }}
     >
       <ul className="grid grid-cols-4">
         {items.map((item) => {
@@ -73,7 +73,7 @@ export function MobileBottomNav({
               <Link
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2 text-[10px] font-medium",
+                  "flex flex-col items-center gap-1 py-2 text-[12px] font-medium",
                   active ? "text-brand" : "text-text-3"
                 )}
               >

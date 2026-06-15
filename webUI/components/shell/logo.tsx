@@ -14,9 +14,9 @@ export function Logo({ size = 28, className, style, ...props }: LogoProps) {
         width: size,
         height: size,
         background:
-          "linear-gradient(135deg, var(--ps-violet-400) 0%, var(--ps-violet-600) 100%)",
+          "linear-gradient(135deg, var(--ps-copper-400) 0%, var(--brand) 100%)",
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,.25), 0 1px 3px rgba(64,40,170,.25)",
+          "inset 0 1px 0 rgba(255,255,255,.25), 0 1px 3px rgba(47,93,80,.25)",
         ...style,
       }}
       aria-hidden

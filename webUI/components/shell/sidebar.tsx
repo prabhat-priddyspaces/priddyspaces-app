@@ -240,10 +240,10 @@ export function Sidebar({
       >
         <Logo size={28} />
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold leading-none">
+          <div className="text-[14px] font-semibold leading-none">
             Priddyspaces
           </div>
-          <div className="text-[11px] text-text-3 leading-none mt-1 truncate">
+          <div className="mt-1 truncate text-[12px] leading-none text-text-3">
             {workspaceLabel}
           </div>
         </div>
@@ -263,7 +263,7 @@ export function Sidebar({
       <nav className="flex-1 overflow-auto flex flex-col gap-3">
         {sections.map((section) => (
           <div key={section.label}>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-4 px-2.5 mb-0.5 py-1">
+            <div className="mb-0.5 px-2.5 py-1 text-[12px] font-semibold text-text-4">
               {section.label}
             </div>
             {section.items.map((item) => {
@@ -289,7 +289,7 @@ export function Sidebar({
                   {item.count != null && (
                     <span
                       className={cn(
-                        "inline-flex items-center px-1.5 py-px rounded-full text-[10px] font-semibold",
+                        "inline-flex items-center rounded-full px-1.5 py-px text-[12px] font-semibold",
                         item.countTone === "warning"
                           ? "bg-warning-soft text-warning"
                           : "bg-surface-2 text-text-2"
@@ -315,10 +315,10 @@ export function Sidebar({
         >
           <Avatar name={profile.name} size={28} />
           <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-semibold leading-none truncate">
+            <div className="truncate text-[13px] font-semibold leading-none">
               {profile.name}
             </div>
-            <div className="text-[11px] text-text-3 leading-none mt-1 truncate">
+            <div className="mt-1 truncate text-[12px] leading-none text-text-3">
               {profile.email}
             </div>
           </div>

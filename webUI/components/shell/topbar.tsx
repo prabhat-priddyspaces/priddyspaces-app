@@ -35,7 +35,7 @@ export function Topbar({
   return (
     <header
       className={cn(
-        "flex items-center gap-3 px-4 sm:gap-4 sm:px-7 border-b border-line bg-bg min-h-[60px]",
+        "flex min-h-[64px] items-center gap-3 border-b border-line bg-bg-elev px-4 sm:gap-4 sm:px-7",
         className
       )}
     >
@@ -63,7 +63,7 @@ export function Topbar({
         )}
         {title && (
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[18px] font-semibold tracking-[-0.01em]">
+            <h1 className="text-[20px] font-semibold">
               {title}
             </h1>
             {badge && <Badge variant={badge.variant ?? "mint"}>{badge.label}</Badge>}

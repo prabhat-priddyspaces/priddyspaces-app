@@ -23,9 +23,9 @@ const buttonVariants = cva(
           "bg-surface text-danger border border-danger/30 hover:border-danger/60",
       },
       size: {
-        default: "h-9 px-3.5 text-[13px] rounded-xl",
-        sm: "h-[30px] px-2.5 text-[12px] rounded-lg",
-        lg: "h-11 px-4.5 text-[15px] rounded-xl",
+        default: "h-10 px-4 text-[14px] rounded-xl",
+        sm: "h-8 px-3 text-[13px] rounded-lg",
+        lg: "h-12 px-5 text-[15px] rounded-xl",
       },
     },
     defaultVariants: {

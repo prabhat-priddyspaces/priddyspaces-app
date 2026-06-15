@@ -3,11 +3,11 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const PALETTES: ReadonlyArray<readonly [string, string, string]> = [
-  ["#FFD074", "#FF9E5E", "#5a2a00"], // amber
-  ["#B59FFF", "#7C5BF5", "#28195D"], // violet
-  ["#7FDDB8", "#2EB888", "#0a3a2a"], // mint
-  ["#FFC4D9", "#FF7AA2", "#5a1030"], // rose
-  ["#A8C7FF", "#5E8EFF", "#0c2c60"], // blue
+  ["#F3E4D4", "#B8753A", "#3E2517"], // copper
+  ["#DDEADF", "#2F5D50", "#10231F"], // sage
+  ["#EFE7DC", "#8D7865", "#2D241C"], // taupe
+  ["#EEF4F8", "#356899", "#102A43"], // denim
+  ["#FDEDEA", "#B42318", "#4A120D"], // brick
 ];
 
 function initials(name: string | undefined) {

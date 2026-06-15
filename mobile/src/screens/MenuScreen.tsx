@@ -2,6 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 import { useAuth } from "../context/AuthContext";
+import { colors, fontSizes, radii, shadows } from "../theme";
 
 type MenuItem = {
   label: string;
@@ -102,50 +103,53 @@ export function MenuScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24
+    flex: 1,
+    padding: 24,
+    backgroundColor: colors.bg
   },
   title: {
-    fontSize: 20,
+    fontSize: fontSizes.pageTitle,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   subtitle: {
     marginTop: 6,
-    fontSize: 14,
-    color: "#6B7280"
+    fontSize: fontSizes.body,
+    color: colors.text2
   },
   list: {
     marginTop: 16,
     gap: 10
   },
   item: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: colors.line,
+    ...shadows.card
   },
   itemText: {
-    fontSize: 14,
+    fontSize: fontSizes.body,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   divider: {
     marginTop: 20,
     height: 1,
-    backgroundColor: "#E5E7EB"
+    backgroundColor: colors.line
   },
   logoutButton: {
     marginTop: 16,
     borderWidth: 1,
-    borderColor: "#FCA5A5",
+    borderColor: colors.dangerSoft,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center"
   },
   logoutText: {
-    color: "#B91C1C",
+    color: colors.danger,
     fontWeight: "600"
   }
 });

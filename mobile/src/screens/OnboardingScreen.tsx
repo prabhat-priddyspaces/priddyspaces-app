@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../constants";
 import { sanitizePhone } from "../lib/phone";
+import { colors, fontSizes, radii } from "../theme";
 
 type Role = "member" | "owner";
 
@@ -108,6 +109,7 @@ export function OnboardingScreen() {
       <TextInput
         style={styles.input}
         placeholder="Jane Doe"
+        placeholderTextColor={colors.text4}
         value={fullName}
         onChangeText={setFullName}
         autoComplete="name"
@@ -117,6 +119,7 @@ export function OnboardingScreen() {
       <TextInput
         style={styles.input}
         placeholder="5551234567"
+        placeholderTextColor={colors.text4}
         value={phone}
         onChangeText={(value) => setPhone(sanitizePhone(value))}
         keyboardType="phone-pad"
@@ -126,6 +129,7 @@ export function OnboardingScreen() {
       <TextInput
         style={styles.input}
         placeholder="US"
+        placeholderTextColor={colors.text4}
         value={country}
         onChangeText={setCountry}
         maxLength={2}
@@ -150,7 +154,7 @@ export function OnboardingScreen() {
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.primaryButtonText}>
             {isOwner ? "Continue to business details" : "Save member profile"}
@@ -162,53 +166,54 @@ export function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24 },
-  title: { fontSize: 24, fontWeight: "600", color: "#111827", marginBottom: 4 },
-  subtitle: { fontSize: 14, color: "#6B7280", marginBottom: 24 },
-  label: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 6 },
+  container: { flexGrow: 1, padding: 24, backgroundColor: colors.bg },
+  title: { fontSize: fontSizes.pageTitle, fontWeight: "600", color: colors.text, marginBottom: 4 },
+  subtitle: { fontSize: fontSizes.body, color: colors.text2, marginBottom: 24 },
+  label: { fontSize: fontSizes.body, fontWeight: "500", color: colors.text2, marginBottom: 6 },
   roleRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
   roleCard: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderColor: colors.line,
+    borderRadius: radii.md,
     padding: 12,
-    backgroundColor: "#FFF",
+    backgroundColor: colors.surface,
     gap: 4,
   },
-  roleCardActive: { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
-  roleTitle: { fontSize: 13, fontWeight: "700", color: "#374151" },
-  roleTitleActive: { color: "#3730A3" },
-  roleHint: { fontSize: 11, color: "#6B7280" },
+  roleCardActive: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
+  roleTitle: { fontSize: fontSizes.small, fontWeight: "700", color: colors.text2 },
+  roleTitleActive: { color: colors.brandStrong },
+  roleHint: { fontSize: fontSizes.caption, color: colors.text3 },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderColor: colors.lineStrong,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: fontSizes.body,
+    color: colors.text,
     marginBottom: 16,
-    backgroundColor: "#FFF",
+    backgroundColor: colors.surface,
   },
   checkRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 24 },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.lineStrong,
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
   },
-  checkboxChecked: { backgroundColor: "#111827", borderColor: "#111827" },
-  checkmark: { color: "#FFF", fontSize: 12 },
-  checkLabel: { flex: 1, fontSize: 13, color: "#6B7280", lineHeight: 20 },
+  checkboxChecked: { backgroundColor: colors.brand, borderColor: colors.brand },
+  checkmark: { color: colors.white, fontSize: fontSizes.caption },
+  checkLabel: { flex: 1, fontSize: fontSizes.small, color: colors.text2, lineHeight: 20 },
   primaryButton: {
-    backgroundColor: "#111827",
+    backgroundColor: colors.brand,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center",
   },
-  primaryButtonText: { color: "#FFF", fontWeight: "600", fontSize: 15 },
+  primaryButtonText: { color: colors.white, fontWeight: "600", fontSize: fontSizes.bodyLg },
 });

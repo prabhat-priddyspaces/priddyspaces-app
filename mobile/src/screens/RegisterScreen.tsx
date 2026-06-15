@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { useAuth } from "../context/AuthContext";
+import { colors, fontSizes, radii } from "../theme";
 
 export function RegisterScreen() {
   const { signUp, verifyEmailCode, loading } = useAuth();
@@ -46,6 +47,7 @@ export function RegisterScreen() {
         <TextInput
           style={styles.input}
           placeholder="Verification code"
+          placeholderTextColor={colors.text4}
           autoCapitalize="none"
           keyboardType="number-pad"
           value={verificationCode}
@@ -53,7 +55,7 @@ export function RegisterScreen() {
         />
         <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyEmail} disabled={loading}>
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.white} />
           ) : (
             <Text style={styles.primaryButtonText}>Verify email</Text>
           )}
@@ -79,18 +81,21 @@ export function RegisterScreen() {
       <TextInput
         style={styles.input}
         placeholder="First name"
+        placeholderTextColor={colors.text4}
         value={form.first_name}
         onChangeText={(value) => setForm({ ...form, first_name: value })}
       />
       <TextInput
         style={styles.input}
         placeholder="Last name"
+        placeholderTextColor={colors.text4}
         value={form.last_name}
         onChangeText={(value) => setForm({ ...form, last_name: value })}
       />
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor={colors.text4}
         autoCapitalize="none"
         keyboardType="email-address"
         value={form.email}
@@ -99,13 +104,14 @@ export function RegisterScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor={colors.text4}
         secureTextEntry
         value={form.password}
         onChangeText={(value) => setForm({ ...form, password: value })}
       />
       <TouchableOpacity style={styles.primaryButton} onPress={handleRegister} disabled={loading}>
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.primaryButtonText}>Create account</Text>
         )}
@@ -116,39 +122,43 @@ export function RegisterScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24
+    flex: 1,
+    padding: 24,
+    backgroundColor: colors.bg
   },
   title: {
-    fontSize: 24,
+    fontSize: fontSizes.pageTitle,
     fontWeight: "600",
-    color: "#111827"
+    color: colors.text
   },
   subtitle: {
     marginTop: 8,
-    fontSize: 14,
-    color: "#6B7280",
+    fontSize: fontSizes.body,
+    color: colors.text2,
     marginBottom: 20
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderColor: colors.lineStrong,
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: fontSizes.body,
+    color: colors.text,
     marginBottom: 12,
-    backgroundColor: "#FFFFFF"
+    backgroundColor: colors.surface
   },
   primaryButton: {
     marginTop: 4,
-    backgroundColor: "#111827",
+    backgroundColor: colors.brand,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: radii.md,
     alignItems: "center"
   },
   primaryButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600"
+    color: colors.white,
+    fontWeight: "600",
+    fontSize: fontSizes.body
   },
   secondaryButton: {
     marginTop: 12,
@@ -156,7 +166,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   secondaryButtonText: {
-    color: "#374151",
+    color: colors.brand,
     fontWeight: "600"
   }
 });

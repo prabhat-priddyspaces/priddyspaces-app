@@ -114,14 +114,14 @@ export function PublicLocationMiniMap({ lat, lng, name }: PublicLocationMiniMapP
 
   if (lat == null || lng == null) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-[24px] border border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
+      <div className="flex h-56 items-center justify-center rounded-2xl border border-line bg-surface-2 px-4 text-sm text-text-3">
         Map is unavailable for this location.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-100">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface-2">
       <div ref={containerRef} className="h-56 w-full" />
     </div>
   );

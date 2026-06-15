@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
+import {
+  DefaultTheme,
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -78,6 +82,7 @@ import { AttendanceScreen } from "../screens/access/AttendanceScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { addNotificationTapListener, registerExpoPushToken } from "../lib/notifications";
 import { ImpersonationBanner } from "../components/ImpersonationBanner";
+import { colors, fontSizes, radii } from "../theme";
 import { linking } from "./linking";
 
 const Stack = createNativeStackNavigator();
@@ -85,6 +90,44 @@ const MemberStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 const navigationRef = createNavigationContainerRef<any>();
 
+const appNavigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: colors.brand,
+    background: colors.bg,
+    card: colors.bgElev,
+    text: colors.text,
+    border: colors.line,
+    notification: colors.warning,
+  },
+};
+
+const sharedHeaderOptions = {
+  headerStyle: { backgroundColor: colors.bgElev },
+  headerTintColor: colors.text,
+  headerTitleStyle: {
+    color: colors.text,
+    fontSize: fontSizes.cardTitle,
+    fontWeight: "600" as const,
+  },
+  headerShadowVisible: false,
+  contentStyle: { backgroundColor: colors.bg },
+};
+
+const sharedTabOptions = {
+  ...sharedHeaderOptions,
+  tabBarActiveTintColor: colors.brand,
+  tabBarInactiveTintColor: colors.text3,
+  tabBarStyle: {
+    backgroundColor: colors.bgElev,
+    borderTopColor: colors.line,
+  },
+  tabBarLabelStyle: {
+    fontSize: fontSizes.caption,
+    fontWeight: "500" as const,
+  },
+};
 
 function openAssistant(navigation: any) {
   let current = navigation;
@@ -121,7 +164,7 @@ function AssistantHeaderButton({ navigation }: { navigation: any }) {
 
   return (
     <TouchableOpacity style={{ marginRight: 12 }} onPress={() => openAssistant(navigation)}>
-      <Text style={{ fontSize: 20, color: "#4f46e5" }}>✦</Text>
+      <Text style={{ fontSize: 20, color: colors.accent }}>✦</Text>
     </TouchableOpacity>
   );
 }
@@ -145,6 +188,7 @@ function MarketplaceStack() {
   return (
     <MemberStack.Navigator
       screenOptions={({ navigation }) => ({
+        ...sharedHeaderOptions,
         headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
       })}
@@ -160,6 +204,7 @@ function MemberTabs() {
   return (
     <Tabs.Navigator
       screenOptions={({ navigation }) => ({
+        ...sharedTabOptions,
         headerShown: true,
         headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
@@ -180,6 +225,7 @@ function OwnerTabs() {
   return (
     <Tabs.Navigator
       screenOptions={({ navigation }) => ({
+        ...sharedTabOptions,
         headerShown: true,
         headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
@@ -199,6 +245,7 @@ function AdminTabs() {
   return (
     <Tabs.Navigator
       screenOptions={({ navigation }) => ({
+        ...sharedTabOptions,
         headerShown: true,
         headerLeft: () => <MenuHeaderButton navigation={navigation} />,
         headerRight: () => <AssistantHeaderButton navigation={navigation} />,
@@ -217,7 +264,7 @@ function MainApp() {
 
   if (!me?.role && !me?.platform_role) {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ ...sharedHeaderOptions, headerShown: false }}>
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       </Stack.Navigator>
     );
@@ -225,7 +272,7 @@ function MainApp() {
 
   if (me.role === "owner" && !me.has_organization) {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ ...sharedHeaderOptions, headerShown: false }}>
         <Stack.Screen name="OrgOnboarding" component={OrgOnboardingScreen} />
       </Stack.Navigator>
     );
@@ -234,7 +281,7 @@ function MainApp() {
   return (
     <>
       <ImpersonationBanner />
-      <Stack.Navigator screenOptions={{ headerShown: true }}>
+      <Stack.Navigator screenOptions={{ ...sharedHeaderOptions, headerShown: true }}>
       <Stack.Screen
         name="App"
         component={me.platform_role ? AdminTabs : me.role === "owner" ? OwnerTabs : MemberTabs}
@@ -378,15 +425,15 @@ export function AppNavigator() {
 
   if (!isLoaded || loading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator />
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
+        <ActivityIndicator color={colors.brand} />
       </View>
     );
   }
 
   return (
-    <NavigationContainer ref={navigationRef} linking={linking}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer ref={navigationRef} linking={linking} theme={appNavigationTheme}>
+      <Stack.Navigator screenOptions={{ ...sharedHeaderOptions, headerShown: false }}>
         {isSignedIn ? (
           <Stack.Screen name="Main" component={MainApp} />
         ) : (
@@ -405,15 +452,16 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: radii.md,
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
+    backgroundColor: colors.surface2,
   },
   menuBar: {
     width: 18,
     height: 2,
     borderRadius: 2,
-    backgroundColor: "#111827",
+    backgroundColor: colors.text,
   },
 });
