@@ -107,14 +107,8 @@ const ownerSections: SidebarSection[] = [
   {
     label: "Settings",
     items: [
+      { href: "/owner/settings", icon: Settings, label: "Settings" },
       { href: "/owner/account", icon: User, label: "Account" },
-      { href: "/owner/settings", icon: Settings, label: "Organization" },
-      { href: "/owner/settings/payments", icon: CreditCard, label: "Payments setup" },
-      {
-        href: "/owner/settings/assistant-policies",
-        icon: Sparkles,
-        label: "Assistant policies",
-      },
     ],
   },
 ];

@@ -268,7 +268,7 @@ test("owner-created promo code applies only to that owner's member bookings", as
     await json(route, { detail: `Unhandled route: ${key}` }, 404);
   });
 
-  await page.goto("/owner/settings");
+  await page.goto("/owner/settings/pricing");
   await expect(page.getByText("Promo codes", { exact: true })).toBeVisible();
   await page.getByPlaceholder("CODE").fill("summer20");
   await page.getByPlaceholder("Percent").fill("20");

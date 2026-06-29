@@ -15,7 +15,7 @@ const cards = [
   { href: "/owner/marketing/campaigns", label: "Campaigns", description: "Draft, review, schedule, and send emails." },
   { href: "/owner/marketing/workflows", label: "Workflows", description: "Automate waits, conditions, sends, tags, and stops." },
   { href: "/owner/marketing/suppressions", label: "Suppressions", description: "Manage unsubscribe, bounce, and manual blocks." },
-  { href: "/owner/marketing/settings", label: "Sender Settings", description: "Choose platform or verified business sender." },
+  { href: "/owner/settings/marketing", label: "Sender Settings", description: "Choose platform or verified business sender." },
 ];
 
 export default function OwnerMarketingHome() {
