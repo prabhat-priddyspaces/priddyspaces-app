@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -107,13 +106,12 @@ export default function AssistantPoliciesPage() {
   }
 
   return (
-    <AppShell>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-textPrimary">Assistant Policies</h2>
-          <p className="text-textSecondary">Configure the structured source material the assistant cites for policy answers.</p>
+          <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Assistant policies</h2>
+          <p className="mt-1 text-[12px] text-text-3">Configure the structured source material the assistant cites for policy answers.</p>
         </div>
-        {message ? <div className="text-sm text-textSecondary">{message}</div> : null}
+        {message ? <p className="text-[13px] text-text-3">{message}</p> : null}
         <Card>
           <form className="grid gap-4" onSubmit={submit}>
             <div className="grid gap-4 md:grid-cols-3">
@@ -209,7 +207,6 @@ export default function AssistantPoliciesPage() {
             </Card>
           ))}
         </div>
-      </div>
-    </AppShell>
+    </div>
   );
 }
