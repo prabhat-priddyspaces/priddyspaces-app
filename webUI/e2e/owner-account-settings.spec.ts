@@ -124,7 +124,7 @@ test("owner settings scroll main content while sidebar stays fixed", async ({ pa
 
   await page.goto("/owner/settings");
 
-  await expect(page.getByRole("heading", { name: "Organization settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Organization profile" })).toBeVisible();
   await expect(page.getByText("Feature flags")).toHaveCount(0);
   await expect(page.getByText("Rewards configuration", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open loyalty settings" })).toHaveCount(0);
@@ -132,11 +132,13 @@ test("owner settings scroll main content while sidebar stays fixed", async ({ pa
   await expect(page.getByText("Stripe Connect", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Membership plans", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Status: Not connected", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Space")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Account" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Organization" })).toBeVisible();
-
   const sidebar = page.getByTestId("workspace-sidebar");
+  await expect(sidebar.getByRole("link", { name: "Account" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "Settings" })).toBeVisible();
+  // The settings sub-nav exposes each grouped section as its own tab.
+  await expect(page.getByRole("link", { name: "Booking rules" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Email sender" })).toBeVisible();
+
   const main = page.getByTestId("workspace-main");
   const before = await sidebar.boundingBox();
 
