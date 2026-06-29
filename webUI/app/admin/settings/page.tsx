@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, KeyRound, Percent, ShieldCheck, User } from "lucide-react";
+import { Building2, KeyRound, Palette, Percent, ShieldCheck, User } from "lucide-react";
 
 import { AdminShell } from "@/components/admin-shell";
+import { ThemeFamilyPicker, ThemeModePicker } from "@/components/settings/appearance-controls";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ interface SettingsResponse {
   current_admin: CurrentAdmin;
 }
 
-type Section = "platform" | "profile" | "password";
+type Section = "platform" | "profile" | "password" | "appearance";
 
 const SECTIONS: Array<{
   id: Section;
@@ -49,6 +50,7 @@ const SECTIONS: Array<{
   { id: "platform", group: "Organization", label: "Platform defaults", icon: Percent, superadmin: true },
   { id: "profile", group: "Account", label: "Admin profile", icon: User, superadmin: false },
   { id: "password", group: "Account", label: "Password", icon: KeyRound, superadmin: false },
+  { id: "appearance", group: "Account", label: "Appearance", icon: Palette, superadmin: false },
 ];
 
 export default function AdminSettingsPage() {
@@ -72,6 +74,7 @@ export default function AdminSettingsPage() {
     platform: null,
     profile: null,
     password: null,
+    appearance: null,
   });
 
   useEffect(() => {
@@ -517,6 +520,30 @@ export default function AdminSettingsPage() {
               </Card>
             </div>
           ) : null}
+
+          <div
+            ref={(node) => {
+              sectionRefs.current.appearance = node;
+            }}
+          >
+            <SectionHeader
+              eyebrow="Account"
+              title="Appearance"
+              sub="Choose your theme and light or dark mode. Personal to your account and applies across every page."
+            />
+            <Card padded={false} className="p-5">
+              <div className="grid gap-5">
+                <div>
+                  <div className="text-[13px] font-semibold mb-2.5">Theme</div>
+                  <ThemeFamilyPicker />
+                </div>
+                <div className="border-t border-border pt-5">
+                  <div className="text-[13px] font-semibold mb-2.5">Appearance mode</div>
+                  <ThemeModePicker />
+                </div>
+              </div>
+            </Card>
+          </div>
 
           {/* Suppress unused import warning */}
           <Building2 className="hidden" aria-hidden />
