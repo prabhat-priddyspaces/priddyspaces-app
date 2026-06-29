@@ -75,6 +75,7 @@ from app.models.marketing import (
 )
 from app.models.meeting_room_hour_ledger import MeetingRoomHourLedger
 from app.models.user_notification import UserNotification, UserNotificationPreference
+from app.models.user_preferences import UserPreference
 from app.models.user import User
 
 __all__ = [
@@ -150,5 +151,6 @@ __all__ = [
     "MeetingRoomHourLedger",
     "UserNotification",
     "UserNotificationPreference",
+    "UserPreference",
     "User"
 ]

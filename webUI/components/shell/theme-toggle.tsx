@@ -3,66 +3,33 @@
 import * as React from "react";
 import { Moon, Sun } from "lucide-react";
 
+import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "ps-theme";
-
-function applyTheme(theme: "light" | "dark") {
-  const root = document.documentElement;
-  if (theme === "dark") {
-    root.classList.add("dark");
-  } else {
-    root.classList.remove("dark");
-  }
-}
-
 export function ThemeToggle({ className }: { className?: string }) {
-  const [theme, setTheme] = React.useState<"light" | "dark">("light");
+  const { resolvedMode, toggleMode } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
+  // Avoid a hydration mismatch: render the default icon until mounted, since
+  // the resolved mode depends on localStorage / OS preference (client-only).
   React.useEffect(() => {
     setMounted(true);
-    let stored: string | null = null;
-    try {
-      stored = window.localStorage?.getItem(STORAGE_KEY) ?? null;
-    } catch {
-      stored = null;
-    }
-    if (stored === "dark" || stored === "light") {
-      setTheme(stored);
-      applyTheme(stored);
-      return;
-    }
-    const prefersDark =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initial = prefersDark ? "dark" : "light";
-    setTheme(initial);
-    applyTheme(initial);
   }, []);
 
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    applyTheme(next);
-    try {
-      window.localStorage?.setItem(STORAGE_KEY, next);
-    } catch {
-      /* storage unavailable */
-    }
-  }
+  const isDark = resolvedMode === "dark";
 
   return (
     <button
       type="button"
-      onClick={toggle}
-      aria-label={mounted ? `Switch to ${theme === "dark" ? "light" : "dark"} mode` : "Toggle theme"}
+      onClick={toggleMode}
+      aria-label={mounted ? `Switch to ${isDark ? "light" : "dark"} mode` : "Toggle theme"}
+      data-testid="theme-toggle"
       className={cn(
         "inline-flex h-9 w-9 items-center justify-center rounded-xl text-text-2 hover:bg-surface-2 transition-colors focus-visible:outline-none focus-visible:shadow-ring",
         className
       )}
     >
-      {mounted && theme === "dark" ? (
+      {mounted && isDark ? (
         <Sun size={16} strokeWidth={1.6} />
       ) : (
         <Moon size={16} strokeWidth={1.6} />

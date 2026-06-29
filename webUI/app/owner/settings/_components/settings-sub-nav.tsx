@@ -7,6 +7,7 @@ import {
   CalendarCheck,
   CreditCard,
   Mail,
+  Palette,
   Sparkles,
   Tag,
   type LucideIcon,
@@ -27,6 +28,7 @@ const SETTINGS_TABS: SubNavItem[] = [
   { href: "/owner/settings/payments", label: "Payments", icon: CreditCard },
   { href: "/owner/settings/marketing", label: "Email sender", icon: Mail },
   { href: "/owner/settings/assistant-policies", label: "AI assistant", icon: Sparkles },
+  { href: "/owner/settings/appearance", label: "Appearance", icon: Palette },
 ];
 
 function isTabActive(pathname: string, href: string): boolean {

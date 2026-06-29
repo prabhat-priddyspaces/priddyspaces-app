@@ -8,8 +8,13 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { AssistantMount } from "@/components/assistant-mount";
 import { ClerkTokenSync } from "@/components/clerk-token-sync";
 import { CommandPalette } from "@/components/command-palette";
+import { ThemeProvider } from "@/components/theme-provider";
 import { getClerkProviderRedirectProps } from "@/lib/clerk-urls";
 import { IS_E2E_BYPASS } from "@/lib/e2e-bypass";
+
+// Applies the saved theme (family + light/dark) to <html> before first paint
+// so there is no flash of the wrong theme. Mirrors ThemeProvider's storage keys.
+const THEME_INIT_SCRIPT = `(function(){try{var f=localStorage.getItem('ps-theme-family');var m=localStorage.getItem('ps-theme');var fam=(f==='warm'||f==='premium'||f==='neutral')?f:'neutral';var mode=(m==='light'||m==='dark'||m==='system')?m:'system';var dark=mode==='dark'||(mode==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);var el=document.documentElement;el.setAttribute('data-theme',fam);el.classList.toggle('dark',dark);}catch(e){}})();`;
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -37,11 +42,14 @@ export default function RootLayout({
   const clerkRedirectProps = getClerkProviderRedirectProps();
   if (IS_E2E_BYPASS) {
     return (
-      <html lang="en" className={fontClasses}>
+      <html lang="en" className={fontClasses} data-theme="neutral">
         <body>
-          {children}
-          <AssistantMount />
-          <CommandPalette />
+          <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+          <ThemeProvider>
+            {children}
+            <AssistantMount />
+            <CommandPalette />
+          </ThemeProvider>
         </body>
       </html>
     );
@@ -56,12 +64,15 @@ export default function RootLayout({
       // platform → /admin.
       {...clerkRedirectProps}
     >
-      <html lang="en" className={fontClasses}>
+      <html lang="en" className={fontClasses} data-theme="neutral">
         <body>
+          <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
           <ClerkTokenSync />
-          {children}
-          <AssistantMount />
-          <CommandPalette />
+          <ThemeProvider>
+            {children}
+            <AssistantMount />
+            <CommandPalette />
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>
