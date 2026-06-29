@@ -64,6 +64,8 @@ test("owner sees a setup error when enabling an incomplete payment provider", as
   await page.goto("/owner/settings/payments");
 
   await expect(page.getByRole("heading", { name: "Payment settings" })).toBeVisible();
+  // The settings layout owns the single app shell; sub-pages must not nest a second one.
+  await expect(page.getByTestId("workspace-sidebar")).toHaveCount(1);
   await expect(page.getByText("Disabled • Test • untested")).toBeVisible();
   await page.getByRole("button", { name: "Enable" }).click();
 
