@@ -1,31 +1,42 @@
 /* ============================================================
    PRIDDYSPACES — DESIGN TOKENS
-   Warm workspace palette · generous radius · gentle motion
+   Theme engine: family (data-theme) × mode (.dark class)
+
+   <html data-theme="neutral|warm|premium" class="dark?">
+
+   - No data-theme        → Neutral (default)
+   - .dark on <html>      → dark mode (also drives Tailwind dark: variants)
+
+   Each family×mode block defines the FULL semantic color set so there is
+   no cross-block fall-through. Non-color tokens (scales, radii, spacing,
+   type, easing, fonts) and semantic foreground colors live once in :root.
    ============================================================ */
 
 :root {
-  /* —— Brand ————————————————————————————— */
-  --ps-sage-50:  #EEF4EF;
-  --ps-sage-100: #DDEADF;
-  --ps-sage-200: #C3D7C7;
-  --ps-sage-300: #9FBEA7;
-  --ps-sage-400: #6F977F;
-  --ps-sage-500: #2F5D50;   /* primary */
-  --ps-sage-600: #274D43;
-  --ps-sage-700: #1F3F37;
-  --ps-sage-800: #18322D;
-  --ps-sage-900: #10231F;
+  /* —— Raw palette scales (Neutral default: indigo + sky) ——
+     Consumed by the .ps-* artboard atoms below. React UI reads the
+     Tailwind scales in tailwind.config.ts, kept in sync with these. */
+  --ps-sage-50:  #EEF2FF;
+  --ps-sage-100: #E0E7FF;
+  --ps-sage-200: #C7D2FE;
+  --ps-sage-300: #A5B4FC;
+  --ps-sage-400: #818CF8;
+  --ps-sage-500: #6366F1;
+  --ps-sage-600: #4F46E5;
+  --ps-sage-700: #4338CA;
+  --ps-sage-800: #3730A3;
+  --ps-sage-900: #312E81;
 
-  --ps-copper-50:  #FAF1E8;
-  --ps-copper-100: #F3E4D4;
-  --ps-copper-200: #E5C4A4;
-  --ps-copper-300: #D39D68;
-  --ps-copper-400: #C08349;
-  --ps-copper-500: #B8753A;
-  --ps-copper-600: #9A5E2F;
-  --ps-copper-700: #7B4A27;
-  --ps-copper-800: #5D3820;
-  --ps-copper-900: #3E2517;
+  --ps-copper-50:  #F0F9FF;
+  --ps-copper-100: #E0F2FE;
+  --ps-copper-200: #BAE6FD;
+  --ps-copper-300: #7DD3FC;
+  --ps-copper-400: #38BDF8;
+  --ps-copper-500: #0EA5E9;
+  --ps-copper-600: #0284C7;
+  --ps-copper-700: #0369A1;
+  --ps-copper-800: #075985;
+  --ps-copper-900: #0C4A6E;
 
   /* Backward-compatible palette aliases. */
   --ps-violet-50:  var(--ps-copper-50);
@@ -45,52 +56,15 @@
   --ps-mint-500: var(--ps-sage-500);
   --ps-mint-700: var(--ps-sage-700);
 
-  /* Semantic */
-  --ps-success: #2F6B4F;
-  --ps-success-bg: #EDF7F0;
-  --ps-warning: #9A5E2F;
-  --ps-warning-bg: #FAF1E8;
-  --ps-danger: #B42318;
-  --ps-danger-bg: #FDEDEA;
-  --ps-info: #356899;
-  --ps-info-bg: #EEF4F8;
-
-  /* —— Light theme ————————————————————————— */
-  --bg: #F7F3EC;
-  --bg-elev: #FFFCF8;
-  --bg-sunken: #EFE7DC;
-  --bg-tint: #FBF7F1;
-  --surface: #FFFFFF;
-  --surface-2: #F3EDE4;
-  --surface-3: #E9DED1;
-
-  --line: #E2D8CB;
-  --line-strong: #CDBFAC;
-  --line-soft: rgba(47, 93, 80, 0.1);
-
-  --text: #1F2320;
-  --text-2: #5E625B;
-  --text-3: #817C72;
-  --text-4: #AAA295;
-
-  --brand: var(--ps-sage-500);
-  --brand-hover: #23463D;
-  --brand-soft: var(--ps-sage-50);
-  --brand-strong: var(--ps-sage-700);
-  --brand-fg: #FFFFFF;
-  --accent: var(--ps-copper-500);
-  --accent-hover: var(--ps-copper-600);
-  --accent-soft: var(--ps-copper-100);
-  --accent-strong: var(--ps-copper-700);
-
-  --ring: rgba(47, 93, 80, 0.3);
-  --ring-strong: rgba(47, 93, 80, 0.6);
-
-  --shadow-xs: 0 1px 2px rgba(31, 35, 32, 0.05);
-  --shadow-sm: 0 1px 3px rgba(31, 35, 32, 0.07), 0 1px 2px rgba(31, 35, 32, 0.05);
-  --shadow-md: 0 4px 14px rgba(31, 35, 32, 0.07), 0 1px 3px rgba(31, 35, 32, 0.04);
-  --shadow-lg: 0 14px 40px rgba(35, 70, 61, 0.1), 0 4px 12px rgba(31, 35, 32, 0.06);
-  --shadow-pop: 0 24px 60px rgba(31, 35, 32, 0.2), 0 8px 20px rgba(31, 35, 32, 0.1);
+  /* Semantic foreground (shared); *-bg gets overridden in dark blocks. */
+  --ps-success: #16A34A;
+  --ps-success-bg: #ECFDF3;
+  --ps-warning: #B45309;
+  --ps-warning-bg: #FEF6EC;
+  --ps-danger: #DC2626;
+  --ps-danger-bg: #FEF2F2;
+  --ps-info: #2563EB;
+  --ps-info-bg: #EFF6FF;
 
   /* Radii */
   --r-xs: 6px;
@@ -132,9 +106,131 @@
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* —— Neutral · Light (default) ————————————————— */
+  --bg: #F7F8FA;
+  --bg-elev: #FFFFFF;
+  --bg-sunken: #EDF0F4;
+  --bg-tint: #FBFCFE;
+  --surface: #FFFFFF;
+  --surface-2: #F1F4F8;
+  --surface-3: #E4E9F0;
+
+  --line: #E6E9EF;
+  --line-strong: #CBD3DE;
+  --line-soft: rgba(79, 70, 229, 0.08);
+
+  --text: #0F172A;
+  --text-2: #475569;
+  --text-3: #64748B;
+  --text-4: #94A3B8;
+
+  --brand: #4F46E5;
+  --brand-hover: #4338CA;
+  --brand-soft: #EEF0FE;
+  --brand-strong: #3730A3;
+  --brand-fg: #FFFFFF;
+  --accent: #0EA5E9;
+  --accent-hover: #0284C7;
+  --accent-soft: #E0F2FE;
+  --accent-strong: #075985;
+
+  --ring: rgba(79, 70, 229, 0.28);
+  --ring-strong: rgba(79, 70, 229, 0.55);
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 14px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.07);
+  --shadow-pop: 0 24px 60px rgba(15, 23, 42, 0.2), 0 8px 20px rgba(15, 23, 42, 0.1);
 }
 
-.theme-dark {
+/* —— Neutral · Dark (also the default dark, via bare .dark) ————— */
+.dark {
+  --bg: #0B1120;
+  --bg-elev: #111A2E;
+  --bg-sunken: #070C16;
+  --bg-tint: #131D33;
+  --surface: #131C30;
+  --surface-2: #1B2740;
+  --surface-3: #25334F;
+
+  --line: #25324A;
+  --line-strong: #3A4A66;
+  --line-soft: rgba(129, 140, 248, 0.14);
+
+  --text: #F1F5F9;
+  --text-2: #CBD5E1;
+  --text-3: #94A3B8;
+  --text-4: #64748B;
+
+  --brand: #818CF8;
+  --brand-hover: #A5B4FC;
+  --brand-soft: rgba(129, 140, 248, 0.15);
+  --brand-strong: #C7D2FE;
+  --brand-fg: #0B1120;
+  --accent: #38BDF8;
+  --accent-hover: #7DD3FC;
+  --accent-soft: rgba(56, 189, 248, 0.16);
+  --accent-strong: #BAE6FD;
+
+  --ring: rgba(129, 140, 248, 0.4);
+  --ring-strong: rgba(129, 140, 248, 0.65);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.7);
+
+  --ps-success-bg: rgba(34, 197, 94, 0.16);
+  --ps-warning-bg: rgba(180, 83, 9, 0.2);
+  --ps-danger-bg: rgba(220, 38, 38, 0.18);
+  --ps-info-bg: rgba(37, 99, 235, 0.18);
+}
+
+/* ============================================================
+   WARM family — refined sage identity
+   ============================================================ */
+[data-theme="warm"] {
+  --bg: #F4EFE5;
+  --bg-elev: #FBF8F1;
+  --bg-sunken: #EBE3D6;
+  --bg-tint: #FAF6EF;
+  --surface: #FFFFFF;
+  --surface-2: #F1EBE0;
+  --surface-3: #E6DBCB;
+
+  --line: #E5DCCD;
+  --line-strong: #D0C3AE;
+  --line-soft: rgba(44, 82, 71, 0.1);
+
+  --text: #1A1E1B;
+  --text-2: #565B53;
+  --text-3: #807A6D;
+  --text-4: #A8A192;
+
+  --brand: #2C5247;
+  --brand-hover: #21413A;
+  --brand-soft: #E6F0E8;
+  --brand-strong: #1E3B33;
+  --brand-fg: #FFFFFF;
+  --accent: #B26B33;
+  --accent-hover: #97582A;
+  --accent-soft: #F6E7D5;
+  --accent-strong: #7B4A27;
+
+  --ring: rgba(44, 82, 71, 0.3);
+  --ring-strong: rgba(44, 82, 71, 0.55);
+
+  --shadow-xs: 0 1px 2px rgba(31, 35, 32, 0.05);
+  --shadow-sm: 0 1px 3px rgba(31, 35, 32, 0.07), 0 1px 2px rgba(31, 35, 32, 0.05);
+  --shadow-md: 0 4px 14px rgba(31, 35, 32, 0.07), 0 1px 3px rgba(31, 35, 32, 0.04);
+  --shadow-lg: 0 14px 40px rgba(35, 70, 61, 0.1), 0 4px 12px rgba(31, 35, 32, 0.06);
+  --shadow-pop: 0 24px 60px rgba(31, 35, 32, 0.2), 0 8px 20px rgba(31, 35, 32, 0.1);
+}
+
+[data-theme="warm"].dark {
   --bg: #111713;
   --bg-elev: #18211C;
   --bg-sunken: #0C120F;
@@ -156,12 +252,14 @@
   --brand-hover: #C3D7C7;
   --brand-soft: rgba(159, 190, 167, 0.14);
   --brand-strong: #DDEADF;
+  --brand-fg: #111713;
   --accent: #D39D68;
   --accent-hover: #E5C4A4;
   --accent-soft: rgba(211, 157, 104, 0.16);
   --accent-strong: #F3E4D4;
 
   --ring: rgba(159, 190, 167, 0.4);
+  --ring-strong: rgba(159, 190, 167, 0.65);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -173,6 +271,90 @@
   --ps-warning-bg: rgba(211, 157, 104, 0.18);
   --ps-danger-bg: rgba(180, 35, 24, 0.18);
   --ps-info-bg: rgba(53, 104, 153, 0.18);
+}
+
+/* ============================================================
+   PREMIUM family — deep emerald
+   ============================================================ */
+[data-theme="premium"] {
+  --bg: #F4F6F4;
+  --bg-elev: #FFFFFF;
+  --bg-sunken: #E8ECE9;
+  --bg-tint: #FAFBFA;
+  --surface: #FFFFFF;
+  --surface-2: #EEF2EF;
+  --surface-3: #E0E6E2;
+
+  --line: #E2E8E4;
+  --line-strong: #C6D0CA;
+  --line-soft: rgba(4, 120, 87, 0.08);
+
+  --text: #0F1A15;
+  --text-2: #45524B;
+  --text-3: #6B756E;
+  --text-4: #9AA39C;
+
+  --brand: #047857;
+  --brand-hover: #065F46;
+  --brand-soft: #D9F2E6;
+  --brand-strong: #064E3B;
+  --brand-fg: #FFFFFF;
+  --accent: #B7791F;
+  --accent-hover: #976515;
+  --accent-soft: #F6EBD3;
+  --accent-strong: #6B4E12;
+
+  --ring: rgba(4, 120, 87, 0.28);
+  --ring-strong: rgba(4, 120, 87, 0.55);
+
+  --shadow-xs: 0 1px 2px rgba(6, 40, 30, 0.06);
+  --shadow-sm: 0 1px 3px rgba(6, 40, 30, 0.08), 0 1px 2px rgba(6, 40, 30, 0.05);
+  --shadow-md: 0 4px 14px rgba(6, 40, 30, 0.08), 0 1px 3px rgba(6, 40, 30, 0.05);
+  --shadow-lg: 0 14px 40px rgba(6, 40, 30, 0.12), 0 4px 12px rgba(6, 40, 30, 0.07);
+  --shadow-pop: 0 24px 60px rgba(6, 40, 30, 0.2), 0 8px 20px rgba(6, 40, 30, 0.1);
+}
+
+[data-theme="premium"].dark {
+  --bg: #0C0F0E;
+  --bg-elev: #121715;
+  --bg-sunken: #070A09;
+  --bg-tint: #141B18;
+  --surface: #181E1B;
+  --surface-2: #1E2522;
+  --surface-3: #28312C;
+
+  --line: #283230;
+  --line-strong: #3A453F;
+  --line-soft: rgba(110, 231, 183, 0.12);
+
+  --text: #ECEAE3;
+  --text-2: #9AA39B;
+  --text-3: #6C736B;
+  --text-4: #4E544D;
+
+  --brand: #6EE7B7;
+  --brand-hover: #A7F3D0;
+  --brand-soft: rgba(110, 231, 183, 0.13);
+  --brand-strong: #A7F3D0;
+  --brand-fg: #0C0F0E;
+  --accent: #E0A867;
+  --accent-hover: #ECC18C;
+  --accent-soft: rgba(224, 168, 103, 0.16);
+  --accent-strong: #F1D6B0;
+
+  --ring: rgba(110, 231, 183, 0.35);
+  --ring-strong: rgba(110, 231, 183, 0.6);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.75);
+
+  --ps-success-bg: rgba(110, 231, 183, 0.13);
+  --ps-warning-bg: rgba(224, 168, 103, 0.18);
+  --ps-danger-bg: rgba(220, 38, 38, 0.18);
+  --ps-info-bg: rgba(56, 189, 248, 0.16);
 }
 
 /* ============================================================
@@ -264,7 +446,7 @@
   box-shadow: var(--shadow-xs);
 }
 
-.theme-dark .ps-card { box-shadow: none; }
+.dark .ps-card { box-shadow: none; }
 
 .ps-divider { height: 1px; background: var(--line); border: 0; }
 
