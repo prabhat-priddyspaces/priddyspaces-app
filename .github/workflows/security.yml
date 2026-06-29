@@ -122,7 +122,9 @@ jobs:
         run: npm ci
 
       - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=moderate
+        # Gate fails on any moderate+ advisory except documented, unfixable
+        # transitive ones listed in mobile/audit-allowlist.json (see SECURITY-NOTES.md).
+        run: node scripts/audit-gate.mjs
 
   sbom:
     runs-on: ubuntu-latest
