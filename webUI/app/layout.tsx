@@ -42,7 +42,7 @@ export default function RootLayout({
   const clerkRedirectProps = getClerkProviderRedirectProps();
   if (IS_E2E_BYPASS) {
     return (
-      <html lang="en" className={fontClasses} data-theme="neutral">
+      <html lang="en" className={fontClasses} data-theme="neutral" suppressHydrationWarning>
         <body>
           <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
           <ThemeProvider>
@@ -64,7 +64,7 @@ export default function RootLayout({
       // platform → /admin.
       {...clerkRedirectProps}
     >
-      <html lang="en" className={fontClasses} data-theme="neutral">
+      <html lang="en" className={fontClasses} data-theme="neutral" suppressHydrationWarning>
         <body>
           <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
           <ClerkTokenSync />
