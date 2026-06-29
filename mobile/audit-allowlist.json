@@ -1,0 +1,10 @@
+{
+  "$schema-note": "Advisories intentionally accepted by the mobile-security gate (scripts/audit-gate.mjs). Each key is a GitHub advisory ID; the value documents why it is accepted and when to revisit. Anything NOT listed here that is moderate+ still fails CI. See SECURITY-NOTES.md.",
+  "GHSA-h67p-54hq-rp68": {
+    "package": "js-yaml",
+    "severity": "moderate",
+    "reason": "Transitive via cosmiconfig@5 (Expo/Metro config loading). The fix requires js-yaml 4.x, but cosmiconfig@5 calls the removed safeLoad/safeDump API, so forcing it breaks the Metro/Expo build. Quadratic-complexity DoS in YAML merge-key handling only affects parsing of attacker-controlled YAML, which is not part of the runtime mobile app (build-time tooling only).",
+    "remediation": "Resolved by the React Native / Expo / Metro major upgrade tracked in SECURITY-NOTES.md (newer @expo/metro-config pulls cosmiconfig>=8, which uses js-yaml 4.x).",
+    "accepted_on": "2026-06-29"
+  }
+}
