@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ThemeFamilyPicker, ThemeModePicker } from "@/components/settings/appearance-controls";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -186,6 +187,23 @@ export default function MemberProfilePage() {
             Enable browser push
           </Button>
           {pushMessage ? <span className="text-sm text-textSecondary">{pushMessage}</span> : null}
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="text-sm font-semibold text-textPrimary">Appearance</div>
+        <p className="mt-1 text-sm text-textSecondary">
+          Choose your theme and light or dark mode. Personal to your account and applies across every page.
+        </p>
+        <div className="mt-4 grid gap-5">
+          <div>
+            <div className="mb-2.5 text-[13px] font-semibold text-text">Theme</div>
+            <ThemeFamilyPicker />
+          </div>
+          <div className="border-t border-line pt-5">
+            <div className="mb-2.5 text-[13px] font-semibold text-text">Appearance mode</div>
+            <ThemeModePicker />
+          </div>
         </div>
       </Card>
     </div>
