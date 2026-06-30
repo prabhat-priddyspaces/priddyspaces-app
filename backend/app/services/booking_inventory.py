@@ -221,7 +221,7 @@ def validate_occurrences_available(
             raise HTTPException(status_code=409, detail="Requested time is outside published availability")
         if full_day_mode:
             if (
-                space.space_type == SpaceType.CONFERENCE_ROOM
+                resolve_archetype(None, space.space_type) == ROOM_HOURLY
                 and (start_local != open_start or end_local != open_end)
             ):
                 raise HTTPException(status_code=400, detail="All-day bookings must match published availability")

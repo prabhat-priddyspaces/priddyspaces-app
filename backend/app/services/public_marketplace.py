@@ -1091,7 +1091,7 @@ def get_public_space_detail(
     membership_price_map = _membership_price_map(
         db,
         [space.id],
-        space_type=space.space_type,
+        space_type_keys=[space.space_type],
     )
     hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
     membership_prices = _space_membership_prices(space.id, membership_price_map)
