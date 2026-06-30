@@ -16,6 +16,7 @@ import { formatAdminDateTime } from "@/lib/admin-format";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import type { MeResponse } from "@/lib/me";
+import { fetchSpaceTypes, type SpaceTypeConfig } from "@/lib/space-types";
 
 interface CurrentAdmin {
   public_id: string;
@@ -59,6 +60,7 @@ export default function AdminSettingsPage() {
   const [priddyEnabled, setPriddyEnabled] = useState(true);
   const [priddySignupPoints, setPriddySignupPoints] = useState("1000");
   const [priddySpaceTypes, setPriddySpaceTypes] = useState<string[]>(["shared_desk"]);
+  const [spaceTypeOptions, setSpaceTypeOptions] = useState<SpaceTypeConfig[]>([]);
   const [priddyBookingModes, setPriddyBookingModes] = useState<string[]>(["day_pass"]);
   const [calendarDailyPricesEnabled, setCalendarDailyPricesEnabled] = useState(false);
   const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
@@ -82,6 +84,7 @@ export default function AdminSettingsPage() {
     apiFetch<MeResponse>("/api/me", { method: "GET" }, token)
       .then(setMe)
       .catch(() => null);
+    fetchSpaceTypes(token).then(setSpaceTypeOptions).catch(() => null);
     apiFetch<SettingsResponse>("/api/admin/settings", { method: "GET" }, token)
       .then((settings) => {
         setCommission(String(settings.default_owner_commission_pct));
@@ -359,13 +362,12 @@ export default function AdminSettingsPage() {
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <Checklist
                       title="Eligible space types"
-                      options={[
-                        ["shared_desk", "Shared desk"],
-                        ["conference_room", "Conference room"],
-                        ["virtual_office", "Virtual office"],
-                        ["private_office", "Private office"],
-                        ["suite", "Suite"],
-                      ]}
+                      options={
+                        (spaceTypeOptions.length
+                          ? spaceTypeOptions
+                          : []
+                        ).map((type) => [type.key, type.label] as [string, string])
+                      }
                       selected={priddySpaceTypes}
                       onToggle={(value) => toggleList(priddySpaceTypes, value, setPriddySpaceTypes)}
                     />

@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, booking_waitlist, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_bookings, owner_calendar, owner_payment_health, owner_payments, payments, pricing, space_booking_modes, space_setup_fees, space_volume_discounts, spaces, stripe_connect, subscriptions, user_preferences, webhooks, webhooks_clerk
+from app.api import access_passes, admin, admin_calendar, amenities, analytics, assistant, auth, booking_requests, booking_waitlist, bookings, cancellations, feature_flags, floor_plan_markers, floor_plans, health, invoices, locations, loyalty, marketplace, marketing, me, media, membership_plans, notifications, onboarding, organization_members, organizations, org_member_profiles, owner_bookings, owner_calendar, owner_payment_health, owner_payments, payments, pricing, space_booking_modes, space_setup_fees, space_types, space_volume_discounts, spaces, stripe_connect, subscriptions, user_preferences, webhooks, webhooks_clerk
 from app.core.config import settings
 from app.core.errors import error_code_for_status
 from app.core.logging_config import RequestContextMiddleware, configure_logging, request_id_ctx
@@ -120,6 +120,7 @@ app.include_router(organizations.router, prefix="/api")
 app.include_router(amenities.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(spaces.router, prefix="/api")
+app.include_router(space_types.router, prefix="/api")
 app.include_router(bookings.router, prefix="/api")
 app.include_router(booking_requests.router, prefix="/api")
 app.include_router(booking_waitlist.router, prefix="/api")

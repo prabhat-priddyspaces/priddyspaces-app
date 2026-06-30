@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.db.deps import get_db
-from app.models.enums import SpaceType, UserRole
+from app.models.enums import UserRole
 from app.models.location import Location
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
@@ -60,11 +60,10 @@ def upsert_space_booking_mode(
 ):
     space, _ = _load_space_for_owner(db, token, space_public_id)
 
-    space_type = SpaceType(space.space_type) if not isinstance(space.space_type, SpaceType) else space.space_type
-    if not is_mode_valid_for_space_type(space_type, payload.booking_mode):
+    if not is_mode_valid_for_space_type(space.space_type, payload.booking_mode, db=db):
         raise HTTPException(
             status_code=400,
-            detail=f"Booking mode {payload.booking_mode.value} is not valid for space type {space_type.value}",
+            detail=f"Booking mode {payload.booking_mode.value} is not valid for space type {space.space_type}",
         )
 
     existing = (

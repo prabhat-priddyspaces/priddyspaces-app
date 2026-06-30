@@ -23,6 +23,9 @@ export function AdminSideNav({ platformRole }: { platformRole: string | null }) 
   const pathname = usePathname();
   const appSignOut = useAppSignOut();
   const nav = [...baseNav];
+  if (platformRole === "superadmin" || platformRole === "admin") {
+    nav.push({ href: "/admin/space-types", label: "Space Types" });
+  }
   if (platformRole === "superadmin") {
     nav.push({ href: "/admin/platform-team", label: "Platform Team" });
     nav.push({ href: "/admin/settings", label: "Settings" });

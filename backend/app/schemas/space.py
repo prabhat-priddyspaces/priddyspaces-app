@@ -1,7 +1,7 @@
 from datetime import time
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility
+from app.models.enums import AvailabilityStatus, SpaceVisibility
 from app.schemas.money import MoneyAmount
 from app.schemas.space_setup_fee import SetupFeeItemIn
 
@@ -9,7 +9,7 @@ from app.schemas.space_setup_fee import SetupFeeItemIn
 class SpaceCreate(BaseModel):
     location_public_id: str
     name: str | None = None
-    space_type: SpaceType
+    space_type: str
     capacity: int = 1
     price_monthly: MoneyAmount | None = None
     price_daily: MoneyAmount | None = None
@@ -32,7 +32,7 @@ class SpaceOut(BaseModel):
     membership_lease_approval_mode: str = "manual"
     payment_failure_hold_minutes: int | None = None
     name: str
-    space_type: SpaceType
+    space_type: str
     capacity: int
     price_monthly: MoneyAmount | None
     price_daily: MoneyAmount | None
@@ -51,7 +51,7 @@ class SpaceOut(BaseModel):
 
 class SpaceUpdate(BaseModel):
     name: str | None = None
-    space_type: SpaceType | None = None
+    space_type: str | None = None
     capacity: int | None = None
     price_monthly: MoneyAmount | None = None
     price_daily: MoneyAmount | None = None

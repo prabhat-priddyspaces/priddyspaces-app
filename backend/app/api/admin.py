@@ -80,7 +80,7 @@ def _space_label(space: Space | None) -> str | None:
         return None
     if space.name and space.name.strip():
         return space.name.strip()
-    return space.space_type.value.replace("_", " ").title()
+    return space.space_type.replace("_", " ").title()
 
 
 def _humanize_label(value: str | None) -> str:
@@ -1088,7 +1088,7 @@ def list_admin_listings(
         {
             "space_public_id": space.public_id,
             "space_name": space.name,
-            "space_type": space.space_type.value,
+            "space_type": space.space_type,
             "visibility": space.visibility.value,
             "availability_status": space.availability_status.value,
             "location_public_id": location.public_id,
@@ -1147,7 +1147,7 @@ def list_admin_booking_activity(
         return {
             "space_public_id": space.public_id if space else None,
             "space_name": _space_label(space),
-            "space_type": space.space_type.value if space else None,
+            "space_type": space.space_type if space else None,
             "location_public_id": location.public_id if location else None,
             "location_name": location.name if location else None,
             "organization_public_id": organization.public_id if organization else None,
@@ -1298,7 +1298,7 @@ def list_admin_payments(
             ),
             "space_public_id": space.public_id if space else None,
             "space_name": _space_label(space),
-            "space_type": space.space_type.value if space and space.space_type else None,
+            "space_type": space.space_type if space and space.space_type else None,
             "location_public_id": location.public_id if location else None,
             "location_name": location.name if location else None,
             "location_city": location.city if location else None,

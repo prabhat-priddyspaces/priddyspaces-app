@@ -77,6 +77,20 @@ def _reset_public_schema(engine) -> None:
         conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
 
 
+def _seed_space_types(engine) -> None:
+    # The spaces.space_type FK references space_types.key, so the built-in
+    # registry rows must exist before any test inserts a space.
+    from app.services.space_type_registry import seed_system_space_types
+
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
+    try:
+        seed_system_space_types(session)
+        session.commit()
+    finally:
+        session.close()
+
+
 @pytest.fixture(scope="session")
 def db_engine():
     _validate_test_database_url(TEST_DATABASE_URL)
@@ -84,6 +98,7 @@ def db_engine():
     engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
     _reset_public_schema(engine)
     Base.metadata.create_all(engine)
+    _seed_space_types(engine)
     try:
         yield engine
     finally:

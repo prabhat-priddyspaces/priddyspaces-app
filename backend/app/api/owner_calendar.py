@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.db.deps import get_db
-from app.models.enums import SpaceType, UserAppRole, UserRole
+from app.models.enums import UserAppRole, UserRole
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.space import Space
@@ -21,16 +21,15 @@ router = APIRouter()
 OWNER_ROLES = {UserRole.OWNER, UserRole.ADMIN, UserRole.STAFF}
 
 
-def _parse_space_types(values: list[str] | None) -> set[SpaceType] | None:
+def _parse_space_types(values: list[str] | None) -> set[str] | None:
     if not values:
         return None
-    out: set[SpaceType] = set()
+    out: set[str] = set()
     for v in values:
-        try:
-            out.add(SpaceType(v))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown space_type: {v}")
-    return out
+        cleaned = (v or "").strip()
+        if cleaned:
+            out.add(cleaned)
+    return out or None
 
 
 @router.get("/owner/calendar", response_model=CalendarResponse)

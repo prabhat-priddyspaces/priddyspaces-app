@@ -15,6 +15,14 @@ import { VolumeDiscountManager } from "@/components/volume-discount-manager";
 import { getAccessToken } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 import type { MoneyValue } from "@/lib/money";
+import {
+  archetypeForKey,
+  fetchSpaceTypes,
+  formConfigForArchetype,
+  isTermManagedArchetype,
+  legacyTermSpaceTypeForArchetype,
+  type SpaceTypeConfig,
+} from "@/lib/space-types";
 
 interface Space {
   public_id: string;
@@ -30,67 +38,6 @@ interface Space {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   visibility: string;
-}
-
-function typeConfig(spaceType: string) {
-  if (spaceType === "conference_room") {
-    return {
-      capacityLabel: "Room capacity",
-      capacityHelp: "Number of people the room can seat.",
-      showHourly: true,
-      requireHourly: true,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day rate price (USD)",
-      dailyHelp: "All-day conference room price.",
-      showMonthly: false,
-      showAvailability: true,
-      showBuffers: true,
-    };
-  }
-  if (spaceType === "shared_desk") {
-    return {
-      capacityLabel: "Desks available per day",
-      capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
-      showHourly: false,
-      requireHourly: false,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day pass price (USD)",
-      dailyHelp: "Charged per shared-desk day pass seat.",
-      showMonthly: false,
-      showAvailability: true,
-      showBuffers: false,
-    };
-  }
-  if (spaceType === "virtual_office") {
-    return {
-      capacityLabel: "",
-      capacityHelp: "",
-      showHourly: false,
-      requireHourly: false,
-      showDaily: false,
-      requireDaily: false,
-      dailyLabel: "",
-      dailyHelp: "",
-      showMonthly: false,
-      showAvailability: false,
-      showBuffers: false,
-    };
-  }
-  return {
-    capacityLabel: spaceType === "suite" ? "Suite seats" : "Office seats",
-    capacityHelp: "Number of people included in this office or suite.",
-    showHourly: false,
-    requireHourly: false,
-    showDaily: false,
-    requireDaily: false,
-    dailyLabel: "",
-    dailyHelp: "",
-    showMonthly: false,
-    showAvailability: false,
-    showBuffers: false,
-  };
 }
 
 export function EditSpaceClient() {
@@ -117,7 +64,9 @@ export function EditSpaceClient() {
   });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const config = typeConfig(form.space_type);
+  const [spaceTypes, setSpaceTypes] = useState<SpaceTypeConfig[]>([]);
+  const archetype = archetypeForKey(form.space_type, spaceTypes);
+  const config = formConfigForArchetype(archetype);
   const isValid =
     (!config.requireHourly || Number(form.price_hourly) > 0) &&
     (!config.requireDaily || Number(form.price_daily) > 0);
@@ -147,6 +96,11 @@ export function EditSpaceClient() {
       .finally(() => setLoading(false));
   }, [spaceId]);
 
+  useEffect(() => {
+    const token = getAccessToken() ?? undefined;
+    fetchSpaceTypes(token).then(setSpaceTypes).catch(() => null);
+  }, []);
+
   function moneyPayload(value: string) {
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
@@ -162,8 +116,8 @@ export function EditSpaceClient() {
           body: JSON.stringify({
             name: form.name,
             space_type: form.space_type,
-            capacity: form.space_type === "virtual_office" ? 1 : Number(form.capacity || 1),
-            price_monthly: config.showMonthly ? moneyPayload(form.price_monthly) : null,
+            capacity: !config.capacityApplicable ? 1 : Number(form.capacity || 1),
+            price_monthly: null,
             price_daily: config.showDaily ? moneyPayload(form.price_daily) : null,
             price_hourly: config.showHourly ? moneyPayload(form.price_hourly) : null,
             availability_status: form.availability_status,
@@ -217,14 +171,17 @@ export function EditSpaceClient() {
                 onChange={(e) => setForm({ ...form, space_type: e.target.value })}
                 className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
               >
-                <option value="conference_room">Conference Room</option>
-                <option value="private_office">Private Office</option>
-                <option value="shared_desk">Shared Desk</option>
-                <option value="virtual_office">Virtual Office</option>
-                <option value="suite">Suite</option>
+                {spaceTypes.map((type) => (
+                  <option key={type.key} value={type.key}>
+                    {type.label}
+                  </option>
+                ))}
+                {spaceTypes.some((t) => t.key === form.space_type) ? null : (
+                  <option value={form.space_type}>{form.space_type}</option>
+                )}
               </select>
             </div>
-            {form.space_type !== "virtual_office" ? (
+            {config.capacityApplicable ? (
               <div className="grid gap-2">
                 <Label htmlFor="capacity">{config.capacityLabel}</Label>
                 <Input
@@ -236,7 +193,7 @@ export function EditSpaceClient() {
                 <div className="text-xs text-textMuted">{config.capacityHelp}</div>
               </div>
             ) : null}
-            {config.showHourly || config.showDaily || config.showMonthly ? (
+            {config.showHourly || config.showDaily ? (
               <div className="grid gap-2 md:grid-cols-3">
                 {config.showHourly ? (
                 <div className="space-y-2">
@@ -272,22 +229,7 @@ export function EditSpaceClient() {
                 <div className="text-xs text-textMuted">{config.dailyHelp}</div>
               </div>
                 ) : null}
-                {config.showMonthly ? (
-              <div className="space-y-2">
-                <Label htmlFor="monthly">Monthly price (USD)</Label>
-                <Input
-                  id="monthly"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={form.price_monthly}
-                  onChange={(e) => setForm({ ...form, price_monthly: e.target.value })}
-                  placeholder="1200"
-                />
               </div>
-                ) : null}
-            </div>
             ) : null}
             <div className="grid gap-2">
               <Label htmlFor="availability">Availability</Label>
@@ -378,14 +320,14 @@ export function EditSpaceClient() {
             {message ? <div className="text-sm text-textMuted">{message}</div> : null}
           </div>
         </Card>
-        {["private_office", "suite", "shared_desk", "virtual_office"].includes(form.space_type) ? (
+        {isTermManagedArchetype(archetype) && legacyTermSpaceTypeForArchetype(archetype) ? (
           <LeaseTermsManager
             spacePublicId={spaceId}
-            spaceType={form.space_type as "private_office" | "suite" | "shared_desk" | "virtual_office"}
+            spaceType={legacyTermSpaceTypeForArchetype(archetype)!}
             spaceCapacity={Number(form.capacity || 1)}
           />
         ) : null}
-        {form.space_type === "conference_room" || form.space_type === "shared_desk" ? (
+        {archetype === "room_hourly" || archetype === "desk_pool" ? (
           <VolumeDiscountManager spacePublicId={spaceId} />
         ) : null}
         <SetupFeeManager spacePublicId={spaceId} />

@@ -38,14 +38,29 @@ from app.services.booking_inventory import expand_occurrences, resolve_tz, valid
 from app.services.booking_products import booking_products_for_space
 from app.services.money import CENT, to_money_decimal
 from app.services.owner_payments import space_payment_is_marketplace_ready
+from app.services.space_archetypes import (
+    DESK_POOL,
+    PRIVATE_OFFICE_LEASE,
+    SUITE_LEASE,
+    VIRTUAL,
+)
+from app.services.space_type_registry import (
+    VALID_MARKETPLACE_CATEGORIES,
+    category_space_type_keys,
+    resolve_archetype,
+)
 from app.services.waitlist_settings import waitlist_enabled_for_space_type, waitlist_settings_payload
 
 
-CATEGORY_SPACE_TYPES = {
-    "coworking": SpaceType.SHARED_DESK,
-    "private_office": SpaceType.PRIVATE_OFFICE,
-    "meeting_room": SpaceType.CONFERENCE_ROOM,
+# Plan-based booking mode produced by each archetype, used to compute membership
+# pricing for a marketplace category.
+_ARCHETYPE_PLAN_MODE = {
+    DESK_POOL: "monthly_membership",
+    VIRTUAL: "virtual_membership",
+    PRIVATE_OFFICE_LEASE: "private_office_lease",
+    SUITE_LEASE: "suite_lease",
 }
+
 
 DEFAULT_SORT = {
     "coworking": "price_asc",
@@ -137,7 +152,7 @@ def _parse_time(value: str | None, field_name: str) -> time | None:
 
 
 def _validate_filters(filters: PublicMarketplaceSearchFilters) -> tuple[date | None, time | None, time | None]:
-    if filters.category not in CATEGORY_SPACE_TYPES:
+    if filters.category not in VALID_MARKETPLACE_CATEGORIES:
         raise HTTPException(status_code=400, detail="Unsupported marketplace category")
 
     parsed_date = _parse_date(filters.date)
@@ -203,7 +218,7 @@ def _space_display_name(space: Space) -> str:
     cleaned = (space.name or "").strip()
     if cleaned:
         return cleaned
-    return " ".join(part.capitalize() for part in space.space_type.value.split("_"))
+    return " ".join(part.capitalize() for part in space.space_type.split("_"))
 
 
 def _split_lines(value: str | None) -> list[str]:
@@ -473,16 +488,16 @@ def _membership_price_map(
     db: Session,
     space_ids: list[int],
     *,
-    space_type: SpaceType,
+    space_type_keys: list[str],
 ) -> dict[int, list[int]]:
     if not space_ids:
         return {}
-    plan_modes = {
-        SpaceType.SHARED_DESK: {"monthly_membership"},
-        SpaceType.VIRTUAL_OFFICE: {"virtual_membership"},
-        SpaceType.PRIVATE_OFFICE: {"private_office_lease"},
-        SpaceType.SUITE: {"suite_lease"},
-    }.get(space_type, set())
+    plan_modes: set[str] = set()
+    for key in space_type_keys:
+        archetype = resolve_archetype(db, key)
+        mode = _ARCHETYPE_PLAN_MODE.get(archetype)
+        if mode:
+            plan_modes.add(mode)
     if not plan_modes:
         return {}
     plan_rows = (
@@ -672,7 +687,7 @@ def _public_inventory_rows(
         .filter(
             Space.visibility == SpaceVisibility.PUBLIC,
             Space.availability_status == AvailabilityStatus.AVAILABLE,
-            Space.space_type == CATEGORY_SPACE_TYPES[category],
+            Space.space_type.in_(category_space_type_keys(db, category)),
             Location.status == LocationStatus.ACTIVE,
             Organization.review_status == OrganizationReviewStatus.APPROVED,
         )
@@ -706,7 +721,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
     membership_price_map = _membership_price_map(
         db,
         space_ids,
-        space_type=CATEGORY_SPACE_TYPES[filters.category],
+        space_type_keys=category_space_type_keys(db, filters.category),
     )
     requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
     radius_active = (
@@ -831,7 +846,7 @@ def search_public_locations(db: Session, filters: PublicMarketplaceSearchFilters
             {
                 "public_id": space.public_id,
                 "name": _space_display_name(space),
-                "space_type": space.space_type.value,
+                "space_type": space.space_type,
                 "capacity": space.capacity,
                 "availability_status": (
                     space.availability_status.value if inventory_available else WAITLIST_AVAILABLE_STATUS
@@ -901,7 +916,7 @@ def get_public_location_detail(
     membership_price_map = _membership_price_map(
         db,
         space_ids,
-        space_type=CATEGORY_SPACE_TYPES[filters.category],
+        space_type_keys=category_space_type_keys(db, filters.category),
     )
     requested_amenities = _normalize_tokens(_split_csv(filters.amenities))
 
@@ -995,7 +1010,7 @@ def get_public_location_detail(
             {
                 "public_id": space.public_id,
                 "name": _space_display_name(space),
-                "space_type": space.space_type.value,
+                "space_type": space.space_type,
                 "capacity": space.capacity,
                 "availability_status": (
                     space.availability_status.value if inventory_available else WAITLIST_AVAILABLE_STATUS
@@ -1076,7 +1091,7 @@ def get_public_space_detail(
     membership_price_map = _membership_price_map(
         db,
         [space.id],
-        space_type=space.space_type,
+        space_type_keys=[space.space_type],
     )
     hourly_prices = _space_hourly_prices(space.id, hourly_pricing_map, space.price_hourly)
     membership_prices = _space_membership_prices(space.id, membership_price_map)
@@ -1115,7 +1130,7 @@ def get_public_space_detail(
         db.query(CancellationPolicy)
         .filter(
             CancellationPolicy.tenant_id == space.tenant_id,
-            CancellationPolicy.space_type == space.space_type.value,
+            CancellationPolicy.space_type == space.space_type,
         )
         .order_by(CancellationPolicy.id.desc())
         .first()
@@ -1167,7 +1182,7 @@ def get_public_space_detail(
         "space": {
             "public_id": space.public_id,
             "name": _space_display_name(space),
-            "space_type": space.space_type.value,
+            "space_type": space.space_type,
             "capacity": space.capacity,
             "availability_status": space.availability_status.value,
             "availability_start_time": _serialize_space_time(space.availability_start_time),

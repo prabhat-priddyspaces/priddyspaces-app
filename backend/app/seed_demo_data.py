@@ -31,6 +31,7 @@ from app.models.space_booking_mode import SpaceBookingMode
 from app.models.space_image import SpaceImage
 from app.models.user import User
 from app.services.amenities import seed_default_amenities
+from app.services.space_type_registry import seed_system_space_types
 
 
 DEMO_OWNER_PASSWORD_ENV = "DEMO_OWNER_PASSWORD"
@@ -1209,6 +1210,9 @@ def _ensure_space_image(db: Session, *, org: Organization, space: Space) -> None
 
 def seed_demo_data(db: Session, *, owner_password: str) -> dict[str, int]:
     _remove_legacy_demo_seed(db)
+    # space_types registry must exist before any space (FK on spaces.space_type).
+    seed_system_space_types(db)
+    db.commit()
     _upsert_superadmin(db, password=owner_password)
     reviewer_user_id = _reviewer_user_id(db)
     counts: dict[str, int] = {

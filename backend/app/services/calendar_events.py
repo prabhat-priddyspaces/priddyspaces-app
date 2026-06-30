@@ -9,7 +9,6 @@ from app.models.enums import (
     BookingRequestStatus,
     BookingStatus,
     PaymentStatus,
-    SpaceType,
 )
 from app.models.location import Location
 from app.models.membership_plan import MembershipPlan
@@ -23,15 +22,14 @@ from app.schemas.calendar import (
     CalendarResponse,
     CalendarSpace,
 )
+from app.services.space_archetypes import EXCLUSIVE_LEASE_ARCHETYPES, VIRTUAL
+from app.services.space_type_registry import resolve_archetype
 
 
-# Subscriptions only emit a calendar occupancy block for these space types.
-# Hot-desk and meeting-room memberships grant credits/access, not exclusive use.
-SUBSCRIPTION_OCCUPANCY_TYPES = {
-    SpaceType.PRIVATE_OFFICE,
-    SpaceType.SUITE,
-    SpaceType.VIRTUAL_OFFICE,
-}
+# Subscriptions only emit a calendar occupancy block for these archetypes
+# (exclusive leases + virtual). Hot-desk and meeting-room memberships grant
+# credits/access, not exclusive use.
+SUBSCRIPTION_OCCUPANCY_ARCHETYPES = EXCLUSIVE_LEASE_ARCHETYPES | {VIRTUAL}
 
 MAX_WINDOW_DAYS = 35
 MAX_EVENTS = 2000
@@ -58,7 +56,7 @@ def build_calendar_events(
     location_ids: Iterable[int],
     start: datetime,
     end: datetime,
-    space_types: Optional[set[SpaceType]] = None,
+    space_types: Optional[set[str]] = None,
     space_ids: Optional[set[int]] = None,
     statuses: Optional[set[str]] = None,
     include: Optional[set[str]] = None,
@@ -280,7 +278,9 @@ def build_calendar_events(
 
     if "subscriptions" in include:
         occupancy_space_ids = {
-            sid for sid, sp in space_by_id.items() if sp.space_type in SUBSCRIPTION_OCCUPANCY_TYPES
+            sid
+            for sid, sp in space_by_id.items()
+            if resolve_archetype(None, sp.space_type) in SUBSCRIPTION_OCCUPANCY_ARCHETYPES
         }
         if occupancy_space_ids:
             window_start_date = start.date()

@@ -45,12 +45,16 @@ export interface CalendarResponse {
   truncated: boolean;
 }
 
+// Static labels for the built-in space types. Used for first paint / fallback;
+// the live source of truth is the space-types registry (see lib/space-types.ts).
 export const SPACE_TYPE_LABEL: Record<string, string> = {
   private_office: "Private office",
   shared_desk: "Shared desk",
   conference_room: "Meeting room",
   virtual_office: "Virtual office",
   suite: "Suite",
+  event_space: "Event space",
+  business_address: "Business address",
 };
 
 export const SPACE_TYPES = Object.keys(SPACE_TYPE_LABEL);

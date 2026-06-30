@@ -270,7 +270,7 @@ def owner_revenue(
     if group_by != "none":
         if group_by == "space_type":
             for s in db.query(Space).filter(Space.id.in_(space_ids)).all() if space_ids else []:
-                group_key_for_space[s.id] = s.space_type.value
+                group_key_for_space[s.id] = s.space_type
         else:  # location
             loc_by_id = {loc.id: loc for loc in db.query(Location).filter(Location.id.in_(location_ids)).all()} if location_ids else {}
             spaces = db.query(Space).filter(Space.id.in_(space_ids)).all() if space_ids else []
@@ -502,7 +502,7 @@ def owner_revenue_per_space(
         s.id: {
             "space_public_id": s.public_id,
             "space_name": s.name or "Unnamed",
-            "space_type": s.space_type.value,
+            "space_type": s.space_type,
             "location_name": location_name.get(s.location_id, ""),
             "bookings": 0,
             "hours_booked": 0.0,

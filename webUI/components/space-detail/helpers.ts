@@ -1,6 +1,7 @@
 import { formatUsd } from "@/lib/money";
 import { markLeaseEstimate, type MarketplaceSpaceDetailSpace } from "@/lib/public-marketplace";
 import { formatCents } from "@/lib/loyalty";
+import { archetypeForKey } from "@/lib/space-types";
 
 /** Pure helpers extracted from public-space-detail-view.tsx (behaviour unchanged). */
 
@@ -16,17 +17,18 @@ export function getPriceRows(space: MarketplaceSpaceDetailSpace): PriceRow[] {
     .filter((product) => product.price_cents != null)
     .sort((a, b) => (a.price_cents ?? 0) - (b.price_cents ?? 0))[0];
 
-  if (space.space_type === "conference_room") {
+  const archetype = archetypeForKey(space.space_type);
+  if (archetype === "room_hourly") {
     if (space.hourly_price != null) rows.push({ label: "Hourly", value: formatUsd(space.hourly_price, "/hour") });
     if (space.price_daily != null) rows.push({ label: "Day Rate", value: formatUsd(space.price_daily, "/day") });
     return rows;
   }
-  if (space.space_type === "shared_desk") {
+  if (archetype === "desk_pool") {
     if (space.price_daily != null) rows.push({ label: "Day Pass", value: formatUsd(space.price_daily, "/day") });
     if (space.membership_price != null) rows.push({ label: "Membership", value: formatUsd(space.membership_price, "/month") });
     return rows;
   }
-  if (space.space_type === "virtual_office") {
+  if (archetype === "virtual") {
     if (space.membership_price != null) rows.push({ label: "Virtual Membership", value: formatUsd(space.membership_price, "/month") });
     return rows;
   }

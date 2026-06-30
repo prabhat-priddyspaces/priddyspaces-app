@@ -390,7 +390,7 @@ def test_waitlist_entries_do_not_block_availability(db_session):
         end_date=datetime(2026, 6, 12, tzinfo=timezone.utc).date(),
         availability_start_time=space.availability_start_time,
         availability_end_time=space.availability_end_time,
-        space_type=space.space_type.value,
+        space_type=space.space_type,
         space_capacity=space.capacity,
     )
 

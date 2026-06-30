@@ -16,7 +16,9 @@ from app.core.config import settings
 from app.core.crypto import decrypt_secret, encrypt_secret
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
-from app.models.enums import BookingRequestStatus, BookingStatus, PaymentStatus, SpaceType, UserRole
+from app.models.enums import BookingRequestStatus, BookingStatus, PaymentStatus, UserRole
+from app.services.space_archetypes import ROOM_HOURLY
+from app.services.space_type_registry import resolve_archetype
 from app.models.location import Location
 from app.models.organization_member import OrganizationMember
 from app.models.payment import Payment
@@ -459,7 +461,7 @@ def run_booking_reminder_push_job(
         if not space or not location:
             result["notifications_skipped"] += 1
             continue
-        if reminder_type == BOOKING_END and space.space_type != SpaceType.CONFERENCE_ROOM:
+        if reminder_type == BOOKING_END and resolve_archetype(None, space.space_type) != ROOM_HOURLY:
             continue
         if _booking_payment_invalid(db, booking, req):
             result["notifications_skipped"] += 1
