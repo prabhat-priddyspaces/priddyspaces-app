@@ -12,6 +12,7 @@ from app.models.enums import BookingMode
 from app.models.space_type import SpaceTypeRegistry
 from app.services.space_archetypes import (
     ARCHETYPE_BY_SYSTEM_KEY,
+    DEFAULT_DIRECT_MODE_BY_ARCHETYPE,
     SYSTEM_SPACE_TYPES,
     VALID_BOOKING_MODES_BY_ARCHETYPE,
     space_type_key,
@@ -71,6 +72,38 @@ def valid_booking_modes(db: Session | None, key) -> set[BookingMode]:
     if archetype is None:
         return set()
     return set(VALID_BOOKING_MODES_BY_ARCHETYPE.get(archetype, set()))
+
+
+def booking_modes_for_archetype(archetype: str | None) -> list[str]:
+    return sorted(mode.value for mode in VALID_BOOKING_MODES_BY_ARCHETYPE.get(archetype, set()))
+
+
+def default_booking_mode_for_archetype(archetype: str | None) -> str | None:
+    direct = DEFAULT_DIRECT_MODE_BY_ARCHETYPE.get(archetype)
+    if direct is not None:
+        return direct.value
+    modes = booking_modes_for_archetype(archetype)
+    return modes[0] if modes else None
+
+
+def serialize_space_type(row) -> dict:
+    """Shape a registry row for the API, resolving archetype-derived fields."""
+    return {
+        "key": row.key,
+        "label": row.label,
+        "description": row.description,
+        "icon": row.icon,
+        "archetype": row.archetype,
+        "marketplace_category": row.marketplace_category,
+        "capacity_applicable": row.capacity_applicable,
+        "has_physical_inventory": row.has_physical_inventory,
+        "sort_order": row.sort_order,
+        "valid_booking_modes": booking_modes_for_archetype(row.archetype),
+        "default_booking_mode": default_booking_mode_for_archetype(row.archetype),
+        "public_id": row.public_id,
+        "is_enabled": row.is_enabled,
+        "is_system": row.is_system,
+    }
 
 
 def list_enabled_space_types(db: Session) -> list[SpaceTypeRegistry]:
