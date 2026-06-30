@@ -10,7 +10,6 @@ from app.models.enums import (
     AvailabilityStatus,
     BookingMode,
     LocationStatus,
-    SpaceType,
     SpaceVisibility,
     UserRole,
 )
@@ -79,11 +78,10 @@ def create_membership_plan(
 ):
     space, location = _load_space_for_owner(db, token, payload.space_public_id)
 
-    space_type = SpaceType(space.space_type) if not isinstance(space.space_type, SpaceType) else space.space_type
-    if not is_mode_valid_for_space_type(space_type, payload.booking_mode):
+    if not is_mode_valid_for_space_type(space.space_type, payload.booking_mode, db=db):
         raise HTTPException(
             status_code=400,
-            detail=f"Booking mode {payload.booking_mode.value} is not valid for space type {space_type.value}",
+            detail=f"Booking mode {payload.booking_mode.value} is not valid for space type {space.space_type}",
         )
 
     plan = MembershipPlan(

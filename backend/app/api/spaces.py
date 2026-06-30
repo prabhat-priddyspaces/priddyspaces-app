@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user, get_optional_user
 from app.db.deps import get_db
-from app.models.enums import BookingMode, LocationStatus, SpaceType, UserAppRole, UserRole, SpaceVisibility
+from app.models.enums import LocationStatus, UserAppRole, UserRole, SpaceVisibility
 from app.models.membership_plan import MembershipPlan
 from app.models.organization import Organization
 from app.models.space import Space
@@ -26,8 +26,15 @@ from app.services.lookups import get_location_by_public_id
 from app.services.owner_payments import space_payment_is_marketplace_ready
 from app.services.platform_auth import get_audit_actor_context, organization_is_publicly_visible
 from app.services.setup_fees import add_normalized_setup_fee_items, normalize_setup_fee_items
+from app.services.space_archetypes import DEFAULT_DIRECT_MODE_BY_ARCHETYPE
+from app.services.space_type_registry import resolve_archetype, space_type_is_enabled
 
 router = APIRouter()
+
+
+def _require_enabled_space_type(db: Session, key: str) -> None:
+    if not space_type_is_enabled(db, key):
+        raise HTTPException(status_code=400, detail=f"Unknown or disabled space type: {key}")
 
 
 def _space_display_name(raw_name: str | None, space_type: str) -> str:
@@ -54,7 +61,7 @@ def _serialize_space(
         )
         or "manual",
         payment_failure_hold_minutes=organization.payment_failure_hold_minutes if organization else None,
-        name=_space_display_name(space.name, space.space_type.value),
+        name=_space_display_name(space.name, space.space_type),
         space_type=space.space_type,
         capacity=space.capacity,
         price_monthly=space.price_monthly,
@@ -101,6 +108,7 @@ def create_space(
 
     user = get_or_create_user(db, token)
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN})
+    _require_enabled_space_type(db, payload.space_type)
     try:
         setup_fee_items = normalize_setup_fee_items(payload.setup_fee_items)
     except ValueError as exc:
@@ -109,7 +117,7 @@ def create_space(
     space = Space(
         location_id=location.id,
         tenant_id=location.organization_id,
-        name=_space_display_name(payload.name, payload.space_type.value),
+        name=_space_display_name(payload.name, payload.space_type),
         space_type=payload.space_type,
         capacity=payload.capacity,
         price_monthly=payload.price_monthly,
@@ -126,17 +134,14 @@ def create_space(
     )
     db.add(space)
     db.flush()
-    default_mode = None
-    if payload.space_type == SpaceType.CONFERENCE_ROOM:
-        default_mode = BookingMode.HOURLY.value
-    elif payload.space_type == SpaceType.SHARED_DESK:
-        default_mode = BookingMode.DAY_PASS.value
-    if default_mode:
+    default_archetype = resolve_archetype(db, space.space_type)
+    default_mode_enum = DEFAULT_DIRECT_MODE_BY_ARCHETYPE.get(default_archetype)
+    if default_mode_enum:
         db.add(
             SpaceBookingMode(
                 tenant_id=location.organization_id,
                 space_id=space.id,
-                booking_mode=default_mode,
+                booking_mode=default_mode_enum.value,
                 is_enabled=True,
             )
         )
@@ -214,7 +219,7 @@ def duplicate_space(
     duplicate = Space(
         location_id=source.location_id,
         tenant_id=source.tenant_id,
-        name=f"COPY of {_space_display_name(source.name, source.space_type.value)}",
+        name=f"COPY of {_space_display_name(source.name, source.space_type)}",
         space_type=source.space_type,
         capacity=source.capacity,
         price_monthly=source.price_monthly,
@@ -328,9 +333,10 @@ def update_space(
     require_location_roles(db, user.id, location, {UserRole.OWNER, UserRole.ADMIN})
 
     if payload.space_type is not None:
+        _require_enabled_space_type(db, payload.space_type)
         space.space_type = payload.space_type
     if payload.name is not None:
-        next_type = payload.space_type.value if payload.space_type is not None else space.space_type.value
+        next_type = payload.space_type if payload.space_type is not None else space.space_type
         space.name = _space_display_name(payload.name, next_type)
     if payload.capacity is not None:
         space.capacity = payload.capacity

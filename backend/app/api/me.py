@@ -7,7 +7,6 @@ from app.core.auth import get_current_user
 from app.db.deps import get_db
 from app.models.booking import Booking
 from app.models.booking_request import BookingRequest
-from app.models.enums import SpaceType
 from app.models.location import Location
 from app.models.organization import Organization
 from app.models.space import Space
@@ -27,16 +26,15 @@ from app.services.platform_auth import (
 router = APIRouter(prefix="/api", tags=["me"])
 
 
-def _parse_space_types(values: list[str] | None) -> set[SpaceType] | None:
+def _parse_space_types(values: list[str] | None) -> set[str] | None:
     if not values:
         return None
-    out: set[SpaceType] = set()
+    out: set[str] = set()
     for value in values:
-        try:
-            out.add(SpaceType(value))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown space_type: {value}")
-    return out
+        cleaned = (value or "").strip()
+        if cleaned:
+            out.add(cleaned)
+    return out or None
 
 
 def _empty_calendar(start: datetime, end: datetime) -> CalendarResponse:

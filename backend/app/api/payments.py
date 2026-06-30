@@ -105,7 +105,7 @@ def _to_out(db: Session, payment: Payment) -> PaymentOut:
         subscription_end_date=subscription.end_date.isoformat() if subscription and subscription.end_date else None,
         space_public_id=space.public_id if space else None,
         space_name=space.name if space else None,
-        space_type=space.space_type.value if space and space.space_type else None,
+        space_type=space.space_type if space and space.space_type else None,
         location_public_id=location.public_id if location else None,
         location_name=location.name if location else None,
         location_city=location.city if location else None,

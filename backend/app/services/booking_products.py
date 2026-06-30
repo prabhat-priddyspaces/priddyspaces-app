@@ -8,12 +8,19 @@ from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models.enums import BookingMode, SpaceType
+from app.models.enums import BookingMode
 from app.models.membership_plan import MembershipPlan
 from app.models.space import Space
 from app.models.space_booking_mode import SpaceBookingMode
 from app.models.subscription import Subscription
-from app.services.booking_modes import VALID_BOOKING_MODES_BY_SPACE_TYPE
+from app.services.booking_modes import valid_booking_modes_for_space_type
+from app.services.space_archetypes import (
+    DESK_POOL,
+    EXCLUSIVE_LEASE_ARCHETYPES,
+    ROOM_HOURLY,
+    VIRTUAL,
+)
+from app.services.space_type_registry import resolve_archetype
 from app.services.money import CENT, money_to_cents, to_money_decimal
 
 
@@ -69,9 +76,8 @@ def _space_type_value(space: Space) -> str:
     return str(raw)
 
 
-def _space_type(space: Space) -> SpaceType:
-    raw = getattr(space.space_type, "value", space.space_type)
-    return SpaceType(raw)
+def _archetype(space: Space, db: Session | None = None) -> str | None:
+    return resolve_archetype(db, _space_type_value(space))
 
 
 def _enabled_modes(db: Session, space: Space) -> set[str]:
@@ -80,7 +86,7 @@ def _enabled_modes(db: Session, space: Space) -> set[str]:
         .filter(SpaceBookingMode.space_id == space.id)
         .all()
     )
-    defaults = {mode.value for mode in VALID_BOOKING_MODES_BY_SPACE_TYPE.get(_space_type(space), set())}
+    defaults = {mode.value for mode in valid_booking_modes_for_space_type(space.space_type, db=db)}
     if not rows:
         return defaults
     configured = {row.booking_mode for row in rows}
@@ -133,11 +139,11 @@ def _plan_available_seats(db: Session, space: Space, plan: MembershipPlan) -> in
 
 def booking_products_for_space(db: Session, space: Space) -> list[dict[str, object]]:
     """Return member-facing products for a space without removing legacy fields."""
-    space_type = _space_type_value(space)
+    archetype = _archetype(space, db)
     enabled = _enabled_modes(db, space)
     products: list[BookingProduct] = []
 
-    if space_type == SpaceType.CONFERENCE_ROOM.value and BookingMode.HOURLY.value in enabled:
+    if archetype == ROOM_HOURLY and BookingMode.HOURLY.value in enabled:
         if space.price_hourly is not None:
             price = to_money_decimal(space.price_hourly).quantize(CENT)
             products.append(
@@ -150,7 +156,7 @@ def booking_products_for_space(db: Session, space: Space) -> list[dict[str, obje
                     space_capacity=space.capacity,
                 )
             )
-    if space_type == SpaceType.CONFERENCE_ROOM.value and BookingMode.DAY_PASS.value in enabled:
+    if archetype == ROOM_HOURLY and BookingMode.DAY_PASS.value in enabled:
         if space.price_daily is not None:
             price = to_money_decimal(space.price_daily).quantize(CENT)
             products.append(
@@ -164,7 +170,7 @@ def booking_products_for_space(db: Session, space: Space) -> list[dict[str, obje
                 )
             )
 
-    if space_type == SpaceType.SHARED_DESK.value and BookingMode.DAY_PASS.value in enabled:
+    if archetype == DESK_POOL and BookingMode.DAY_PASS.value in enabled:
         if space.price_daily is not None:
             price = to_money_decimal(space.price_daily).quantize(CENT)
             products.append(
@@ -204,7 +210,7 @@ def booking_products_for_space(db: Session, space: Space) -> list[dict[str, obje
 
 
 def valid_plan_mode_for_space(space: Space, booking_mode: str) -> bool:
-    return booking_mode in {mode.value for mode in VALID_BOOKING_MODES_BY_SPACE_TYPE.get(_space_type(space), set())}
+    return booking_mode in {mode.value for mode in valid_booking_modes_for_space_type(space.space_type)}
 
 
 def validate_direct_booking_product(
@@ -215,22 +221,22 @@ def validate_direct_booking_product(
     seats_requested: int = 1,
 ) -> None:
     """Validate one-time booking requests against the product model."""
-    space_type = _space_type_value(space)
+    archetype = _archetype(space)
     normalized_mode = booking_mode or (BookingMode.DAY_PASS.value if full_day else BookingMode.HOURLY.value)
     seats = max(1, seats_requested or 1)
 
-    if space_type == SpaceType.CONFERENCE_ROOM.value:
+    if archetype == ROOM_HOURLY:
         if full_day or normalized_mode == BookingMode.DAY_PASS.value:
             if space.price_daily is None:
-                raise HTTPException(status_code=400, detail="Day-rate price is required for all-day conference room bookings")
+                raise HTTPException(status_code=400, detail="Day-rate price is required for all-day room bookings")
             return
         if normalized_mode == BookingMode.HOURLY.value:
             if space.price_hourly is None:
-                raise HTTPException(status_code=400, detail="Hourly price is required for conference room bookings")
+                raise HTTPException(status_code=400, detail="Hourly price is required for room bookings")
             return
-        raise HTTPException(status_code=400, detail="Conference rooms can only be booked hourly or all day")
+        raise HTTPException(status_code=400, detail="This space can only be booked hourly or all day")
 
-    if space_type == SpaceType.SHARED_DESK.value:
+    if archetype == DESK_POOL:
         if not full_day and normalized_mode != BookingMode.DAY_PASS.value:
             raise HTTPException(status_code=400, detail="Shared desks can only be booked as day passes")
         if space.price_daily is None:
@@ -239,10 +245,10 @@ def validate_direct_booking_product(
             raise HTTPException(status_code=400, detail="Requested seats exceed shared desk capacity")
         return
 
-    if space_type in {SpaceType.PRIVATE_OFFICE.value, SpaceType.SUITE.value}:
+    if archetype in EXCLUSIVE_LEASE_ARCHETYPES:
         raise HTTPException(status_code=400, detail="Private offices and suites must be requested through lease terms")
 
-    if space_type == SpaceType.VIRTUAL_OFFICE.value:
+    if archetype == VIRTUAL:
         raise HTTPException(status_code=400, detail="Virtual offices must be purchased through virtual membership plans")
 
     raise HTTPException(status_code=400, detail="Unsupported booking product for this space")

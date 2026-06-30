@@ -1,7 +1,7 @@
 from sqlalchemy import Boolean, Column, Enum, Float, ForeignKey, Integer, Numeric, String, Time
 
 from app.models.base import Base
-from app.models.enums import AvailabilityStatus, SpaceType, SpaceVisibility, enum_values
+from app.models.enums import AvailabilityStatus, SpaceVisibility, enum_values
 from app.models.mixins import PublicIdMixin, TimestampMixin
 
 class Space(PublicIdMixin, TimestampMixin, Base):
@@ -11,9 +11,15 @@ class Space(PublicIdMixin, TimestampMixin, Base):
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     tenant_id = Column(Integer, ForeignKey("organizations.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False, index=True)
     name = Column(String(255), nullable=True)
+    # space_type references the admin-managed space_types registry by key.
+    # Kept as a string column (the values were already stored as strings under
+    # the previous Enum) so existing comparisons against SpaceType.X.value and
+    # registry-driven archetype lookups both keep working.
     space_type = Column(
-        Enum(SpaceType, values_callable=enum_values),
+        String(64),
+        ForeignKey("space_types.key", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
         nullable=False,
+        index=True,
     )
     size_sqft = Column(Float, nullable=True)
     capacity = Column(Integer, nullable=False, default=1, server_default="1")

@@ -36,6 +36,7 @@ from app.models.platform_setting import PlatformSetting
 from app.models.platform_team_member import PlatformTeamMember
 from app.models.push_subscription import PushSubscription
 from app.models.space import Space
+from app.models.space_type import SpaceTypeRegistry
 from app.models.space_access_pass import SpaceAccessPass
 from app.models.space_attendance_record import SpaceAttendanceRecord
 from app.models.space_image import SpaceImage
@@ -115,6 +116,7 @@ __all__ = [
     "PlatformTeamMember",
     "PushSubscription",
     "Space",
+    "SpaceTypeRegistry",
     "SpaceAccessPass",
     "SpaceAttendanceRecord",
     "SpaceImage",

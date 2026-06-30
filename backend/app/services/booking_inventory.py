@@ -15,16 +15,15 @@ from app.models.enums import (
     BookingRequestKind,
     BookingRequestStatus,
     BookingStatus,
-    SpaceType,
 )
 from app.models.location import Location
 from app.models.space import Space
 from app.models.subscription import Subscription
+from app.services.space_archetypes import DESK_POOL, EXCLUSIVE_LEASE_ARCHETYPES, ROOM_HOURLY
+from app.services.space_type_registry import resolve_archetype
 
 
 MAX_RECURRENCE_OCCURRENCES = 52
-INSTANT_SPACE_TYPES = {SpaceType.CONFERENCE_ROOM, SpaceType.SHARED_DESK}
-HIGH_VALUE_SPACE_TYPES = {SpaceType.PRIVATE_OFFICE, SpaceType.SUITE}
 
 
 @dataclass(frozen=True)
@@ -50,11 +49,12 @@ def as_utc(dt: datetime) -> datetime:
 
 
 def instant_booking_allowed(space: Space, *, booking_mode: str | None, full_day: bool) -> bool:
-    if space.space_type in HIGH_VALUE_SPACE_TYPES:
+    archetype = resolve_archetype(None, space.space_type)
+    if archetype in EXCLUSIVE_LEASE_ARCHETYPES:
         return False
-    if space.space_type == SpaceType.CONFERENCE_ROOM:
+    if archetype == ROOM_HOURLY:
         return True
-    if space.space_type == SpaceType.SHARED_DESK and (full_day or booking_mode == "day_pass"):
+    if archetype == DESK_POOL and (full_day or booking_mode == "day_pass"):
         return True
     return False
 
@@ -91,7 +91,7 @@ def is_shared_desk_day_pass(
     request_kind: str | BookingRequestKind | None = None,
 ) -> bool:
     request_kind_value = getattr(request_kind, "value", request_kind)
-    return space.space_type == SpaceType.SHARED_DESK and (
+    return resolve_archetype(None, space.space_type) == DESK_POOL and (
         full_day
         or booking_mode == "day_pass"
         or request_kind_value == BookingRequestKind.DAILY_BOOKING.value

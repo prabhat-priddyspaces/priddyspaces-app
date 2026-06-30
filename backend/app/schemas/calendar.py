@@ -3,8 +3,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import SpaceType
-
 
 CalendarEventKind = Literal["booking", "request", "subscription"]
 
@@ -22,7 +20,7 @@ class CalendarEvent(BaseModel):
     public_id: str
     space_public_id: str
     space_name: Optional[str] = None
-    space_type: SpaceType
+    space_type: str
     location_public_id: str
     location_name: str
     start: datetime
@@ -43,7 +41,7 @@ class CalendarEvent(BaseModel):
 class CalendarSpace(BaseModel):
     public_id: str
     name: Optional[str] = None
-    space_type: SpaceType
+    space_type: str
     location_public_id: str
     location_name: str
     location_timezone: Optional[str] = None
