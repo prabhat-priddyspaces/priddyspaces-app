@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -11,18 +11,16 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 
 import { apiFetch } from "../../lib/api";
+import {
+  archetypeForKey,
+  fetchSpaceTypes,
+  formConfigForArchetype,
+  FALLBACK_SPACE_TYPES,
+  type SpaceTypeConfig,
+} from "../../lib/spaceTypes";
 import { useAuth } from "../../context/AuthContext";
 
-type SpaceType = "conference_room" | "shared_desk" | "private_office" | "suite" | "virtual_office";
 type Visibility = "public" | "unlisted" | "private";
-
-const SPACE_TYPE_OPTIONS: Array<{ value: SpaceType; label: string }> = [
-  { value: "conference_room", label: "Conference room" },
-  { value: "shared_desk", label: "Shared desk" },
-  { value: "private_office", label: "Private office" },
-  { value: "suite", label: "Suite" },
-  { value: "virtual_office", label: "Virtual office" },
-];
 
 const VISIBILITY_OPTIONS: Array<{ value: Visibility; label: string }> = [
   { value: "public", label: "Public" },
@@ -35,9 +33,10 @@ export function OwnerAddSpaceScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { locationId, locationName } = route.params || {};
+  const [spaceTypes, setSpaceTypes] = useState<SpaceTypeConfig[]>(FALLBACK_SPACE_TYPES);
   const [form, setForm] = useState({
     name: "",
-    space_type: "conference_room" as SpaceType,
+    space_type: "conference_room",
     capacity: "4",
     price_daily: "",
     price_hourly: "",
@@ -50,11 +49,27 @@ export function OwnerAddSpaceScreen() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const config = useMemo(() => typeConfig(form.space_type), [form.space_type]);
+  useEffect(() => {
+    fetchSpaceTypes(token ?? undefined)
+      .then((types) => {
+        setSpaceTypes(types);
+        setForm((current) =>
+          types.some((t) => t.key === current.space_type)
+            ? current
+            : { ...current, space_type: types[0]?.key ?? current.space_type },
+        );
+      })
+      .catch(() => null);
+  }, [token]);
+
+  const config = useMemo(
+    () => formConfigForArchetype(archetypeForKey(form.space_type, spaceTypes)),
+    [form.space_type, spaceTypes],
+  );
 
   const isValid = useMemo(() => {
     if (!locationId) return false;
-    if (form.space_type !== "virtual_office") {
+    if (config.capacityApplicable) {
       const capacity = Number.parseInt(form.capacity, 10);
       if (!Number.isFinite(capacity) || capacity < 1) return false;
     }
@@ -68,7 +83,7 @@ export function OwnerAddSpaceScreen() {
       setMessage("Choose a location before creating a space.");
       return;
     }
-    const capacity = form.space_type === "virtual_office" ? 1 : Number.parseInt(form.capacity, 10);
+    const capacity = !config.capacityApplicable ? 1 : Number.parseInt(form.capacity, 10);
     if (!Number.isFinite(capacity) || capacity < 1) {
       setMessage("Capacity must be at least 1.");
       return;
@@ -137,17 +152,17 @@ export function OwnerAddSpaceScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Space type</Text>
         <View style={styles.optionGrid}>
-          {SPACE_TYPE_OPTIONS.map((option) => (
+          {spaceTypes.map((option) => (
             <ModeButton
-              key={option.value}
+              key={option.key}
               label={option.label}
-              active={form.space_type === option.value}
+              active={form.space_type === option.key}
               onPress={() => {
                 setMessage("");
                 setForm((current) => ({
                   ...current,
-                  space_type: option.value,
-                  capacity: option.value === "virtual_office" ? "1" : current.capacity || "1",
+                  space_type: option.key,
+                  capacity: option.capacity_applicable ? current.capacity || "1" : "1",
                   // Reset type-specific fields so the form swaps cleanly.
                   price_hourly: "",
                   price_daily: "",
@@ -166,7 +181,7 @@ export function OwnerAddSpaceScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Details</Text>
         <Field label="Space name" value={form.name} onChange={(name) => setForm({ ...form, name })} />
-        {form.space_type !== "virtual_office" ? (
+        {config.capacityApplicable ? (
           <Field
             label="Capacity"
             value={form.capacity}
@@ -251,40 +266,6 @@ export function OwnerAddSpaceScreen() {
       </TouchableOpacity>
     </ScrollView>
   );
-}
-
-function typeConfig(spaceType: SpaceType) {
-  if (spaceType === "conference_room") {
-    return {
-      showHourly: true,
-      requireHourly: true,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day rate price",
-      showAvailability: true,
-      showBuffers: true,
-    };
-  }
-  if (spaceType === "shared_desk") {
-    return {
-      showHourly: false,
-      requireHourly: false,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day pass price",
-      showAvailability: true,
-      showBuffers: false,
-    };
-  }
-  return {
-    showHourly: false,
-    requireHourly: false,
-    showDaily: false,
-    requireDaily: false,
-    dailyLabel: "Daily price",
-    showAvailability: false,
-    showBuffers: false,
-  };
 }
 
 function moneyPayload(value: string) {

@@ -11,16 +11,25 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 
 import { apiFetch } from "../../lib/api";
+import {
+  archetypeForKey,
+  fetchSpaceTypes,
+  formConfigForArchetype,
+  isTermManagedArchetype,
+  termBookingModeForArchetype,
+  FALLBACK_SPACE_TYPES,
+  type SpaceArchetype,
+  type SpaceTypeConfig,
+} from "../../lib/spaceTypes";
 import { useAuth } from "../../context/AuthContext";
 
-type SpaceType = "conference_room" | "shared_desk" | "private_office" | "suite" | "virtual_office";
 type Visibility = "public" | "unlisted" | "private";
 type AvailabilityStatus = "available" | "occupied" | "maintenance";
 
 type Space = {
   public_id: string;
   name: string;
-  space_type: SpaceType;
+  space_type: string;
   capacity: number;
   price_monthly: number | string | null;
   price_daily: number | string | null;
@@ -32,14 +41,6 @@ type Space = {
   buffer_after_minutes: number;
   visibility: Visibility;
 };
-
-const SPACE_TYPE_OPTIONS: Array<{ value: SpaceType; label: string }> = [
-  { value: "conference_room", label: "Conference room" },
-  { value: "shared_desk", label: "Shared desk" },
-  { value: "private_office", label: "Private office" },
-  { value: "suite", label: "Suite" },
-  { value: "virtual_office", label: "Virtual office" },
-];
 
 const VISIBILITY_OPTIONS: Array<{ value: Visibility; label: string }> = [
   { value: "public", label: "Public" },
@@ -58,9 +59,10 @@ export function OwnerSpaceEditScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { spaceId } = route.params || {};
+  const [spaceTypes, setSpaceTypes] = useState<SpaceTypeConfig[]>(FALLBACK_SPACE_TYPES);
   const [form, setForm] = useState({
     name: "",
-    space_type: "conference_room" as SpaceType,
+    space_type: "conference_room",
     capacity: "1",
     price_daily: "",
     price_hourly: "",
@@ -75,18 +77,26 @@ export function OwnerSpaceEditScreen() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  const config = useMemo(() => typeConfig(form.space_type), [form.space_type]);
+  const archetype = useMemo(
+    () => archetypeForKey(form.space_type, spaceTypes),
+    [form.space_type, spaceTypes],
+  );
+  const config = useMemo(() => formConfigForArchetype(archetype), [archetype]);
+
+  useEffect(() => {
+    fetchSpaceTypes(token ?? undefined).then(setSpaceTypes).catch(() => null);
+  }, [token]);
 
   const isValid = useMemo(() => {
     if (!spaceId) return false;
-    if (form.space_type !== "virtual_office") {
+    if (config.capacityApplicable) {
       const capacity = Number.parseInt(form.capacity, 10);
       if (!Number.isFinite(capacity) || capacity < 1) return false;
     }
     if (config.requireHourly && !(Number(form.price_hourly) > 0)) return false;
     if (config.requireDaily && !(Number(form.price_daily) > 0)) return false;
     return true;
-  }, [spaceId, form.space_type, form.capacity, form.price_hourly, form.price_daily, config]);
+  }, [spaceId, config, form.capacity, form.price_hourly, form.price_daily]);
 
   useEffect(() => {
     if (!token || !spaceId) return;
@@ -124,7 +134,7 @@ export function OwnerSpaceEditScreen() {
           body: JSON.stringify({
             name: form.name,
             space_type: form.space_type,
-            capacity: form.space_type === "virtual_office" ? 1 : Number.parseInt(form.capacity, 10) || 1,
+            capacity: !config.capacityApplicable ? 1 : Number.parseInt(form.capacity, 10) || 1,
             // Web's edit form never exposes monthly pricing; it always nulls it.
             price_monthly: null,
             price_daily: config.showDaily ? moneyPayload(form.price_daily) : null,
@@ -172,17 +182,17 @@ export function OwnerSpaceEditScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Space type</Text>
         <View style={styles.optionGrid}>
-          {SPACE_TYPE_OPTIONS.map((option) => (
+          {spaceTypes.map((option) => (
             <ModeButton
-              key={option.value}
+              key={option.key}
               label={option.label}
-              active={form.space_type === option.value}
+              active={form.space_type === option.key}
               onPress={() => {
                 setMessage("");
                 setForm((current) => ({
                   ...current,
-                  space_type: option.value,
-                  capacity: option.value === "virtual_office" ? "1" : current.capacity || "1",
+                  space_type: option.key,
+                  capacity: option.capacity_applicable ? current.capacity || "1" : "1",
                 }));
               }}
               accessibilityLabel={`Set space type ${option.label}`}
@@ -194,7 +204,7 @@ export function OwnerSpaceEditScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Details</Text>
         <Field label="Listing name" value={form.name} onChange={(name) => setForm({ ...form, name })} />
-        {form.space_type !== "virtual_office" ? (
+        {config.capacityApplicable ? (
           <Field
             label="Capacity"
             value={form.capacity}
@@ -297,15 +307,15 @@ export function OwnerSpaceEditScreen() {
         {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Save Changes</Text>}
       </TouchableOpacity>
 
-      {form.space_type !== "conference_room" ? (
+      {isTermManagedArchetype(archetype) ? (
         <LeaseTermsSection
           spaceId={spaceId}
           token={token}
-          spaceType={form.space_type}
+          archetype={archetype}
           spaceCapacity={Number.parseInt(form.capacity, 10) || 1}
         />
       ) : null}
-      {form.space_type === "conference_room" || form.space_type === "shared_desk" ? (
+      {archetype === "room_hourly" || archetype === "desk_pool" ? (
         <VolumeDiscountsSection spaceId={spaceId} token={token} />
       ) : null}
       <SetupFeesSection spaceId={spaceId} token={token} />
@@ -330,13 +340,6 @@ type OwnerMembershipPlan = {
   is_active: boolean;
 };
 
-function bookingModeFor(spaceType: SpaceType): LeaseBookingMode {
-  if (spaceType === "suite") return "suite_lease";
-  if (spaceType === "shared_desk") return "monthly_membership";
-  if (spaceType === "virtual_office") return "virtual_membership";
-  return "private_office_lease";
-}
-
 function defaultPlanName(commitmentMonths: number | null) {
   if (commitmentMonths == null) return "Month-to-month";
   return `${commitmentMonths}-month Term`;
@@ -345,19 +348,19 @@ function defaultPlanName(commitmentMonths: number | null) {
 function LeaseTermsSection({
   spaceId,
   token,
-  spaceType,
+  archetype,
   spaceCapacity,
 }: {
   spaceId?: string;
   token: string | null;
-  spaceType: SpaceType;
+  archetype: SpaceArchetype | null;
   spaceCapacity: number;
 }) {
-  const bookingMode = bookingModeFor(spaceType);
+  const bookingMode = (termBookingModeForArchetype(archetype) ?? "private_office_lease") as LeaseBookingMode;
   const sectionLabel =
-    spaceType === "shared_desk"
+    archetype === "desk_pool"
       ? "Membership Terms"
-      : spaceType === "virtual_office"
+      : archetype === "virtual"
         ? "Virtual Membership Terms"
         : "Lease Terms";
   const [plans, setPlans] = useState<OwnerMembershipPlan[]>([]);
@@ -849,40 +852,6 @@ function SetupFeesSection({ spaceId, token }: { spaceId?: string; token: string 
       ) : null}
     </View>
   );
-}
-
-function typeConfig(spaceType: SpaceType) {
-  if (spaceType === "conference_room") {
-    return {
-      showHourly: true,
-      requireHourly: true,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day rate price",
-      showAvailability: true,
-      showBuffers: true,
-    };
-  }
-  if (spaceType === "shared_desk") {
-    return {
-      showHourly: false,
-      requireHourly: false,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day pass price",
-      showAvailability: true,
-      showBuffers: false,
-    };
-  }
-  return {
-    showHourly: false,
-    requireHourly: false,
-    showDaily: false,
-    requireDaily: false,
-    dailyLabel: "Daily price",
-    showAvailability: false,
-    showBuffers: false,
-  };
 }
 
 function moneyPayload(value: string) {

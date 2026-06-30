@@ -268,7 +268,7 @@ describe("owner location mobile screens", () => {
     expect(queryByLabelText("Hourly price")).toBeNull();
 
     // Back to conference room: the prior hourly value was cleared.
-    fireEvent.press(getByText("Conference room"));
+    fireEvent.press(getByText("Conference Room"));
     expect(getByLabelText("Hourly price").props.value).toBe("");
   });
 
