@@ -257,6 +257,25 @@ export function termBookingModeForArchetype(archetype: SpaceArchetype | null): s
   }
 }
 
+// Maps a term-managed archetype to the legacy space-type key understood by the
+// LeaseTermsManager (which keys booking mode + labels off these strings).
+export function legacyTermSpaceTypeForArchetype(
+  archetype: SpaceArchetype | null
+): "private_office" | "suite" | "shared_desk" | "virtual_office" | null {
+  switch (archetype) {
+    case "virtual":
+      return "virtual_office";
+    case "desk_pool":
+      return "shared_desk";
+    case "suite_lease":
+      return "suite";
+    case "private_office_lease":
+      return "private_office";
+    default:
+      return null;
+  }
+}
+
 export function isTermManagedArchetype(archetype: SpaceArchetype | null): boolean {
   return (
     archetype === "private_office_lease" ||
