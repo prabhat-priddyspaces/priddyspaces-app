@@ -11,6 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import {
+  archetypeForKey,
+  fetchSpaceTypes,
+  formConfigForArchetype,
+  isTermManagedArchetype,
+  termBookingModeForArchetype,
+  type SpaceTypeConfig,
+} from "@/lib/space-types";
 
 interface LocationOption {
   public_id: string;
@@ -64,8 +72,6 @@ interface DiscountTier {
   is_active: boolean;
 }
 
-type TermManagedSpaceType = "private_office" | "suite" | "shared_desk" | "virtual_office";
-
 function moneyPayload(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
@@ -77,89 +83,6 @@ function amountToCents(value: string) {
   return Math.round(amount * 100);
 }
 
-function typeConfig(spaceType: string) {
-  if (spaceType === "conference_room") {
-    return {
-      capacityLabel: "Room capacity",
-      capacityHelp: "Number of people the room can seat.",
-      showHourly: true,
-      requireHourly: true,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day rate price (USD)",
-      dailyHelp: "All-day conference room price.",
-      showAvailability: true,
-      showBuffers: true,
-      showVolumeDiscounts: true,
-      showTerms: false,
-      requireTerm: false,
-      termLabel: "",
-    };
-  }
-  if (spaceType === "shared_desk") {
-    return {
-      capacityLabel: "Desks available per day",
-      capacityHelp: "Pooled sellable seats for day passes and coworking memberships.",
-      showHourly: false,
-      requireHourly: false,
-      showDaily: true,
-      requireDaily: true,
-      dailyLabel: "Day pass price (USD)",
-      dailyHelp: "Charged per shared-desk day pass seat.",
-      showAvailability: true,
-      showBuffers: false,
-      showVolumeDiscounts: true,
-      showTerms: true,
-      requireTerm: false,
-      termLabel: "Membership Terms",
-    };
-  }
-  if (spaceType === "virtual_office") {
-    return {
-      capacityLabel: "",
-      capacityHelp: "",
-      showHourly: false,
-      requireHourly: false,
-      showDaily: false,
-      requireDaily: false,
-      dailyLabel: "",
-      dailyHelp: "",
-      showAvailability: false,
-      showBuffers: false,
-      showVolumeDiscounts: false,
-      showTerms: true,
-      requireTerm: true,
-      termLabel: "Virtual Membership Terms",
-    };
-  }
-  return {
-    capacityLabel: spaceType === "suite" ? "Suite seats" : "Office seats",
-    capacityHelp: "Number of people included in this office or suite.",
-    showHourly: false,
-    requireHourly: false,
-    showDaily: false,
-    requireDaily: false,
-    dailyLabel: "",
-    dailyHelp: "",
-    showAvailability: false,
-    showBuffers: false,
-    showVolumeDiscounts: false,
-    showTerms: true,
-    requireTerm: true,
-    termLabel: "Lease Terms",
-  };
-}
-
-function isTermManagedSpaceType(spaceType: string): spaceType is TermManagedSpaceType {
-  return ["private_office", "suite", "shared_desk", "virtual_office"].includes(spaceType);
-}
-
-function bookingModeFor(spaceType: TermManagedSpaceType) {
-  if (spaceType === "suite") return "suite_lease";
-  if (spaceType === "shared_desk") return "monthly_membership";
-  if (spaceType === "virtual_office") return "virtual_membership";
-  return "private_office_lease";
-}
 
 function defaultTermName(commitmentMonths: number | null) {
   if (commitmentMonths == null) return "Month-to-month";
@@ -183,6 +106,7 @@ export default function NewSpacePage() {
 
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(true);
+  const [spaceTypes, setSpaceTypes] = useState<SpaceTypeConfig[]>([]);
   const [form, setForm] = useState({
     location_public_id: queryLocationId,
     name: "",
@@ -201,7 +125,8 @@ export default function NewSpacePage() {
   const [setupFeeRows, setSetupFeeRows] = useState<SetupFeeDraftRow[]>([]);
   const [termRows, setTermRows] = useState<TermDraftRow[]>([]);
   const [discountRows, setDiscountRows] = useState<DiscountDraftRow[]>([]);
-  const config = typeConfig(form.space_type);
+  const archetype = archetypeForKey(form.space_type, spaceTypes);
+  const config = formConfigForArchetype(archetype);
 
   useEffect(() => {
     async function loadLocations() {
@@ -228,6 +153,21 @@ export default function NewSpacePage() {
     loadLocations().catch(() => null);
   }, [queryLocationId]);
 
+  useEffect(() => {
+    const token = getAccessToken() ?? undefined;
+    fetchSpaceTypes(token)
+      .then((types) => {
+        setSpaceTypes(types);
+        // If the default type isn't enabled, fall back to the first enabled one.
+        setForm((current) =>
+          types.some((t) => t.key === current.space_type)
+            ? current
+            : { ...current, space_type: types[0]?.key ?? current.space_type }
+        );
+      })
+      .catch(() => null);
+  }, []);
+
   function handleSpaceTypeChange(nextType: string) {
     setMessage("");
     setForm((current) => ({
@@ -242,7 +182,7 @@ export default function NewSpacePage() {
       buffer_after_minutes: "0",
     }));
     // Drop drafts that don't apply to the new type.
-    const next = typeConfig(nextType);
+    const next = formConfigForArchetype(archetypeForKey(nextType, spaceTypes));
     if (!next.showTerms) setTermRows([]);
     if (!next.showVolumeDiscounts) setDiscountRows([]);
   }
@@ -306,9 +246,10 @@ export default function NewSpacePage() {
   }
 
   function buildTermPayloads(): TermCreatePayload[] | null {
-    if (!isTermManagedSpaceType(form.space_type)) return [];
-    const bookingMode = bookingModeFor(form.space_type);
-    const fallbackSeats = form.space_type === "virtual_office" ? 1 : Number(form.capacity || 1);
+    if (!isTermManagedArchetype(archetype)) return [];
+    const bookingMode = termBookingModeForArchetype(archetype);
+    if (!bookingMode) return [];
+    const fallbackSeats = archetype === "virtual" ? 1 : Number(form.capacity || 1);
     const payloads: TermCreatePayload[] = [];
     for (const row of termRows) {
       const hasAnyValue =
@@ -386,7 +327,7 @@ export default function NewSpacePage() {
   // --- Validity gate --------------------------------------------------------
   const isValid = useMemo(() => {
     if (!form.location_public_id) return false;
-    if (form.space_type !== "virtual_office") {
+    if (config.capacityApplicable) {
       const capacity = Number(form.capacity || 0);
       if (!Number.isFinite(capacity) || capacity < 1) return false;
     }
@@ -404,6 +345,7 @@ export default function NewSpacePage() {
     config.requireHourly,
     config.requireDaily,
     config.requireTerm,
+    config.capacityApplicable,
   ]);
 
   async function handleSave(nextStep: "inventory" | "media") {
@@ -414,7 +356,7 @@ export default function NewSpacePage() {
         setMessage("Choose a location before creating a room.");
         return;
       }
-      const capacity = form.space_type === "virtual_office" ? 1 : Number(form.capacity || 1);
+      const capacity = !config.capacityApplicable ? 1 : Number(form.capacity || 1);
       if (Number.isNaN(capacity) || capacity < 1) {
         setMessage("Capacity must be at least 1.");
         return;
@@ -450,7 +392,7 @@ export default function NewSpacePage() {
       );
 
       // Persist inline lease/membership terms, then enable the booking mode.
-      if (termPayloads.length > 0 && isTermManagedSpaceType(form.space_type)) {
+      if (termPayloads.length > 0 && isTermManagedArchetype(archetype)) {
         for (const payload of termPayloads) {
           await apiFetch(
             "/api/membership-plans",
@@ -465,7 +407,7 @@ export default function NewSpacePage() {
           `/api/spaces/${space.public_id}/booking-modes`,
           {
             method: "PUT",
-            body: JSON.stringify({ booking_mode: bookingModeFor(form.space_type), is_enabled: true }),
+            body: JSON.stringify({ booking_mode: termBookingModeForArchetype(archetype), is_enabled: true }),
           },
           token
         );
@@ -547,14 +489,14 @@ export default function NewSpacePage() {
                 onChange={(e) => handleSpaceTypeChange(e.target.value)}
                 className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-textPrimary"
               >
-                <option value="conference_room">Conference Room</option>
-                <option value="private_office">Private Office</option>
-                <option value="shared_desk">Shared Desk</option>
-                <option value="virtual_office">Virtual Office</option>
-                <option value="suite">Suite</option>
+                {spaceTypes.map((type) => (
+                  <option key={type.key} value={type.key}>
+                    {type.label}
+                  </option>
+                ))}
               </select>
             </div>
-            {form.space_type !== "virtual_office" ? (
+            {config.capacityApplicable ? (
               <div className="grid gap-2">
                 <Label htmlFor="capacity">{config.capacityLabel}</Label>
                 <Input
