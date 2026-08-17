@@ -7,7 +7,7 @@ pydantic-settings==2.14.2
 python-dotenv==1.2.2
 email-validator==2.1.1
 stripe==15.1.0
-svix==1.14.0
+svix==1.99.1
 uuid6==2025.0.1
 python-multipart==0.0.31
 pyjwt[crypto]==2.13.0
