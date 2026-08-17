@@ -6,7 +6,7 @@ alembic==1.13.2
 pydantic-settings==2.14.2
 python-dotenv==1.2.2
 email-validator==2.1.1
-stripe==15.1.0
+stripe==15.5.0
 svix==1.14.0
 uuid6==2025.0.1
 python-multipart==0.0.31
